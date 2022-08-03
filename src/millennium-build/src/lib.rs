@@ -19,7 +19,7 @@
 use std::path::{Path, PathBuf};
 
 pub use anyhow::Result;
-use heck::ToSnakeCase;
+use heck::AsShoutySnakeCase;
 use millennium_utils::resources::{external_binaries, resource_relpath, ResourcePaths};
 
 #[cfg(feature = "codegen")]
@@ -79,7 +79,7 @@ fn copy_resources(resources: ResourcePaths<'_>, path: &Path) -> Result<()> {
 fn has_feature(feature: &str) -> bool {
 	// when a feature is enabled, Cargo sets the `CARGO_FEATURE_<name` env var to 1
 	// https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts
-	std::env::var(format!("CARGO_FEATURE_{}", feature.to_snake_case().to_uppercase()))
+	std::env::var(format!("CARGO_FEATURE_{}", AsShoutySnakeCase(feature)))
 		.map(|x| x == "1")
 		.unwrap_or(false)
 }

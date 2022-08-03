@@ -43,7 +43,7 @@ use std::{
 };
 
 use anyhow::Context;
-use heck::ToKebabCase;
+use heck::AsKebabCase;
 use image::{self, codecs::png::PngDecoder, ImageDecoder};
 use libflate::gzip;
 use log::info;
@@ -154,7 +154,7 @@ fn generate_control_file(settings: &Settings, arch: &str, control_dir: &Path, da
 	// https://www.debian.org/doc/debian-policy/ch-controlfields.html
 	let dest_path = control_dir.join("control");
 	let mut file = common::create_file(&dest_path)?;
-	writeln!(file, "Package: {}", settings.product_name().to_kebab_case().to_ascii_lowercase())?;
+	writeln!(file, "Package: {}", AsKebabCase(settings.product_name()))?;
 	writeln!(file, "Version: {}", settings.version_string())?;
 	writeln!(file, "Architecture: {}", arch)?;
 	// Installed-Size must be divided by 1024, see https://www.debian.org/doc/debian-policy/ch-controlfields.html#installed-size
