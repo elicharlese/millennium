@@ -724,7 +724,7 @@ fn copy_files_and_run<R: Read + Seek>(archive_buffer: R, _extract_path: &Path, w
 			// run the installer and relaunch the application
 			let powershell_install_res = Command::new("powershell.exe")
 				.args(["-NoProfile", "-windowstyle", "hidden"])
-				.args(["Start-Process", "-Wait", "-FilePath", "msiexec", "-ArgumentList"])
+				.args(["Start-Process", "-Wait", "-FilePath", "C:\\Windows\\system32\\msiexec.exe", "-ArgumentList"])
 				.arg("/i,")
 				.arg(msi_path_arg)
 				.arg(format!(", {}, /promptrestart;", msiexec_args.join(", ")))
@@ -733,7 +733,7 @@ fn copy_files_and_run<R: Read + Seek>(archive_buffer: R, _extract_path: &Path, w
 				.spawn();
 			if powershell_install_res.is_err() {
 				// fallback to running msiexec directly for older machines
-				let _ = Command::new("msiexec.exe")
+				let _ = Command::new("C:\\Windows\\system32\\msiexec.exe")
 					.arg("/i")
 					.arg(found_path)
 					.args(msiexec_args)
