@@ -241,7 +241,7 @@ impl EmbeddedAssets {
 	pub fn new(
 		input: impl Into<EmbeddedAssetsInput>,
 		options: &AssetOptions,
-		map: impl Fn(&AssetKey, &Path, &mut Vec<u8>, &mut CspHashes) -> Result<(), EmbeddedAssetsError>
+		mut map: impl FnMut(&AssetKey, &Path, &mut Vec<u8>, &mut CspHashes) -> Result<(), EmbeddedAssetsError>
 	) -> Result<Self, EmbeddedAssetsError> {
 		// we need to pre-compute all files now, so that we can inject data from all
 		// files into a few
@@ -256,7 +256,7 @@ impl EmbeddedAssets {
 			paths
 				.into_iter()
 				.try_fold(CompressState { csp_hashes, assets: HashMap::new() }, move |mut state, (prefix, entry)| {
-					let (key, asset) = Self::compress_file(&prefix, entry.path(), &map, &mut state.csp_hashes)?;
+					let (key, asset) = Self::compress_file(&prefix, entry.path(), &mut map, &mut state.csp_hashes)?;
 					state.assets.insert(key, asset);
 					Result::<_, EmbeddedAssetsError>::Ok(state)
 				})?;
@@ -287,7 +287,7 @@ impl EmbeddedAssets {
 	fn compress_file(
 		prefix: &Path,
 		path: &Path,
-		map: &impl Fn(&AssetKey, &Path, &mut Vec<u8>, &mut CspHashes) -> Result<(), EmbeddedAssetsError>,
+		map: &mut impl FnMut(&AssetKey, &Path, &mut Vec<u8>, &mut CspHashes) -> Result<(), EmbeddedAssetsError>,
 		csp_hashes: &mut CspHashes
 	) -> Result<Asset, EmbeddedAssetsError> {
 		let mut input = std::fs::read(path).map_err(|error| EmbeddedAssetsError::AssetRead { path: path.to_owned(), error })?;

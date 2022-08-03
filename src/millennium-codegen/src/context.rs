@@ -271,11 +271,26 @@ pub fn context_codegen(data: ContextData) -> Result<TokenStream, EmbeddedAssetsE
 		PatternKind::Isolation { dir } => {
 			let dir = config_parent.join(dir);
 			if !dir.exists() {
-				panic!("The isolation dir configuration is set to `{:?}` but this path doesn't exist", dir)
+				panic!("The isolated application path is set to `{:?}`, but it doesn't exist", dir)
 			}
 
+			let mut sets_isolation_hook = false;
+
 			let key = uuid::Uuid::new_v4().to_string();
-			let assets = EmbeddedAssets::new(dir.clone(), &options, map_isolation(&options, dir))?;
+			let map_isolation = map_isolation(&options, dir.clone());
+			let assets = EmbeddedAssets::new(dir, &options, |key, path, input, csp_hashes| {
+				// check if `__MILLENNIUM_ISOLATION_HOOK__` exists in the isolation code before modifying the files, since we inject our
+				// own `__MILLENNIUM_ISOLATION_HOOK__` reference in any HTML files
+				if String::from_utf8_lossy(input).contains("__MILLENNIUM_ISOLATION_HOOK__") {
+					sets_isolation_hook = true;
+				}
+				map_isolation(key, path, input, csp_hashes)
+			})?;
+
+			if !sets_isolation_hook {
+				panic!("The isolation application does not contain a file setting the `window.__MILLENNIUM_ISOLATION_HOOK__` value.");
+			}
+
 			let schema = options.isolation_schema;
 
 			quote!(#root::Pattern::Isolation {
