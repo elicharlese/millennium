@@ -93,6 +93,8 @@ pub fn wrapper(attributes: TokenStream, item: TokenStream) -> TokenStream {
 		macro_rules! #wrapper {
 			// double braces because the item is expected to be a block expression
 			($path:path, $invoke:ident) => {{
+				#[allow(unused_imports)]
+				use ::millennium::command::private::*;
 				// prevent warnings when the body is a `compile_error!` or if the command has no arguments
 				#[allow(unused_variables)]
 				let ::millennium::Invoke { message: #message, resolver: #resolver } = $invoke;
@@ -117,9 +119,6 @@ fn body_async(function: &ItemFn, invoke: &Invoke) -> syn::Result<TokenStream2> {
 	let Invoke { message, resolver } = invoke;
 	parse_args(function, message).map(|args| {
 		quote! {
-			#[allow(unused_imports)]
-			use ::millennium::command::private::*;
-
 			#resolver.respond_async_serialized(async move {
 				let result = $path(#(#args?),*);
 				let kind = (&result).async_kind();
@@ -146,9 +145,6 @@ fn body_blocking(function: &ItemFn, invoke: &Invoke) -> syn::Result<TokenStream2
 	});
 
 	Ok(quote! {
-		#[allow(unused_imports)]
-		use ::millennium::command::private::*;
-
 		let result = $path(#(match #args #match_body),*);
 		let kind = (&result).blocking_kind();
 		kind.block(result, #resolver);
