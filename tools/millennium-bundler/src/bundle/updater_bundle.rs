@@ -187,7 +187,7 @@ pub fn create_zip(src_file: &Path, dst_file: &Path) -> crate::Result<PathBuf> {
 	let mut f = File::open(src_file)?;
 	let mut buffer = Vec::new();
 	f.read_to_end(&mut buffer)?;
-	zip.write_all(&*buffer)?;
+	zip.write_all(&buffer)?;
 	buffer.clear();
 
 	Ok(dst_file.to_owned())
