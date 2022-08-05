@@ -23,7 +23,7 @@ use std::{
 use anyhow::{bail, Context};
 use clap::Parser;
 use log::{error, info, warn};
-use millennium_bundler::bundle::{bundle_project, PackageType};
+use millennium_bundler::bundle::{bundle_project, Bundle, PackageType};
 
 use crate::{
 	helpers::{
@@ -261,8 +261,9 @@ pub fn command(mut options: Options) -> Result<()> {
 
 		let bundles = bundle_project(settings).with_context(|| "failed to bundle project")?;
 
-		// If updater is active
-		if config_.millennium.updater.active {
+		let updater_bundles: Vec<&Bundle> = bundles.iter().filter(|bundle| bundle.package_type == PackageType::Updater).collect();
+		// If updater is active and we bundled it
+		if config_.millennium.updater.active && !updater_bundles.is_empty() {
 			let password = var_os("MILLENNIUM_KEY_PASSWORD").map(|v| v.to_str().unwrap().to_string());
 			let secret_key = if let Some(mut private_key) = var_os("MILLENNIUM_PRIVATE_KEY").map(|v| v.to_str().unwrap().to_string()) {
 				let pk_dir = Path::new(&private_key);
@@ -280,7 +281,7 @@ pub fn command(mut options: Options) -> Result<()> {
 
 			// make sure we have our package builts
 			let mut signed_paths = Vec::new();
-			for elem in bundles.iter().filter(|bundle| bundle.package_type == PackageType::Updater) {
+			for elem in updater_bundles {
 				// we expect to have only one path in the vec but we iter if we add
 				// another type of updater package who require multiple file signature
 				for path in elem.bundle_paths.iter() {
@@ -295,9 +296,7 @@ pub fn command(mut options: Options) -> Result<()> {
 				}
 			}
 
-			if !signed_paths.is_empty() {
-				print_signed_updater_archive(&signed_paths)?;
-			}
+			print_signed_updater_archive(&signed_paths)?;
 		}
 	}
 
