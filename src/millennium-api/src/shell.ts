@@ -151,11 +151,48 @@ class EventEmitter<E extends string> {
 		return this;
 	}
 
+	public removeEventListener(event: E, handler: (arg: any) => void): this {
+		if (this.eventListeners.has(event)) {
+			const handlers = this.eventListeners.get(event)!;
+			const index = handlers.indexOf(handler);
+			if (index >= 0)
+				handlers.splice(index, 1);
+		}
+		return this;
+	}
+
 	public on(event: E, handler: (arg: any) => void): this {
 		return this.addEventListener(event, handler);
 	}
 
-	/** @ignore */
+	public off(event: E, handler: (arg: any) => void): this {
+		return this.removeEventListener(event, handler);
+	}
+
+	public once(event: E, handler: (arg: any) => void): this {
+		const onceHandler = (arg: any) => {
+			handler(arg);
+			this.removeEventListener(event, onceHandler);
+		};
+		return this.addEventListener(event, onceHandler);
+	}
+
+	public prependEventListener(event: E, handler: (arg: any) => void): this {
+		if (this.eventListeners.has(event))
+			this.eventListeners.get(event)!.unshift(handler);
+		else
+			this.eventListeners.set(event, [ handler ]);
+		return this;
+	}
+
+	public prependOnceListener(event: E, handler: (arg: any) => void): this {
+		const onceHandler = (arg: any) => {
+			handler(arg);
+			this.removeEventListener(event, onceHandler);
+		};
+		return this.prependEventListener(event, onceHandler);
+	}
+
 	public emit(event: E, payload: any): this {
 		if (this.eventListeners.has(event))
 			this.eventListeners.get(event)!.forEach(fn => fn(payload));
