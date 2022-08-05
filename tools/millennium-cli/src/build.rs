@@ -14,7 +14,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{env::set_current_dir, path::PathBuf, process::Command};
+use std::{
+	env::{set_current_dir, var_os},
+	path::{Path, PathBuf},
+	process::Command
+};
 
 use anyhow::{bail, Context};
 use clap::Parser;
@@ -26,7 +30,7 @@ use crate::{
 		app_paths::{app_dir, millennium_dir},
 		command_env,
 		config::{get as get_config, AppUrl, WindowUrl, MERGE_CONFIG_EXTENSION_NAME},
-		updater_signature::sign_file_from_env_variables
+		updater_signature::{read_key_from_file, secret_key as updater_secret_key, sign_file}
 	},
 	interface::{AppInterface, AppSettings, Interface},
 	CommandExt, Result
@@ -259,6 +263,21 @@ pub fn command(mut options: Options) -> Result<()> {
 
 		// If updater is active
 		if config_.millennium.updater.active {
+			let password = var_os("MILLENNIUM_KEY_PASSWORD").map(|v| v.to_str().unwrap().to_string());
+			let secret_key = if let Some(mut private_key) = var_os("MILLENNIUM_PRIVATE_KEY").map(|v| v.to_str().unwrap().to_string()) {
+				let pk_dir = Path::new(&private_key);
+				if pk_dir.exists() {
+					private_key = read_key_from_file(pk_dir)?;
+				}
+				updater_secret_key(private_key, password)
+			} else {
+				Err(anyhow::anyhow!("A public key was provided, but no private key. Make sure to also set the `MILLENNIUM_PRIVATE_KEY` environment variable."))
+			}?;
+
+			let pubkey = base64::decode(&config_.millennium.updater.pubkey)?;
+			let pub_key_decoded = String::from_utf8_lossy(&pubkey);
+			let public_key = minisign::PublicKeyBox::from_string(&pub_key_decoded)?.into_public_key()?;
+
 			// make sure we have our package builts
 			let mut signed_paths = Vec::new();
 			for elem in bundles.iter().filter(|bundle| bundle.package_type == PackageType::Updater) {
@@ -266,7 +285,12 @@ pub fn command(mut options: Options) -> Result<()> {
 				// another type of updater package who require multiple file signature
 				for path in elem.bundle_paths.iter() {
 					// sign our path from environment variables
-					let (signature_path, _signature) = sign_file_from_env_variables(path)?;
+					let (signature_path, signature) = sign_file(&secret_key, path)?;
+					if signature.keynum() != public_key.keynum() {
+						return Err(anyhow::anyhow!(
+							"The updater secret key from `MILLENNIUM_PRIVATE_KEY` does not match the public key defined in `.millenniumrc > millennium > updater > pubkey`."
+						));
+					}
 					signed_paths.append(&mut vec![signature_path]);
 				}
 			}

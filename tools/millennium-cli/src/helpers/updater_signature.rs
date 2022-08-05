@@ -15,7 +15,6 @@
 // limitations under the License.
 
 use std::{
-	env::var_os,
 	fs::{self, File, OpenOptions},
 	io::{BufReader, BufWriter, Write},
 	path::{Path, PathBuf},
@@ -25,7 +24,7 @@ use std::{
 
 use anyhow::Context;
 use base64::{decode, encode};
-use minisign::{sign, KeyPair as KP, SecretKeyBox};
+use minisign::{sign, KeyPair as KP, SecretKey, SecretKeyBox, SignatureBox};
 
 /// A key pair (`PublicKey` and `SecretKey`).
 #[derive(Clone, Debug)]
@@ -106,16 +105,11 @@ where
 }
 
 /// Sign files
-pub fn sign_file<P>(private_key: String, password: Option<String>, bin_path: P) -> crate::Result<(PathBuf, String)>
+pub fn sign_file<P>(secret_key: &SecretKey, bin_path: P) -> crate::Result<(PathBuf, SignatureBox)>
 where
 	P: AsRef<Path>
 {
 	let bin_path = bin_path.as_ref();
-	let decoded_secret = decode_key(private_key)?;
-	let sk_box = SecretKeyBox::from_string(&decoded_secret).with_context(|| "failed to load updater private key")?;
-	let sk = sk_box
-		.into_secret_key(password)
-		.with_context(|| "incorrect updater private key password")?;
 
 	// We need to append .sig at the end it's where the signature will be stored
 	let mut extension = bin_path.extension().unwrap().to_os_string();
@@ -128,38 +122,22 @@ where
 
 	let data_reader = open_data_file(bin_path)?;
 
-	let signature_box = sign(None, &sk, data_reader, Some(trusted_comment.as_str()), Some("signature from Millennium secret key"))?;
+	let signature_box = sign(None, secret_key, data_reader, Some(trusted_comment.as_str()), Some("signature from Millennium secret key"))?;
 
 	let encoded_signature = encode(&signature_box.to_string());
 	signature_box_writer.write_all(encoded_signature.as_bytes())?;
 	signature_box_writer.flush()?;
-	Ok((fs::canonicalize(&signature_path)?, encoded_signature))
+	Ok((fs::canonicalize(&signature_path)?, signature_box))
 }
 
-/// Sign files using the MILLENNIUM_KEY_PASSWORD and MILLENNIUM_PRIVATE_KEY environment variables
-pub fn sign_file_from_env_variables<P>(path_to_sign: P) -> crate::Result<(PathBuf, String)>
-where
-	P: AsRef<Path>
-{
-	// if no password provided we set empty string
-	let password_string = var_os("MILLENNIUM_KEY_PASSWORD").map(|value| value.to_str().unwrap().to_string());
-	// get the private key
-	if let Some(private_key) = var_os("MILLENNIUM_PRIVATE_KEY") {
-		// check if this file exist..
-		let mut private_key_string = String::from(private_key.to_str().unwrap());
-		let pk_dir = Path::new(&private_key_string);
-		// Check if user provided a path or a key
-		// We validate if the path exist or no.
-		if pk_dir.exists() {
-			// read file content as use it as private key
-			private_key_string = read_key_from_file(pk_dir)?;
-		}
-		// sign our file
-		sign_file(private_key_string, password_string, path_to_sign)
-	} else {
-		// reject if we don't have the private key
-		Err(anyhow::anyhow!("A public key has been found, but no private key. Make sure to set `MILLENNIUM_PRIVATE_KEY` environment variable."))
-	}
+/// Gets the updater secret key from the given private key and password.
+pub fn secret_key(private_key: String, password: Option<String>) -> crate::Result<SecretKey> {
+	let decoded_secret = decode_key(private_key)?;
+	let sk_box = SecretKeyBox::from_string(&decoded_secret).with_context(|| "failed to load updater private key")?;
+	let sk = sk_box
+		.into_secret_key(password)
+		.with_context(|| "incorrect updater private key password")?;
+	Ok(sk)
 }
 
 fn unix_timestamp() -> u64 {
