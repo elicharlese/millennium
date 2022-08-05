@@ -79,5 +79,13 @@ pub fn get_config(path: &Path) -> Result<(Config, PathBuf), CodegenConfigError> 
 		json_patch::merge(&mut config, &merge_config);
 	}
 
-	Ok((serde_json::from_value(config)?, parent))
+	let old_cwd = std::env::current_dir().map_err(CodegenConfigError::CurrentDir)?;
+	// Set working directory to the config's path so that relative paths are resolved correctly.
+	std::env::set_current_dir(parent.clone()).map_err(CodegenConfigError::CurrentDir)?;
+
+	let config = serde_json::from_value(config)?;
+
+	std::env::set_current_dir(old_cwd).map_err(CodegenConfigError::CurrentDir)?;
+
+	Ok((config, parent))
 }
