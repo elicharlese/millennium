@@ -6,7 +6,9 @@
 	},
 	"build": {
 		"distDir": "{{ dist_dir }}",
-		"devPath": "{{ dev_path }}"
+		"devPath": "{{ dev_path }}",
+		"beforeDevCommand": "{{ beforeDevCommand }}",
+		"beforeBuildCommand": "{{ beforeBuildCommand }}"
 	},
 	"millennium": {
 		"bundle": {

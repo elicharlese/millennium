@@ -69,7 +69,13 @@ pub struct Options {
 	dist_dir: Option<String>,
 	/// Url of your dev server
 	#[clap(short = 'P', long)]
-	dev_path: Option<String>
+	dev_path: Option<String>,
+	/// A shell command to run before `millennium dev` does its work.
+	#[clap(long)]
+	before_dev_command: Option<String>,
+	/// A shell command to run before `millennium build` does its work.
+	#[clap(long)]
+	before_build_command: Option<String>
 }
 
 impl Options {
@@ -124,6 +130,30 @@ impl Options {
 			}
 		})?;
 
+		self.before_dev_command = self.before_dev_command.map(|s| Ok(Some(s))).unwrap_or_else(|| {
+			let text = Text::new("What command should be run before running `millennium dev`?")
+				.with_default("")
+				.with_help_message(
+					"This is a shell command that will be run before `millennium dev` is run.\nTypically, this will be something like `npm run dev`."
+				);
+			match text.prompt() {
+				Ok(text) => Ok(Some(text)),
+				Err(e) => Err(e)
+			}
+		})?;
+
+		self.before_build_command = self.before_build_command.map(|s| Ok(Some(s))).unwrap_or_else(|| {
+			let text = Text::new("What command should be run before running `millennium build`?")
+				.with_default("")
+				.with_help_message(
+					"This is a shell command that will be run before `millennium build` is run.\nTypically, this will be something like `npm run build`."
+				);
+			match text.prompt() {
+				Ok(text) => Ok(Some(text)),
+				Err(e) => Err(e)
+			}
+		})?;
+
 		Ok(self)
 	}
 }
@@ -158,6 +188,8 @@ pub fn command(mut options: Options) -> Result<()> {
 		data.insert("dev_path", to_json(options.dev_path.unwrap_or_else(|| "http://localhost:7216".to_string())));
 		data.insert("app_name", to_json(options.app_name.unwrap_or_else(|| "Millennium App".to_string())));
 		data.insert("window_title", to_json(options.window_title.unwrap_or_else(|| "Millennium App".to_string())));
+		data.insert("before_dev_command", to_json(options.before_dev_command.unwrap_or_default()));
+		data.insert("before_build_command", to_json(options.before_build_command.unwrap_or_default()));
 
 		let config = &handlebars
 			.render_template(MILLENNIUMRC_TEMPLATE, &data)
