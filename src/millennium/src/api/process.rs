@@ -98,7 +98,7 @@ pub fn restart(env: &Env) {
 	use std::process::{exit, Command};
 
 	if let Ok(path) = current_binary(env) {
-		Command::new(path).spawn().expect("application failed to start");
+		Command::new(path).args(&env.args).spawn().expect("application failed to start");
 	}
 
 	exit(0);
