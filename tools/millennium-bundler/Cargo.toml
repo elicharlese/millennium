@@ -15,7 +15,7 @@ exclude = [
 
 [dependencies]
 millennium-utils = { version = "1.0.0-beta.3", path = "../../src/millennium-utils", features = [ "resources" ] }
-image = "0.24.2"
+image = "0.24.3"
 libflate = "1.2"
 anyhow = "1.0"
 thiserror = "1.0"
