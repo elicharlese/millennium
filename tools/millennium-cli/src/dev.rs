@@ -69,7 +69,10 @@ pub struct Options {
 	#[clap(long = "release")]
 	pub release_mode: bool,
 	/// Command line arguments passed to the runner
-	pub args: Vec<String>
+	pub args: Vec<String>,
+	/// Disable the file watcher
+	#[clap(long)]
+	pub no_watch: bool
 }
 
 pub fn command(options: Options) -> Result<()> {
@@ -199,11 +202,12 @@ fn command_internal(mut options: Options) -> Result<()> {
 	let mut interface = AppInterface::new(config.lock().unwrap().as_ref().unwrap())?;
 
 	let exit_on_panic = options.exit_on_panic;
-	interface.dev(options.into(), move |status, reason| on_dev_exit(status, reason, exit_on_panic))
+	let no_watch = options.no_watch;
+	interface.dev(options.into(), move |status, reason| on_dev_exit(status, reason, exit_on_panic, no_watch))
 }
 
-fn on_dev_exit(status: ExitStatus, reason: ExitReason, exit_on_panic: bool) {
-	if !matches!(reason, ExitReason::TriggeredKill) && (exit_on_panic || matches!(reason, ExitReason::NormalExit)) {
+fn on_dev_exit(status: ExitStatus, reason: ExitReason, exit_on_panic: bool, no_watch: bool) {
+	if no_watch || (!matches!(reason, ExitReason::TriggeredKill) && (exit_on_panic || matches!(reason, ExitReason::NormalExit))) {
 		kill_before_dev_process();
 		#[cfg(not(debug_assertions))]
 		let _ = check_for_updates();

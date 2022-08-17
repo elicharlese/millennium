@@ -23,7 +23,7 @@ use std::{
 	str::FromStr,
 	sync::{
 		atomic::{AtomicBool, Ordering},
-		mpsc::channel,
+		mpsc::{channel, sync_channel},
 		Arc, Mutex
 	},
 	time::{Duration, Instant}
@@ -57,7 +57,8 @@ pub struct Options {
 	pub target: Option<String>,
 	pub features: Option<Vec<String>>,
 	pub args: Vec<String>,
-	pub config: Option<String>
+	pub config: Option<String>,
+	pub no_watch: bool
 }
 
 impl From<crate::build::Options> for Options {
@@ -68,7 +69,8 @@ impl From<crate::build::Options> for Options {
 			target: options.target,
 			features: options.features,
 			args: options.args,
-			config: options.config
+			config: options.config,
+			no_watch: true
 		}
 	}
 }
@@ -81,7 +83,8 @@ impl From<crate::dev::Options> for Options {
 			target: options.target,
 			features: options.features,
 			args: options.args,
-			config: options.config
+			config: options.config,
+			no_watch: options.no_watch
 		}
 	}
 }
@@ -204,11 +207,22 @@ impl Interface for Rust {
 
 	fn dev<F: Fn(ExitStatus, ExitReason) + Send + Sync + 'static>(&mut self, options: Options, on_exit: F) -> crate::Result<()> {
 		let on_exit = Arc::new(on_exit);
-
 		let on_exit_ = on_exit.clone();
-		let child = self.run_dev(options.clone(), move |status, reason| on_exit_(status, reason))?;
 
-		self.run_dev_watcher(child, options, on_exit)
+		if options.no_watch {
+			let (tx, rx) = sync_channel(1);
+			self.run_dev(options, move |status, reason| {
+				tx.send(()).unwrap();
+				on_exit_(status, reason)
+			})?;
+
+			rx.recv().unwrap();
+			Ok(())
+		} else {
+			let child = self.run_dev(options.clone(), move |status, reason| on_exit_(status, reason))?;
+
+			self.run_dev_watcher(child, options, on_exit)
+		}
 	}
 }
 
