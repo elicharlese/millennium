@@ -1,7 +1,7 @@
 lockfileVersion: 5.4
 
 specifiers:
-  '@napi-rs/cli': ^2.10.1
+  '@napi-rs/cli': ^2.11.4
   '@pyke/millennium-cli-darwin-arm64': 1.0.0-beta.3
   '@pyke/millennium-cli-darwin-x64': 1.0.0-beta.3
   '@pyke/millennium-cli-linux-arm-gnueabihf': 1.0.0-beta.3
@@ -26,14 +26,14 @@ optionalDependencies:
   '@pyke/millennium-cli-win32-x64-msvc': 1.0.0-beta.3
 
 devDependencies:
-  '@napi-rs/cli': 2.10.1
+  '@napi-rs/cli': 2.11.4
   cross-spawn: 7.0.3
   fs-extra: 10.1.0
 
 packages:
 
-  /@napi-rs/cli/2.10.1:
-    resolution: {integrity: sha512-Rscrg0BO4AKqFX2mKd8C68Wh3TkSHXqF2PZp+utVoLV+PTQnGVMwHedtIHBcFoq1Ij3I4yETMgSFSdAR+lp++Q==}
+  /@napi-rs/cli/2.11.4:
+    resolution: {integrity: sha512-rjU651owB4GJetO3pnu3B8TyVM3Fis3AYb+U16bKxYyykp81S+dJlIgWc8Lc0t55PYbHlBM3hxdgy4pultxMAw==}
     engines: {node: '>= 10'}
     hasBin: true
     dev: true
