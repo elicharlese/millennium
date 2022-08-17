@@ -98,6 +98,8 @@ interface SpawnOptions {
 	cwd?: string;
 	/** Environment variables. Set to `null` to clear all environment variables. */
 	env?: { [key: string]: string };
+	/** Character encoding for stdout/stderr */
+	encoding?: string;
 }
 
 interface InternalSpawnOptions extends SpawnOptions {

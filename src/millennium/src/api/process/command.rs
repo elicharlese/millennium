@@ -32,6 +32,7 @@ use std::{
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
+pub use encoding_rs::Encoding;
 use millennium_utils::platform;
 use os_pipe::{pipe, PipeReader, PipeWriter};
 use serde::Serialize;
@@ -109,7 +110,8 @@ pub struct Command {
 	args: Vec<String>,
 	env_clear: bool,
 	env: HashMap<String, String>,
-	current_dir: Option<PathBuf>
+	current_dir: Option<PathBuf>,
+	encoding: Option<&'static Encoding>
 }
 
 /// Spawned child process.
@@ -186,7 +188,8 @@ impl Command {
 			args: Default::default(),
 			env_clear: false,
 			env: Default::default(),
-			current_dir: None
+			current_dir: None,
+			encoding: None
 		}
 	}
 
@@ -233,6 +236,13 @@ impl Command {
 		self
 	}
 
+	/// Sets the character encoding for stdout/stderr.
+	#[must_use]
+	pub fn encoding(mut self, encoding: &'static Encoding) -> Self {
+		self.encoding.replace(encoding);
+		self
+	}
+
 	/// Spawns the command.
 	///
 	/// # Examples
@@ -274,8 +284,8 @@ impl Command {
 
 		let (tx, rx) = channel(1);
 
-		spawn_pipe_reader(tx.clone(), guard.clone(), stdout_reader, CommandEvent::Stdout);
-		spawn_pipe_reader(tx.clone(), guard.clone(), stderr_reader, CommandEvent::Stderr);
+		spawn_pipe_reader(tx.clone(), guard.clone(), stdout_reader, CommandEvent::Stdout, self.encoding);
+		spawn_pipe_reader(tx.clone(), guard.clone(), stderr_reader, CommandEvent::Stderr, self.encoding);
 
 		spawn(move || {
 			let _ = match child_.wait() {
@@ -376,7 +386,8 @@ fn spawn_pipe_reader<F: Fn(String) -> CommandEvent + Send + Copy + 'static>(
 	tx: Sender<CommandEvent>,
 	guard: Arc<RwLock<()>>,
 	pipe_reader: PipeReader,
-	wrapper: F
+	wrapper: F,
+	character_encoding: Option<&'static Encoding>
 ) {
 	spawn(move || {
 		let _lock = guard.read().unwrap();
@@ -391,7 +402,10 @@ fn spawn_pipe_reader<F: Fn(String) -> CommandEvent + Send + Copy + 'static>(
 						break;
 					}
 					let tx_ = tx.clone();
-					let line = String::from_utf8(buf.clone());
+					let line = match character_encoding {
+						Some(encoding) => Ok(encoding.decode_with_bom_removal(&buf).0.into()),
+						None => String::from_utf8(buf.clone())
+					};
 					block_on_task(async move {
 						let _ = match line {
 							Ok(line) => tx_.send(wrapper(line)).await,
