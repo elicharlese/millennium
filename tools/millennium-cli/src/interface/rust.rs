@@ -224,6 +224,8 @@ fn lookup<F: FnMut(FileType, PathBuf)>(dir: &Path, mut f: F) {
 	}
 
 	let mut builder = ignore::WalkBuilder::new(dir);
+	builder.add_custom_ignore_filename(".m2kignore");
+	builder.add_custom_ignore_filename(".millenniumignore");
 	let _ = builder.add_ignore(default_gitignore);
 	if let Ok(ignore_file) = std::env::var("MILLENNIUM_DEV_WATCHER_IGNORE_FILE") {
 		builder.add_ignore(ignore_file);

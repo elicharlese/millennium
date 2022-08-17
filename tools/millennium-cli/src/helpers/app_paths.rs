@@ -40,6 +40,8 @@ fn lookup<F: Fn(&PathBuf, FileType) -> bool>(dir: &Path, checker: F) -> Option<P
 	let mut builder = WalkBuilder::new(dir);
 	let _ = builder.add_ignore(default_gitignore);
 	builder
+		.add_custom_ignore_filename(".m2kignore")
+		.add_custom_ignore_filename(".millenniumignore")
 		.require_git(false)
 		.ignore(false)
 		.max_depth(Some(
