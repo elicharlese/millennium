@@ -35,7 +35,7 @@ use crate::{
 		ffi::{id, CGFloat, CGPoint, CGRect, CGSize, UIEdgeInsets, UIInterfaceOrientationMask, UIRectEdge, UIScreenOverscanCompensation},
 		monitor, view, EventLoopWindowTarget, Menu, MonitorHandle
 	},
-	window::{CursorIcon, Fullscreen, UserAttentionType, WindowAttributes, WindowId as RootWindowId}
+	window::{CursorIcon, Fullscreen, Theme, UserAttentionType, WindowAttributes, WindowId as RootWindowId}
 };
 
 pub struct Inner {
@@ -352,6 +352,10 @@ impl Inner {
 		handle.ui_view = self.view as _;
 		handle.ui_view_controller = self.view_controller as _;
 		return RawWindowHandle::UiKit(handle);
+	}
+
+	pub fn theme(&self) -> Theme {
+		Theme::Light
 	}
 }
 
