@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-import { invoke } from '../millennium';
+import { invoke } from './millennium';
 
 export type MillenniumModule =
 	| 'App'

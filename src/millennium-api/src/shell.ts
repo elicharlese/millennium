@@ -89,7 +89,7 @@
  * @module
  */
 
-import { invokeMillenniumCommand } from './helpers/millennium';
+import { invokeMillenniumCommand } from './_internal';
 import { isLinux, isMacOS, isWindows } from './platform';
 import { transformCallback } from './millennium';
 

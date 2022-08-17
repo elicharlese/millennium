@@ -17,7 +17,7 @@
  */
 
 import type { WindowLabel } from './window';
-import { invokeMillenniumCommand } from './helpers/millennium';
+import { invokeMillenniumCommand } from './_internal';
 import { transformCallback } from './millennium';
 
 import type { LiteralUnion } from 'type-fest';

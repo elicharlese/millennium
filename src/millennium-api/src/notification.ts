@@ -36,7 +36,7 @@
  * @module
  */
 
-import { invokeMillenniumCommand } from './helpers/millennium';
+import { invokeMillenniumCommand } from './_internal';
 
 export interface NotificationOptions {
 	title: string;

@@ -25,7 +25,7 @@ interface UpdateStatusResult {
 	status: UpdateStatus;
 }
 
-interface UpdateManifest {
+export interface UpdateManifest {
 	version: string;
 	date: string;
 	body: string;

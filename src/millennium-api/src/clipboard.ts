@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-import { invokeMillenniumCommand } from './helpers/millennium';
+import { invokeMillenniumCommand } from './_internal';
 
 /**
  * Writes plain text to the clipboard.

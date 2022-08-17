@@ -22,7 +22,7 @@
 
 import { LiteralUnion } from 'type-fest';
 
-import { invokeMillenniumCommand } from './helpers/millennium';
+import { invokeMillenniumCommand } from './_internal';
 import { isWindows } from './platform';
 
 /** The line ending character(s) used by the OS. */

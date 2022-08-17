@@ -102,25 +102,27 @@ export async function invoke<T>(cmd: string, args: InvokeArgs = {}): Promise<T> 
  *
  * @param filePath The file path.
  * @param protocol The protocol to use. Defaults to `asset`. You only need to set this when using a custom protocol.
+ *
  * @example
  * ```typescript
- * import { appDir, join } from '@pyke/millennium-api/path'
- * import { convertFileSrc } from '@pyke/millennium-api/millennium'
- * const appDirPath = await appDir()
- * const filePath = await join(appDir, 'assets/video.mp4')
- * const assetUrl = convertFileSrc(filePath)
+ * import { appDir, join } from '@pyke/millennium-api/path';
+ * import { getAssetUri } from '@pyke/millennium-api/millennium';
  *
- * const video = document.getElementById('my-video')
- * const source = document.createElement('source')
- * source.type = 'video/mp4'
- * source.src = assetUrl
- * video.appendChild(source)
- * video.load()
+ * const appDirPath = await appDir();
+ * const filePath = await join(appDir, 'assets/video.mp4');
+ * const assetUrl = getAssetUri(filePath);
+ *
+ * const video = document.getElementById('my-video');
+ * const source = document.createElement('source');
+ * source.type = 'video/mp4';
+ * source.src = assetUrl;
+ * video.appendChild(source);
+ * video.load();
  * ```
  *
  * @return the URL that can be used as source on the webview.
  */
-export function convertFileSrc(filePath: string, protocol = 'asset'): string {
+export function getAssetUri(filePath: string, protocol = 'asset'): string {
 	const path = encodeURIComponent(filePath);
 	return isWindows()
 		? `https://${protocol}.localhost/${path}`

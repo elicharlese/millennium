@@ -83,7 +83,7 @@
  * @module
  */
 
-import { invokeMillenniumCommand } from './helpers/millennium';
+import { invokeMillenniumCommand } from './_internal';
 
 export enum BaseDirectory {
 	AUDIO = 1,

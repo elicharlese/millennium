@@ -24,9 +24,11 @@
 		"README.md"
 	],
 	"exports": {
-		".": "./dist/millennium-api.js",
+		".": "./dist/index.js",
 		"./app": "./dist/app.js",
 		"./cli": "./dist/cli.js",
+		"./clipboard": "./dist/clipboard.js",
+		"./dialog": "./dist/dialog.js",
 		"./command-line": "./dist/cli.js",
 		"./event": "./dist/event.js",
 		"./fs": "./dist/fs.js",
@@ -38,6 +40,7 @@
 		"./notification": "./dist/notification.js",
 		"./os": "./dist/os.js",
 		"./path": "./dist/path.js",
+		"./platform": "./dist/platform.js",
 		"./process": "./dist/process.js",
 		"./shell": "./dist/shell.js",
 		"./updater": "./dist/updater.js",

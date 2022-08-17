@@ -123,7 +123,7 @@
  * @module
  */
 
-import { invokeMillenniumCommand } from './helpers/millennium';
+import { invokeMillenniumCommand } from './_internal';
 import { emit, listen, once, EventName, EventCallback, Unlistener } from './event';
 
 export type Theme = 'light' | 'dark';

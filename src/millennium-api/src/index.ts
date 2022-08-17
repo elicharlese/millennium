@@ -19,11 +19,13 @@
 export * as app from './app';
 export * as commandLine from './cli';
 export * as clipboard from './clipboard';
+export * as dialog from './dialog';
 export * as event from './event';
 export * as fs from './fs';
 export * as globalShortcut from './globalShortcut';
 export * as http from './http';
 export * as millennium from './millennium';
+export * as notification from './notification';
 export * as os from './os';
 export * as path from './path';
 export * as platform from './platform';
@@ -37,13 +39,15 @@ export * as cli from './cli';
 export * as windows from './window';
 
 export { appWindow } from './window';
+
 export * from './millennium';
 export type { ArgMatch, CliMatches, SubcommandMatch } from './cli';
+export type { FileDialogFilter, OpenDialogOptions, MessageDialogOptions, SaveDialogOptions } from './dialog';
 export type { Event, EventCallback, EventName, Unlistener } from './event';
 export { BaseDirectory, BinaryFileContents } from './fs';
 export type { ShortcutHandler } from './globalShortcut';
 export type { Duration, Body as HttpBody, Client as HttpClient, FetchOptions, HttpOptions, HttpVerb, RequestOptions, Response as HttpResponse, ResponseType } from './http';
 export type { NotificationOptions, NotificationPermissionStatus } from './notification';
-export type { UpdateResult, UpdateStatus } from './updater';
+export type { UpdateManifest, UpdateResult, UpdateStatus } from './updater';
 export { LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize, UserAttentionType, WebviewWindow } from './window';
 export type { Monitor, WindowLabel, WindowOptions } from './window';

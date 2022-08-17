@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-import { invokeMillenniumCommand } from './helpers/millennium';
+import { invokeMillenniumCommand } from './_internal';
 
 /**
  * Gets the application version defined in `.millenniumrc`.

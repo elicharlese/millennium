@@ -23,7 +23,7 @@
  */
 
 import { BaseDirectory } from './fs';
-import { invokeMillenniumCommand } from './helpers/millennium';
+import { invokeMillenniumCommand } from './_internal';
 import { isWindows } from './platform';
 
 const resolveBaseDirectory = async (directory: BaseDirectory) =>

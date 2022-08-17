@@ -22,7 +22,7 @@
  * @module
  */
 
-import { invokeMillenniumCommand } from './helpers/millennium';
+import { invokeMillenniumCommand } from './_internal';
 
 export interface ArgMatch {
 	value: string | boolean | string[] | null;
