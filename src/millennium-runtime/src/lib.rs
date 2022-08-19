@@ -21,6 +21,7 @@
 use std::{fmt::Debug, sync::mpsc::Sender};
 
 use millennium_utils::Theme;
+use raw_window_handle::RawDisplayHandle;
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -268,6 +269,8 @@ pub trait RuntimeHandle<T: UserEvent>: Debug + Clone + Send + Sync + Sized + 'st
 	#[cfg(all(windows, feature = "system-tray"))]
 	#[cfg_attr(doc_cfg, doc(cfg(all(windows, feature = "system-tray"))))]
 	fn remove_system_tray(&self) -> Result<()>;
+
+	fn raw_display_handle(&self) -> RawDisplayHandle;
 }
 
 /// A global shortcut manager.

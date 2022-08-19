@@ -28,7 +28,7 @@ use ndk::{
 	looper::{ForeignLooper, Poll, ThreadLooper}
 };
 use ndk_sys::AKeyEvent_getKeyCode;
-use raw_window_handle::{AndroidNdkHandle, RawWindowHandle};
+use raw_window_handle::{AndroidDisplayhandle, AndroidNdkWindowHandle, RawDisplayHandle, RawWindowHandle};
 
 use crate::{
 	accelerator::Accelerator,
@@ -430,6 +430,10 @@ impl<T: 'static> EventLoopWindowTarget<T> {
 		v.push_back(MonitorHandle);
 		v
 	}
+
+	pub fn raw_display_handle(&self) -> RawDisplayHandle {
+		RawDisplayHandle::Android(AndroidDisplayHandle::empty())
+	}
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -600,7 +604,7 @@ impl Window {
 
 	pub fn raw_window_handle(&self) -> RawWindowHandle {
 		// TODO: use main activity instead?
-		let mut handle = AndroidNdkHandle::empty();
+		let mut handle = AndroidNdkWindowHandle::empty();
 		if let Some(w) = ndk_glue::window_manager() {
 			handle.a_native_window = w.as_obj().into_inner() as *mut _;
 		} else {
@@ -609,6 +613,10 @@ impl Window {
 			);
 		};
 		RawWindowHandle::AndroidNdk(handle)
+	}
+
+	pub fn raw_display_handle(&self) -> RawDisplayHandle {
+		RawDisplayHandle::Android(AndroidDisplayHandle::empty())
 	}
 
 	pub fn config(&self) -> Configuration {

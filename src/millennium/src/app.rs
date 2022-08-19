@@ -31,6 +31,7 @@ use millennium_runtime::window::{
 	FileDropEvent
 };
 use millennium_utils::PackageInfo;
+use raw_window_handle::HasRawDisplayHandle;
 
 use crate::runtime::menu::{Menu, MenuId, MenuIdRef};
 use crate::runtime::RuntimeHandle;
@@ -1454,6 +1455,18 @@ impl<R: Runtime> Builder<R> {
 	pub fn run<A: Assets>(self, context: Context<A>) -> crate::Result<()> {
 		self.build(context)?.run(|_, _| {});
 		Ok(())
+	}
+}
+
+unsafe impl HasRawDisplayHandle for AppHandle {
+	fn raw_display_handle(&self) -> raw_window_handle::RawDisplayHandle {
+		self.runtime_handle.raw_display_handle()
+	}
+}
+
+unsafe impl HasRawDisplayHandle for App {
+	fn raw_display_handle(&self) -> raw_window_handle::RawDisplayHandle {
+		self.handle.raw_display_handle()
 	}
 }
 

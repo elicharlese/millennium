@@ -31,6 +31,7 @@
 use std::{error, fmt, ops::Deref};
 
 use instant::Instant;
+use raw_window_handle::{HasRawDisplayHandle, RawDisplayHandle};
 
 use crate::{event::Event, monitor::MonitorHandle, platform_impl};
 
@@ -230,6 +231,13 @@ impl<T> EventLoopWindowTarget<T> {
 	#[inline]
 	pub fn primary_monitor(&self) -> Option<MonitorHandle> {
 		self.p.primary_monitor()
+	}
+}
+
+unsafe impl<T> HasRawDisplayHandle for EventLoopWindowTarget<T> {
+	/// Returns a [`raw_window_handle::RawDisplayHandle`] for the event loop.
+	fn raw_display_handle(&self) -> RawDisplayHandle {
+		self.p.raw_display_handle()
 	}
 }
 

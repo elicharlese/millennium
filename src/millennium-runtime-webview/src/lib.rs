@@ -89,7 +89,7 @@ use millennium_webview::{
 	},
 	webview::{FileDropEvent as MillenniumFileDropEvent, WebContext, WebView, WebViewBuilder}
 };
-pub use raw_window_handle::HasRawWindowHandle;
+use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle};
 use uuid::Uuid;
 #[cfg(windows)]
 use webview2_com::FocusChangedEventHandler;
@@ -1491,6 +1491,10 @@ impl<T: UserEvent> RuntimeHandle<T> for MillenniumHandle<T> {
 	#[cfg(all(windows, feature = "system-tray"))]
 	fn remove_system_tray(&self) -> Result<()> {
 		send_user_message(&self.context, Message::Tray(TrayMessage::Close))
+	}
+
+	fn raw_display_handle(&self) -> RawDisplayHandle {
+		self.context.main_thread.window_target.raw_display_handle()
 	}
 }
 

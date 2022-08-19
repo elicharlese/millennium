@@ -23,6 +23,7 @@ use std::{
 };
 
 use crossbeam_channel::{self as channel, Receiver, Sender};
+use raw_window_handle::{RawDisplayHandle, UiKitDisplayHandle};
 
 use crate::platform_impl::platform::{
 	app_state,
@@ -75,6 +76,10 @@ impl<T: 'static> EventLoopWindowTarget<T> {
 		// guaranteed to be on main thread
 		let monitor = unsafe { monitor::main_uiscreen() };
 		return Some(RootMonitorHandle { inner: monitor });
+	}
+
+	pub fn raw_display_handle(&self) -> RawDisplayHandle {
+		RawDisplayHandle::UiKit(UiKitDisplayHandle::empty())
 	}
 }
 

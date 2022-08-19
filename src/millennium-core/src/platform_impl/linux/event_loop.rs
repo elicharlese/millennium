@@ -30,6 +30,7 @@ use gdk::{Cursor, CursorType, EventKey, EventMask, ScrollDirection, WindowEdge, 
 use gio::{prelude::*, Cancellable};
 use glib::{source::Priority, Continue, MainContext};
 use gtk::{builders::AboutDialogBuilder, prelude::*, Inhibit};
+use raw_window_handle::{RawDisplayHandle, XlibDisplayHandle};
 
 use super::{
 	keyboard,
@@ -83,6 +84,18 @@ impl<T> EventLoopWindowTarget<T> {
 		let number = screen.primary_monitor();
 		let handle = MonitorHandle::new(&self.display, number);
 		Some(RootMonitorHandle { inner: handle })
+	}
+
+	pub fn raw_display_handle(&self) -> RawDisplayHandle {
+		let mut display_handle = XlibDisplayHandle::empty();
+		unsafe {
+			if let Ok(xlib) = x11_dl::xlib::Xlib::open() {
+				let display = (xlib.XOpenDisplay)(std::ptr::null());
+				display_handle.display = display as _;
+				display_handle.screen = (xlib.XDefaultScreen)(display) as _;
+			}
+		}
+		RawDisplayHandle::Xlib(display_handle)
 	}
 }
 

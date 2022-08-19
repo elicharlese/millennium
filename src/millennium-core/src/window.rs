@@ -20,6 +20,8 @@
 //! The `Window` struct and associated types.
 use std::fmt;
 
+use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle};
+
 pub use crate::icon::{BadIcon, Icon};
 use crate::{
 	dpi::{PhysicalPosition, PhysicalSize, Position, Size},
@@ -988,8 +990,8 @@ impl Window {
 }
 
 // Safety: objc runtime calls are unsafe
-unsafe impl raw_window_handle::HasRawWindowHandle for Window {
-	/// Returns a `raw_window_handle::RawWindowHandle` for the Window
+unsafe impl HasRawWindowHandle for Window {
+	/// Returns a [`raw_window_handle::RawWindowHandle`] for the Window
 	///
 	/// ## Platform-specific
 	///
@@ -998,6 +1000,15 @@ unsafe impl raw_window_handle::HasRawWindowHandle for Window {
 	/// panic*!
 	fn raw_window_handle(&self) -> raw_window_handle::RawWindowHandle {
 		self.window.raw_window_handle()
+	}
+}
+
+unsafe impl HasRawDisplayHandle for Window {
+	/// Returns a [`raw_window_handle::RawDisplayHandle`] used by the [`EventLoop`] that created a window.
+	///
+	/// [`EventLoop`]: crate::event_loop::EventLoop
+	fn raw_display_handle(&self) -> RawDisplayHandle {
+		self.window.raw_display_handle()
 	}
 }
 

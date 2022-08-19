@@ -32,6 +32,7 @@ use std::{
 
 use crossbeam_channel::{self as channel, Receiver, Sender};
 use parking_lot::Mutex;
+use raw_window_handle::{RawDisplayHandle, WindowsDisplayHandle};
 use runner::{EventLoopRunner, EventLoopRunnerShared};
 use windows::{
 	core::PCWSTR,
@@ -294,6 +295,10 @@ impl<T> EventLoopWindowTarget<T> {
 	pub fn primary_monitor(&self) -> Option<RootMonitorHandle> {
 		let monitor = monitor::primary_monitor();
 		Some(RootMonitorHandle { inner: monitor })
+	}
+
+	pub fn raw_display_handle(&self) -> RawDisplayHandle {
+		RawDisplayHandle::Windows(WindowsDisplayHandle::empty())
 	}
 }
 

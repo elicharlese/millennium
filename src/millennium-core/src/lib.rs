@@ -124,9 +124,9 @@
 //!
 //! Millennium Core doesn't directly provide any methods for drawing on a
 //! [`Window`]. However it allows you to retrieve the raw handle of the window
-//! (see the [`platform`] module and/or the [`raw_window_handle`] method), which
-//! in turn allows you to create an OpenGL/Vulkan/DirectX/Metal/etc. context
-//! that can be used to render graphics.
+//! and display (see the [`platform`] module and/or the [`raw_window_handle`] &
+//! [`raw_display_handle`] methods), which in turn allows you to create an
+//! OpenGL/Vulkan/DirectX/Metal/etc. context that can be used to render graphics.
 //!
 //! Note that many platforms will display garbage data in the window's client
 //! area if the application doesn't render anything to the window by the time
