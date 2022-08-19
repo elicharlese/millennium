@@ -558,10 +558,12 @@ lazy_static! {
 fn create_event_target_window() -> HWND {
 	let window = unsafe {
 		CreateWindowExW(
-			WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED,
+			WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED |
+			// Prevent a ghost window from appearing on the taskbar after an extended period of time.
+			WS_EX_TOOLWINDOW,
 			PCWSTR(THREAD_EVENT_TARGET_WINDOW_CLASS.clone().as_ptr()),
 			PCWSTR::default(),
-			Default::default(),
+			WS_OVERLAPPED,
 			0,
 			0,
 			0,
