@@ -27,6 +27,7 @@ use windows::{
 };
 
 use super::{
+	event_loop::S_U_TASKBAR_RESTART,
 	menu::{subclass_proc as menu_subclass_proc, Menu, MenuHandler},
 	util, OsError
 };
@@ -41,9 +42,10 @@ use crate::{
 
 const WM_USER_TRAYICON: u32 = 6001;
 const WM_USER_UPDATE_TRAYMENU: u32 = 6002;
-const TRAYICON_UID: u32 = 6003;
-const TRAY_SUBCLASS_ID: usize = 6004;
-const TRAY_MENU_SUBCLASS_ID: usize = 6005;
+const WM_USER_UPDATE_TRAYICON: u32 = 6003;
+const TRAYICON_UID: u32 = 6004;
+const TRAY_SUBCLASS_ID: usize = 6005;
+const TRAY_MENU_SUBCLASS_ID: usize = 6006;
 
 struct TrayLoopData {
 	hmenu: Option<HMENU>,
@@ -97,25 +99,19 @@ impl SystemTrayBuilder {
 				return Err(os_error!(OsError::CreationError("Unable to get valid mutable pointer for CreateWindowEx")));
 			}
 
-			let mut nid = NOTIFYICONDATAW {
-				uFlags: NIF_MESSAGE,
-				hWnd: hwnd,
-				uID: TRAYICON_UID,
-				uCallbackMessage: WM_USER_TRAYICON,
-				..std::mem::zeroed()
-			};
-
-			if !Shell_NotifyIconW(NIM_ADD, &mut nid as _).as_bool() {
+			let hicon = self.icon.inner.as_raw_handle();
+			if !register_tray_icon(hwnd, hicon) {
 				return Err(os_error!(OsError::CreationError("Error with shellapi::Shell_NotifyIconW")));
 			}
 
-			let mut system_tray = SystemTray { hwnd };
-			system_tray.set_icon(self.icon);
+			let mut system_tray = SystemTray { hwnd: hwnd.clone() };
 
 			// system_tray event handler
 			let event_loop_runner = window_target.p.runner_shared.clone();
 			let traydata = TrayLoopData {
+				hwnd,
 				hmenu,
+				icon: self.icon,
 				sender: Box::new(move |event| {
 					if let Ok(e) = event.map_nonuser_event() {
 						event_loop_runner.send_event(e)
@@ -159,6 +155,9 @@ impl SystemTray {
 			if !Shell_NotifyIconW(NIM_MODIFY, &mut nid as _).as_bool() {
 				debug!("Error setting icon");
 			}
+
+			// Send the new icon to the subclass proc to store it in the tray data
+			SendMessageW(self.hwnd, WM_USER_UPDATE_TRAYICON, WPARAM(Box::into_raw(Box::new(icon)) as _), LPARAM(0));
 		}
 	}
 
@@ -200,6 +199,15 @@ unsafe extern "system" fn tray_subclass_proc(hwnd: HWND, msg: u32, wparam: WPARA
 
 	if msg == WM_USER_UPDATE_TRAYMENU {
 		subclass_input.hmenu = Some(HMENU(wparam.0 as _));
+	}
+
+	if msg == WM_USER_UPDATE_TRAYICON {
+		let icon = wparam.0 as *mut Icon;
+		subclass_input.icon = (*icon).clone();
+	}
+
+	if msg == *S_U_TASKBAR_RESTART {
+		register_tray_icon(subclass_input.hwnd, subclass_input.icon.inner.as_raw_handle());
 	}
 
 	if msg == WM_USER_TRAYICON && matches!(lparam.0 as u32, WM_LBUTTONUP | WM_RBUTTONUP | WM_LBUTTONDBLCLK) {
@@ -271,4 +279,17 @@ unsafe fn show_tray_menu(hwnd: HWND, menu: HMENU, x: i32, y: i32) {
 		hwnd,
 		std::ptr::null_mut()
 	);
+}
+
+unsafe fn register_tray_icon(hwnd: HWND, hicon: HICON) -> bool {
+	let mut nid = NOTIFYICONDATAW {
+		uFlags: NIF_MESSAGE | NIF_ICON,
+		hWnd: hwnd,
+		hIcon: hicon,
+		uID: TRAYICON_UID,
+		uCallbackMessage: WM_USER_TRAYICON,
+		..std::mem::zeroed()
+	};
+
+	Shell_NotifyIconW(NIM_ADD, &mut nid as _).as_bool()
 }
