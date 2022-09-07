@@ -116,12 +116,25 @@ impl WindowDelegateState {
 		AppState::queue_event(wrapper);
 	}
 
-	pub fn emit_move_event(&mut self) {
+	pub fn emit_resize_event(&mut self) {
 		let rect = unsafe { NSView::frame(*self.ns_view) };
 		let scale_factor = self.get_scale_factor();
 		let logical_size = LogicalSize::new(rect.size.width as f64, rect.size.height as f64);
 		let size = logical_size.to_physical(scale_factor);
 		self.emit_event(WindowEvent::Resized(size));
+	}
+
+	fn emit_move_event(&mut self) {
+		let rect = unsafe { NSWindow::frame(*self.ns_window) };
+		let x = rect.origin.x as f64;
+		let y = util::bottom_left_to_top_left(rect);
+		let moved = self.previous_position != Some((x, y));
+		if moved {
+			self.previous_position = Some((x, y));
+			let scale_factor = self.get_scale_factor();
+			let physical_pos = LogicalPosition::<f64>::from((x, y)).to_physical(scale_factor);
+			self.emit_event(WindowEvent::Moved(physical_pos));
+		}
 	}
 
 	fn get_scale_factor(&self) -> f64 {

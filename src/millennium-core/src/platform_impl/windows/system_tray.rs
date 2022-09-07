@@ -48,7 +48,9 @@ const TRAY_SUBCLASS_ID: usize = 6005;
 const TRAY_MENU_SUBCLASS_ID: usize = 6006;
 
 struct TrayLoopData {
+	hwnd: HWND,
 	hmenu: Option<HMENU>,
+	icon: Icon,
 	sender: Box<dyn Fn(Event<'static, ()>)>
 }
 
@@ -104,7 +106,7 @@ impl SystemTrayBuilder {
 				return Err(os_error!(OsError::CreationError("Error with shellapi::Shell_NotifyIconW")));
 			}
 
-			let mut system_tray = SystemTray { hwnd: hwnd.clone() };
+			let system_tray = SystemTray { hwnd: hwnd.clone() };
 
 			// system_tray event handler
 			let event_loop_runner = window_target.p.runner_shared.clone();
