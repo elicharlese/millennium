@@ -25,7 +25,7 @@ use gdk::{WindowEdge, WindowState};
 use gtk::{prelude::*, traits::SettingsExt, AccelGroup, Orientation, Settings};
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle, XlibDisplayHandle, XlibWindowHandle};
 
-use super::{event_loop::EventLoopWindowTarget, menu, monitor::MonitorHandle, PlatformSpecificWindowBuilderAttributes};
+use super::{event_loop::EventLoopWindowTarget, menu, monitor::MonitorHandle, Parent, PlatformSpecificWindowBuilderAttributes};
 use crate::{
 	dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize, Position, Size},
 	error::{ExternalError, NotSupportedError, OsError as RootOsError},
@@ -226,6 +226,10 @@ impl Window {
 			window.show_all();
 		} else {
 			window.hide();
+		}
+
+		if let Parent::ChildOf(parent) = pl_attribs.parent {
+			window.set_transient_for(Some(&parent));
 		}
 
 		let w_pos = window.position();
