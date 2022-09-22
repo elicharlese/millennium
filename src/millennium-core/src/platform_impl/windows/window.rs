@@ -850,7 +850,7 @@ unsafe fn init<T: 'static>(
 		win.set_inner_size(clamped_size);
 
 		if attributes.maximized {
-			// Need toset MAXIMIZED after setting `inner_size` as `Window::set_inner_size` changes MAXIMIZED to false.
+			// Need to set MAXIMIZED after setting `inner_size` as `Window::set_inner_size` changes MAXIMIZED to false.
 			win.set_maximized(true);
 		}
 	}
