@@ -220,6 +220,11 @@ impl Inner {
 		return false;
 	}
 
+	pub fn is_minimized(&self) -> bool {
+		warn!("`Window::is_minimized` is ignored on iOS");
+		return false;
+	}
+
 	pub fn is_visible(&self) -> bool {
 		log::warn!("`Window::is_visible` is ignored on iOS");
 		return false;

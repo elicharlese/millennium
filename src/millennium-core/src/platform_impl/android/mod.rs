@@ -544,6 +544,10 @@ impl Window {
 		false
 	}
 
+	pub fn is_minimized(&self) -> bool {
+		false
+	}
+
 	pub fn is_visible(&self) -> bool {
 		log::warn!("`Window::is_visible` is ignored on android");
 		false
