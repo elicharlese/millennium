@@ -149,7 +149,7 @@ impl Scope {
 	/// the Millennium API to read the contents of this file.
 	pub fn allow_file<P: AsRef<Path>>(&self, path: P) -> crate::Result<()> {
 		let path = path.as_ref();
-		push_pattern(&mut self.allowed_patterns.lock().unwrap(), &path)?;
+		push_pattern(&mut self.allowed_patterns.lock().unwrap(), path)?;
 		self.trigger(Event::PathAllowed(path.to_path_buf()));
 		Ok(())
 	}
@@ -179,7 +179,7 @@ impl Scope {
 	/// denied **always**.
 	pub fn forbid_file<P: AsRef<Path>>(&self, path: P) -> crate::Result<()> {
 		let path = path.as_ref();
-		push_pattern(&mut self.forbidden_patterns.lock().unwrap(), &path)?;
+		push_pattern(&mut self.forbidden_patterns.lock().unwrap(), path)?;
 		self.trigger(Event::PathForbidden(path.to_path_buf()));
 		Ok(())
 	}

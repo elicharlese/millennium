@@ -389,7 +389,7 @@ fn dur2timeout(dur: Duration) -> u32 {
 	dur.as_secs()
 		.checked_mul(1000)
 		.and_then(|ms| ms.checked_add((dur.subsec_nanos() as u64) / 1_000_000))
-		.and_then(|ms| ms.checked_add(if dur.subsec_nanos() % 1_000_000 > 0 { 1 } else { 0 }))
+		.and_then(|ms| ms.checked_add(u64::from(dur.subsec_nanos() % 1_000_000 > 0)))
 		.map(|ms| if ms > u32::max_value() as u64 { INFINITE } else { ms as u32 })
 		.unwrap_or(INFINITE)
 }
@@ -1766,10 +1766,8 @@ unsafe fn public_window_callback_inner<T: 'static>(
 						let delta_nudge_to_dpi_monitor = (
 							if wrong_monitor_rect.left == new_monitor_rect.right {
 								-1
-							} else if wrong_monitor_rect.right == new_monitor_rect.left {
-								1
 							} else {
-								0
+								i32::from(wrong_monitor_rect.right == new_monitor_rect.left)
 							},
 							if wrong_monitor_rect.bottom == new_monitor_rect.top {
 								1
@@ -1814,8 +1812,7 @@ unsafe fn public_window_callback_inner<T: 'static>(
 			use crate::event::WindowEvent::ThemeChanged;
 
 			let preferred_theme = subclass_input.window_state.lock().preferred_theme;
-
-			if preferred_theme == None {
+			if preferred_theme.is_none() {
 				let new_theme = try_theme(window, preferred_theme);
 				let mut window_state = subclass_input.window_state.lock();
 

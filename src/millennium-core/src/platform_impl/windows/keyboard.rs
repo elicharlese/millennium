@@ -650,7 +650,7 @@ fn get_async_kbd_state() -> [u8; 256] {
 				// Toggle states aren't reported by `GetAsyncKeyState`
 				let toggle_state = GetKeyState(i32::from(vk.0));
 				let is_active = (toggle_state & 1) != 0;
-				*state |= if is_active { 1 } else { 0 };
+				*state |= u8::from(is_active);
 			}
 		}
 		kbd_state

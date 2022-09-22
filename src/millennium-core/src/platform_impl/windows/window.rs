@@ -1074,10 +1074,10 @@ pub fn hit_test(hwnd: *mut libc::c_void, cx: i32, cy: i32) -> LRESULT {
 
 			#[rustfmt::skip]
 			let result =
-				  (LEFT * (if cx < (left + inset) { 1 } else { 0 }))
-				| (RIGHT * (if cx >= (right - inset) { 1 } else { 0 }))
-				| (TOP * (if cy < (top + inset) { 1 } else { 0 }))
-				| (BOTTOM * (if cy >= (bottom - inset) { 1 } else { 0 }));
+				  (LEFT * isize::from(cx < (left + inset)))
+				| (RIGHT * isize::from(cx >= (right - inset)))
+				| (TOP * isize::from(cy < (top + inset)))
+				| (BOTTOM * isize::from(cy >= (bottom - inset)));
 
 			LRESULT(match result {
 				CLIENT => HTCLIENT,

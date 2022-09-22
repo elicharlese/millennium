@@ -64,7 +64,7 @@ fn map_core_assets(options: &AssetOptions) -> impl Fn(&AssetKey, &Path, &mut Vec
 							let mut hasher = Sha256::new();
 							hasher.update(&script);
 							let hash = hasher.finalize();
-							scripts.push(format!("'sha256-{}'", base64::encode(&hash)));
+							scripts.push(format!("'sha256-{}'", base64::encode(hash)));
 						}
 						csp_hashes.inline_scripts.entry(key.clone().into()).or_default().append(&mut scripts);
 					}
@@ -78,7 +78,7 @@ fn map_core_assets(options: &AssetOptions) -> impl Fn(&AssetKey, &Path, &mut Vec
 						let mut hasher = Sha256::new();
 						hasher.update(millennium_utils::pattern::isolation::IFRAME_STYLE);
 						let hash = hasher.finalize();
-						csp_hashes.styles.push(format!("'sha256-{}'", base64::encode(&hash)));
+						csp_hashes.styles.push(format!("'sha256-{}'", base64::encode(hash)));
 					}
 				}
 			}
@@ -354,7 +354,7 @@ fn ico_icon<P: AsRef<Path>>(root: &TokenStream, out_dir: &Path, path: P) -> Resu
 	use std::io::Write;
 
 	let path = path.as_ref();
-	let bytes = std::fs::read(&path)
+	let bytes = std::fs::read(path)
 		.unwrap_or_else(|_| panic!("failed to read icon {}", path.display()))
 		.to_vec();
 	let icon_dir = ico::IconDir::read(std::io::Cursor::new(bytes)).unwrap_or_else(|_| panic!("failed to parse icon {}", path.display()));
@@ -406,7 +406,7 @@ fn png_icon<P: AsRef<Path>>(root: &TokenStream, out_dir: &Path, path: P) -> Resu
 	use std::io::Write;
 
 	let path = path.as_ref();
-	let bytes = std::fs::read(&path)
+	let bytes = std::fs::read(path)
 		.unwrap_or_else(|_| panic!("failed to read icon {}", path.display()))
 		.to_vec();
 	let decoder = png::Decoder::new(std::io::Cursor::new(bytes));
