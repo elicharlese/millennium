@@ -106,7 +106,7 @@ impl SystemTrayBuilder {
 /// * **Linux**:
 /// 	- Dropping the tray too early could lead to a default icon.
 /// 	- Dropping the tray after the icon has been added to the system tray may not remove it.
-/// * **Windows**:
+/// * **Windows/macOS**:
 /// 	- Dropping the tray will effectively remove the icon from the system tray.
 pub struct SystemTray(pub SystemTrayPlatform);
 
