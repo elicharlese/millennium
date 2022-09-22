@@ -40,7 +40,7 @@ impl SystemTrayBuilder {
 	}
 
 	#[inline]
-	pub fn build<T: 'static>(self, window_target: &EventLoopWindowTarget<T>) -> Result<RootSystemTray, OsError> {
+	pub fn build<T: 'static>(self, window_target: &EventLoopWindowTarget<T>, _tooltip: Option<String>) -> Result<RootSystemTray, OsError> {
 		let mut app_indicator = AppIndicator::new("millennium-core", "");
 
 		let (parent_path, icon_path) = temp_icon_path(self.temp_icon_dir.as_ref()).expect("failed to create temp folder for system tray icon");
@@ -86,6 +86,8 @@ impl SystemTray {
 		self.app_indicator.set_icon_full(&icon_path.to_string_lossy(), "icon");
 		self.icon_path = icon_path;
 	}
+
+	pub fn set_tooltip(&self, _tooltip: &str) {}
 
 	pub fn set_menu(&mut self, tray_menu: &Menu) {
 		let mut menu = tray_menu.clone().into_gtkmenu(&self.sender, &AccelGroup::new(), WindowId::dummy());

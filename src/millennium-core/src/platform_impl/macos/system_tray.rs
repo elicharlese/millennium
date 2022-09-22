@@ -19,7 +19,7 @@ use std::sync::Once;
 use cocoa::{
 	appkit::{NSButton, NSEventMask, NSEventModifierFlags, NSEventType, NSImage, NSSquareStatusItemLength, NSStatusBar, NSStatusItem, NSWindow},
 	base::{id, nil, NO, YES},
-	foundation::{NSAutoreleasePool, NSData, NSPoint, NSSize}
+	foundation::{NSAutoreleasePool, NSData, NSPoint, NSSize, NSString}
 };
 use objc::{
 	declare::ClassDecl,
@@ -67,7 +67,7 @@ impl SystemTrayBuilder {
 
 	/// Builds the system tray.
 	#[inline]
-	pub fn build<T: 'static>(self, _window_target: &EventLoopWindowTarget<T>) -> Result<RootSystemTray, OsError> {
+	pub fn build<T: 'static>(self, _window_target: &EventLoopWindowTarget<T>, tooltip: Option<String>) -> Result<RootSystemTray, OsError> {
 		unsafe {
 			// use our existing status bar
 			let status_bar = self.system_tray.ns_status_bar;
@@ -93,6 +93,11 @@ impl SystemTrayBuilder {
 				// the button See `make_tray_class` for more information.
 				(*tray_target).set_ivar("menu", menu.menu);
 				let () = msg_send![menu.menu, setDelegate: tray_target];
+			}
+
+			// set tooltip if provided
+			if let Some(tooltip) = tooltip {
+				self.system_tray.set_tooltip(&tooltip);
 			}
 		}
 
@@ -125,6 +130,13 @@ impl SystemTray {
 	pub fn set_menu(&mut self, tray_menu: &Menu) {
 		unsafe {
 			self.ns_status_bar.setMenu_(tray_menu.menu);
+		}
+	}
+
+	pub fn set_tooltip(&self, tooltip: &str) {
+		unsafe {
+			let tooltip = NSString::alloc(nil).init_str(tooltip);
+			let _: () = msg_send![self.ns_status_bar.button(), setToolTip: tooltip];
 		}
 	}
 

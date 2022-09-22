@@ -66,7 +66,7 @@ impl SystemTrayBuilder {
 	}
 
 	#[inline]
-	pub fn build<T: 'static>(self, window_target: &EventLoopWindowTarget<T>) -> Result<RootSystemTray, RootOsError> {
+	pub fn build<T: 'static>(self, window_target: &EventLoopWindowTarget<T>, _tooltip: Option<String>) -> Result<RootSystemTray, RootOsError> {
 		let hmenu: Option<HMENU> = self.tray_menu.map(|m| m.hmenu());
 
 		let class_name = util::encode_wide("millennium_system_tray_app");
@@ -170,6 +170,8 @@ impl SystemTray {
 			SendMessageW(self.hwnd, WM_USER_UPDATE_TRAYICON, WPARAM(Box::into_raw(Box::new(icon)) as _), LPARAM(0));
 		}
 	}
+
+	pub fn set_tooltip(&self, _tooltip: &str) {}
 
 	pub fn set_menu(&mut self, tray_menu: &Menu) {
 		unsafe {
