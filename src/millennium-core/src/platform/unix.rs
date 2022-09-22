@@ -54,6 +54,11 @@ pub trait WindowBuilderExtUnix {
 	/// Set this window as a transient dialog for `parent`
 	/// <https://gtk-rs.org/gtk3-rs/stable/latest/docs/gdk/struct.Window.html#method.set_transient_for>
 	fn with_transient_for(self, parent: gtk::ApplicationWindow) -> WindowBuilder;
+	/// Whether to enable or disable the internal draw for transparent window.
+	///
+	/// When the tranparent attribute is enabled, `millennium-core` calls `connect_draw` and draws a transparent
+	/// background. If you'd like to draw the background manually, set this to `false`. Default is `true`.
+	fn with_transparent_draw(self, draw: bool) -> WindowBuilder;
 }
 
 impl WindowBuilderExtUnix for WindowBuilder {
@@ -64,6 +69,11 @@ impl WindowBuilderExtUnix for WindowBuilder {
 
 	fn with_transient_for(mut self, parent: gtk::ApplicationWindow) -> WindowBuilder {
 		self.platform_specific.parent = Parent::ChildOf(parent);
+		self
+	}
+
+	fn with_transparent_draw(mut self, draw: bool) -> WindowBuilder {
+		self.platform_specific.auto_transparent = draw;
 		self
 	}
 }
@@ -91,4 +101,62 @@ impl<T> EventLoopExtUnix for EventLoop<T> {
 	fn new_any_thread() -> Self {
 		wrap_ev(UnixEventLoop::new_any_thread())
 	}
+}
+
+/// Additional methods on `EventLoopWindowTarget` that are specific to Unix.
+pub trait EventLoopWindowTargetExtUnix {
+	/// True if the `EventLoopWindowTarget` uses Wayland.
+	fn is_wayland(&self) -> bool;
+
+	/// True if the `EventLoopWindowTarget` uses X11.
+	fn is_x11(&self) -> bool;
+
+	fn xlib_xconnection(&self) -> Option<Arc<XConnection>>;
+
+	// /// Returns a pointer to the `wl_display` object of wayland that is used by this
+	// /// `EventLoopWindowTarget`.
+	// ///
+	// /// Returns `None` if the `EventLoop` doesn't use wayland (if it uses xlib for example).
+	// ///
+	// /// The pointer will become invalid when the winit `EventLoop` is destroyed.
+	// fn wayland_display(&self) -> Option<*mut raw::c_void>;
+}
+
+impl<T> EventLoopWindowTargetExtUnix for EventLoopWindowTarget<T> {
+	#[inline]
+	fn is_wayland(&self) -> bool {
+		self.p.is_wayland()
+	}
+
+	#[inline]
+	fn is_x11(&self) -> bool {
+		!self.p.is_wayland()
+	}
+
+	#[inline]
+	fn xlib_xconnection(&self) -> Option<Arc<XConnection>> {
+		if self.is_x11() {
+			if let Ok(xconn) = XConnection::new(Some(x_error_callback)) {
+				Some(Arc::new(xconn))
+			} else {
+				None
+			}
+		} else {
+			None
+		}
+	}
+}
+
+unsafe extern "C" fn x_error_callback(_display: *mut x11::ffi::Display, event: *mut x11::ffi::XErrorEvent) -> c_int {
+	let error = XError {
+		// TODO: get the error text as description
+		description: String::new(),
+		error_code: (*event).error_code,
+		request_code: (*event).request_code,
+		minor_code: (*event).minor_code
+	};
+
+	error!("X11 error: {:#?}", error);
+
+	0
 }

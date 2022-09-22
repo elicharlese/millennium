@@ -27,6 +27,7 @@ mod monitor;
 #[cfg(feature = "tray")]
 mod system_tray;
 mod window;
+pub mod x11;
 
 pub use event_loop::{EventLoop, EventLoopProxy, EventLoopWindowTarget};
 pub use icon::PlatformIcon;
@@ -62,10 +63,21 @@ impl Default for Parent {
 	}
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct PlatformSpecificWindowBuilderAttributes {
 	pub parent: Parent,
-	pub skip_taskbar: bool
+	pub skip_taskbar: bool,
+	pub auto_transparent: bool
+}
+
+impl Default for PlatformSpecificWindowBuilderAttributes {
+	fn default() -> Self {
+		Self {
+			parent: Default::default(),
+			skip_taskbar: false,
+			auto_transparent: true
+		}
+	}
 }
 
 unsafe impl Send for PlatformSpecificWindowBuilderAttributes {}
