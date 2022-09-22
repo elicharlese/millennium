@@ -68,7 +68,7 @@ macro_rules! android_fn {
 			android_fn!($domain, $package, MainActivity, destroy);
 			android_fn!($domain, $package, MainActivity, memory);
 			android_fn!($domain, $package, MainActivity, focus, i32);
-			android_fn!($domain, $package, RustClient, eval);
+			android_fn!($domain, $package, RustChromeClient, runInitializationScripts);
 			android_fn!($domain, $package, RustClient, handleRequest, JObject, jobject);
 			android_fn!($domain, $package, IpcInterface, ipc, JString);
 		}
@@ -104,7 +104,7 @@ static MAIN_PIPE: Lazy<[RawFd; 2]> = Lazy::new(|| {
 pub struct MainPipe<'a> {
 	env: JNIEnv<'a>,
 	activity: GlobalRef,
-	scripts: Vec<String>,
+	initialization_scripts: Vec<String>,
 	webview: Option<GlobalRef>
 }
 
@@ -121,7 +121,7 @@ impl MainPipe<'_> {
 		let activity = self.activity.as_obj();
 		if let Ok(message) = CHANNEL.1.recv() {
 			match message {
-				WebViewMessage::CreateWebView(url, mut scripts, devtools) => {
+				WebViewMessage::CreateWebView(url, mut initialization_scripts, devtools) => {
 					// Create webview
 					let class = env.find_class("android/webkit/WebView")?;
 					let webview = env.new_object(class, "(Landroid/content/Context;)V", &[activity.into()])?;
@@ -139,11 +139,15 @@ impl MainPipe<'_> {
 					env.call_static_method(class, "setWebContentsDebuggingEnabled", "(Z)V", &[devtools.into()])?;
 
 					// Initialize scripts
-					self.scripts.append(&mut scripts);
+					self.initialization_scripts.append(&mut initialization_scripts);
 
 					// Set webview client
 					let client = env.call_method(activity, "getClient", "()Landroid/webkit/WebViewClient;", &[])?;
 					env.call_method(webview, "setWebViewClient", "(Landroid/webkit/WebViewClient;)V", &[client.into()])?;
+
+					// Set chrome client
+					let chrome_client = env.call_method(activity, "getChromeClient", "()Landroid/webkit/WebChromeClient;", &[])?;
+					env.call_method(webview, "setWebChromeClient", "(Landroid/webkit/WebChromeClient;)V", &[chrome_client.into()])?;
 
 					// Add javascript interface (IPC)
 					let sig = format!("()L{}/IpcInterface;", PACKAGE.get().unwrap());
@@ -156,9 +160,9 @@ impl MainPipe<'_> {
 					let webview = env.new_global_ref(webview)?;
 					self.webview = Some(webview);
 				}
-				WebViewMessage::Eval => {
+				WebViewMessage::RunInitializationScripts => {
 					if let Some(webview) = &self.webview {
-						for s in self.scripts.drain(..).into_iter() {
+						for s in &self.initialization_scripts {
 							let s = env.new_string(s)?;
 							env.call_method(
 								webview.as_obj(),
@@ -178,7 +182,7 @@ impl MainPipe<'_> {
 #[derive(Debug)]
 pub enum WebViewMessage {
 	CreateWebView(String, Vec<String>, bool),
-	Eval
+	RunInitializationScripts
 }
 
 pub static IPC: OnceCell<UnsafeIpc> = OnceCell::new();
@@ -317,7 +321,7 @@ pub unsafe fn create(env: JNIEnv, _jclass: JClass, jobject: JObject, main: fn())
 	let mut main_pipe = MainPipe {
 		env,
 		activity,
-		scripts: vec![],
+		initialization_scripts: vec![],
 		webview: None
 	};
 	let looper = ThreadLooper::for_thread().unwrap().into_foreign();
@@ -384,8 +388,9 @@ pub unsafe fn create(env: JNIEnv, _jclass: JClass, jobject: JObject, main: fn())
 	let _mutex_guard = looper_ready.wait_while(locked_looper, |looper| looper.is_none()).unwrap();
 }
 
-pub unsafe fn eval(_: JNIEnv, _: JClass, _: JObject) {
-	MainPipe::send(WebViewMessage::Eval);
+#[allow(non_snake_case)]
+pub unsafe fn runInitializationScripts(_: JNIEnv, _: JClass, _: JObject) {
+	MainPipe::send(WebViewMessage::RunInitializationScripts);
 }
 
 pub struct WebResourceRequest {
