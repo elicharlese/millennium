@@ -112,6 +112,7 @@ pub enum Event<'a, T: 'static> {
 	/// - **iOS / Android / Linux:** Unsupported.
 	#[non_exhaustive]
 	TrayEvent {
+		id: crate::TrayId,
 		bounds: Rectangle,
 		event: TrayEvent,
 		position: PhysicalPosition<f64>
@@ -211,7 +212,8 @@ impl<T: Clone> Clone for Event<'static, T> {
 				menu_id: *menu_id,
 				origin: *origin
 			},
-			TrayEvent { bounds, event, position } => TrayEvent {
+			TrayEvent { id, bounds, event, position } => TrayEvent {
+				id: *id,
 				bounds: *bounds,
 				event: *event,
 				position: *position
@@ -236,7 +238,7 @@ impl<'a, T> Event<'a, T> {
 			Suspended => Ok(Suspended),
 			Resumed => Ok(Resumed),
 			MenuEvent { window_id, menu_id, origin } => Ok(MenuEvent { window_id, menu_id, origin }),
-			TrayEvent { bounds, event, position } => Ok(TrayEvent { bounds, event, position }),
+			TrayEvent { id, bounds, event, position } => Ok(TrayEvent { id, bounds, event, position }),
 			GlobalShortcutEvent(accelerator_id) => Ok(GlobalShortcutEvent(accelerator_id))
 		}
 	}
@@ -257,7 +259,7 @@ impl<'a, T> Event<'a, T> {
 			Suspended => Some(Suspended),
 			Resumed => Some(Resumed),
 			MenuEvent { window_id, menu_id, origin } => Some(MenuEvent { window_id, menu_id, origin }),
-			TrayEvent { bounds, event, position } => Some(TrayEvent { bounds, event, position }),
+			TrayEvent { id, bounds, event, position } => Some(TrayEvent { id, bounds, event, position }),
 			GlobalShortcutEvent(accelerator_id) => Some(GlobalShortcutEvent(accelerator_id))
 		}
 	}

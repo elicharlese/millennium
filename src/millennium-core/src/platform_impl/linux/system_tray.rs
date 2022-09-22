@@ -24,7 +24,8 @@ use super::{menu::Menu, window::WindowRequest, WindowId};
 use crate::{
 	error::OsError,
 	event_loop::EventLoopWindowTarget,
-	system_tray::{Icon, SystemTray as RootSystemTray}
+	system_tray::{Icon, SystemTray as RootSystemTray},
+	TrayId
 };
 
 pub struct SystemTrayBuilder {
@@ -40,7 +41,7 @@ impl SystemTrayBuilder {
 	}
 
 	#[inline]
-	pub fn build<T: 'static>(self, window_target: &EventLoopWindowTarget<T>, _tooltip: Option<String>) -> Result<RootSystemTray, OsError> {
+	pub fn build<T: 'static>(self, window_target: &EventLoopWindowTarget<T>, _id: TrayId, _tooltip: Option<String>) -> Result<RootSystemTray, OsError> {
 		let mut app_indicator = AppIndicator::new("millennium-core", "");
 
 		let (parent_path, icon_path) = temp_icon_path(self.temp_icon_dir.as_ref()).expect("failed to create temp folder for system tray icon");

@@ -169,6 +169,11 @@
 )]
 #![deny(rustdoc::broken_intra_doc_links)]
 
+use std::{
+	collections::hash_map::DefaultHasher,
+	hash::{Hash, Hasher}
+};
+
 #[allow(unused_imports)]
 #[macro_use]
 extern crate lazy_static;
@@ -183,6 +188,31 @@ extern crate bitflags;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 #[macro_use]
 extern crate objc;
+
+/// Identifier of a system tray.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct TrayId(pub u16);
+
+impl TrayId {
+	/// Return an empty `TrayId`.
+	pub const EMPTY: TrayId = TrayId(0);
+
+	/// Create new `TrayId` from a String.
+	pub fn new(unique_string: &str) -> TrayId {
+		TrayId(hash_string_to_u16(unique_string))
+	}
+
+	/// Whether this tray id is empty or not.
+	pub fn is_empty(self) -> bool {
+		Self::EMPTY == self
+	}
+}
+
+fn hash_string_to_u16(title: &str) -> u16 {
+	let mut s = DefaultHasher::new();
+	title.to_uppercase().hash(&mut s);
+	s.finish() as u16
+}
 
 pub mod clipboard;
 pub mod dpi;

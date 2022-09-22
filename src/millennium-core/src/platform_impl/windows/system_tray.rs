@@ -37,7 +37,8 @@ use crate::{
 	event::{Event, Rectangle, TrayEvent},
 	event_loop::EventLoopWindowTarget,
 	menu::MenuType,
-	system_tray::{Icon, SystemTray as RootSystemTray}
+	system_tray::{Icon, SystemTray as RootSystemTray},
+	TrayId
 };
 
 const WM_USER_TRAYICON: u32 = 6001;
@@ -48,6 +49,7 @@ const TRAY_SUBCLASS_ID: usize = 6005;
 const TRAY_MENU_SUBCLASS_ID: usize = 6006;
 
 struct TrayLoopData {
+	id: TrayId,
 	hwnd: HWND,
 	hmenu: Option<HMENU>,
 	icon: Icon,
@@ -66,7 +68,7 @@ impl SystemTrayBuilder {
 	}
 
 	#[inline]
-	pub fn build<T: 'static>(self, window_target: &EventLoopWindowTarget<T>, _tooltip: Option<String>) -> Result<RootSystemTray, RootOsError> {
+	pub fn build<T: 'static>(self, window_target: &EventLoopWindowTarget<T>, tray_id: TrayId, _tooltip: Option<String>) -> Result<RootSystemTray, RootOsError> {
 		let hmenu: Option<HMENU> = self.tray_menu.map(|m| m.hmenu());
 
 		let class_name = util::encode_wide("millennium_system_tray_app");
@@ -119,6 +121,7 @@ impl SystemTrayBuilder {
 			// system_tray event handler
 			let event_loop_runner = window_target.p.runner_shared.clone();
 			let traydata = TrayLoopData {
+				id: tray_id,
 				hwnd,
 				hmenu,
 				icon: self.icon,
@@ -243,6 +246,7 @@ unsafe extern "system" fn tray_subclass_proc(hwnd: HWND, msg: u32, wparam: WPARA
 		match lparam.0 as u32 {
 			win32wm::WM_LBUTTONUP => {
 				(subclass_input.sender)(Event::TrayEvent {
+					id: subclass_input.id,
 					event: TrayEvent::LeftClick,
 					position,
 					bounds
@@ -251,6 +255,7 @@ unsafe extern "system" fn tray_subclass_proc(hwnd: HWND, msg: u32, wparam: WPARA
 
 			win32wm::WM_RBUTTONUP => {
 				(subclass_input.sender)(Event::TrayEvent {
+					id: subclass_input.id,
 					event: TrayEvent::RightClick,
 					position,
 					bounds
@@ -263,6 +268,7 @@ unsafe extern "system" fn tray_subclass_proc(hwnd: HWND, msg: u32, wparam: WPARA
 
 			win32wm::WM_LBUTTONDBLCLK => {
 				(subclass_input.sender)(Event::TrayEvent {
+					id: subclass_input.id,
 					event: TrayEvent::DoubleClick,
 					position,
 					bounds

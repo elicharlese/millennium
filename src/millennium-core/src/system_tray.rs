@@ -50,24 +50,33 @@ use crate::{
 	error::OsError,
 	event_loop::EventLoopWindowTarget,
 	menu::ContextMenu,
-	platform_impl::{SystemTray as SystemTrayPlatform, SystemTrayBuilder as SystemTrayBuilderPlatform}
+	platform_impl::{SystemTray as SystemTrayPlatform, SystemTrayBuilder as SystemTrayBuilderPlatform},
+	TrayId
 };
 /// Object that allows you to build SystemTray instance.
 pub struct SystemTrayBuilder {
 	pub(crate) platform_tray_builder: SystemTrayBuilderPlatform,
-	tooltip: Option<String>
+	tooltip: Option<String>,
+	id: TrayId
 }
 
 #[cfg(target_os = "linux")]
 use std::path::PathBuf;
 
 impl SystemTrayBuilder {
-	/// Creates a new SystemTray for platforms where this is appropriate.
+	/// Creates a new SystemTray with an empty identifier for platforms where this is appropriate.
 	pub fn new(icon: Icon, tray_menu: Option<ContextMenu>) -> Self {
 		Self {
 			platform_tray_builder: SystemTrayBuilderPlatform::new(icon, tray_menu.map(|m| m.0.menu_platform)),
-			tooltip: None
+			tooltip: None,
+			id: TrayId::EMPTY
 		}
+	}
+
+	/// Sets the tray identifier.
+	pub fn with_id(mut self, id: TrayId) -> Self {
+		self.id = id;
+		self
 	}
 
 	/// Adds a tooltip to the tray icon.
@@ -86,7 +95,7 @@ impl SystemTrayBuilder {
 	/// Possible causes of error include denied permission, incompatible system,
 	/// and lack of memory.
 	pub fn build<T: 'static>(self, window_target: &EventLoopWindowTarget<T>) -> Result<SystemTray, OsError> {
-		self.platform_tray_builder.build(window_target, self.tooltip)
+		self.platform_tray_builder.build(window_target, self.id, self.tooltip)
 	}
 }
 
