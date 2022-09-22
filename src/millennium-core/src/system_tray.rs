@@ -83,8 +83,7 @@ impl SystemTrayBuilder {
 	///
 	/// ## Platform-specific
 	///
-	/// - **Windows**: Not implemented.
-	/// - **Linux**: Unsupported
+	/// - **Linux**: Unsupported.
 	pub fn with_tooltip(mut self, tooltip: &str) -> Self {
 		self.tooltip = Some(tooltip.to_string());
 		self
@@ -125,7 +124,6 @@ impl SystemTray {
 	///
 	/// ## Platform-specific
 	///
-	/// - **Windows**: Not implemented.
 	/// - **Linux**: Unsupported.
 	pub fn set_tooltip(&mut self, tooltip: &str) {
 		self.0.set_tooltip(tooltip);
