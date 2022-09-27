@@ -718,7 +718,7 @@ impl Window {
 		self.window.is_minimized()
 	}
 
-	/// Gets the window's current vibility state.
+	/// Gets the window's current visibility state.
 	///
 	/// ## Platform-specific
 	///
@@ -726,6 +726,16 @@ impl Window {
 	#[inline]
 	pub fn is_visible(&self) -> bool {
 		self.window.is_visible()
+	}
+
+	/// Gets the window's current focus state.
+	///
+	/// ## Platform-specific
+	///
+	/// - **iOS / Android**: Unsupported.
+	#[inline]
+	pub fn is_focused(&self) -> bool {
+		self.window.is_focused()
 	}
 
 	/// Gets the window's current resizable state.

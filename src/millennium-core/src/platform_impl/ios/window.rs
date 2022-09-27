@@ -80,6 +80,10 @@ impl Inner {
 		warn!("set_focus not yet implemented on iOS");
 	}
 
+	pub fn is_focused(&self) -> bool {
+		false
+	}
+
 	pub fn request_redraw(&self) {
 		unsafe {
 			if self.gl_or_metal_backed {

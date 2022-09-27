@@ -534,6 +534,10 @@ impl Window {
 		warn!("set_focus not yet implemented on Android");
 	}
 
+	pub fn is_focused(&self) -> bool {
+		false
+	}
+
 	pub fn set_resizable(&self, _resizeable: bool) {}
 
 	pub fn set_minimized(&self, _minimized: bool) {}
