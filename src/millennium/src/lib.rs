@@ -886,19 +886,22 @@ pub fn running_under_arm64_translation() -> bool {
 	}
 	#[cfg(target_os = "windows")]
 	{
-		use windows::Win32::{
-			Foundation::{BOOL, HANDLE},
-			System::{
-				Diagnostics::Debug::IMAGE_FILE_MACHINE_ARM64,
-				LibraryLoader::{GetModuleHandleW, GetProcAddress},
-				Threading::GetCurrentProcess
+		use windows::{
+			core::PCSTR,
+			Win32::{
+				Foundation::{BOOL, HANDLE},
+				System::{
+					LibraryLoader::{GetModuleHandleA, GetProcAddress},
+					SystemInformation::IMAGE_FILE_MACHINE_ARM64,
+					Threading::GetCurrentProcess
+				}
 			}
 		};
 
 		type IsWow64Process2 = unsafe extern "system" fn(HANDLE, *mut u16, *mut u16) -> BOOL;
 
-		if let Ok(handle) = unsafe { GetModuleHandleW("kernel32.dll") } {
-			if let Some(is_wow64_process2) = unsafe { GetProcAddress(handle, "IsWow64Process2") } {
+		if let Ok(handle) = unsafe { GetModuleHandleA(PCSTR::from_raw("kernel32.dll".as_ptr())) } {
+			if let Some(is_wow64_process2) = unsafe { GetProcAddress(handle, PCSTR::from_raw("IsWow64Process2".as_ptr())) } {
 				let is_wow64_process2: IsWow64Process2 = unsafe { std::mem::transmute(is_wow64_process2) };
 				let mut process_arch: u16 = 0;
 				let mut system_arch: u16 = 0;

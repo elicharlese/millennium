@@ -16,19 +16,19 @@
 
 mod file_drop;
 
-use std::{collections::HashSet, fmt::Write, mem::MaybeUninit, rc::Rc, sync::mpsc};
+use std::{collections::HashSet, fmt::Write, iter::once, mem::MaybeUninit, os::windows::prelude::OsStrExt, rc::Rc, sync::mpsc};
 
 use file_drop::FileDropController;
 use once_cell::unsync::OnceCell;
 use webview2_com::{Microsoft::Web::WebView2::Win32::*, *};
 use windows::{
-	core::{Interface, PCWSTR, PWSTR},
+	core::{Interface, PCSTR, PCWSTR, PWSTR},
 	Win32::{
 		Foundation::{BOOL, E_FAIL, E_POINTER, FARPROC, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM},
 		Globalization::{self, MAX_LOCALE_NAME},
 		System::{
 			Com::{IStream, StructuredStorage::CreateStreamOnHGlobal},
-			LibraryLoader::{GetProcAddress, LoadLibraryA},
+			LibraryLoader::{GetProcAddress, LoadLibraryW},
 			SystemInformation::OSVERSIONINFOW,
 			WinRT::EventRegistrationToken
 		},
@@ -106,17 +106,24 @@ impl InnerWebView {
 					let mut lang = [0; MAX_LOCALE_NAME as usize];
 					Globalization::LCIDToLocaleName(lcid as u32, &mut lang, Globalization::LOCALE_ALLOW_NEUTRAL_NAMES);
 
-					options.SetLanguage(PCWSTR(lang.as_ptr())).map_err(webview2_com::Error::WindowsError)?;
+					options
+						.SetLanguage(PCWSTR::from_raw(lang.as_ptr()))
+						.map_err(webview2_com::Error::WindowsError)?;
 					options
 				};
 
 				// remove "mini menu"
-				let _ = options.SetAdditionalBrowserArguments("--disable-features=msWebOOUI,msPdfOOUI");
+				let _ = options.SetAdditionalBrowserArguments(PCWSTR::from_raw(encode_wide("--disable-features=msWebOOUI,msPdfOOUI").as_ptr()));
 
 				if let Some(data_directory) = data_directory {
-					CreateCoreWebView2EnvironmentWithOptions(PCWSTR::default(), data_directory, options, environmentcreatedhandler)
+					CreateCoreWebView2EnvironmentWithOptions(
+						PCWSTR::null(),
+						PCWSTR::from_raw(encode_wide(data_directory).as_ptr()),
+						&options,
+						&environmentcreatedhandler
+					)
 				} else {
-					CreateCoreWebView2EnvironmentWithOptions(PCWSTR::default(), PCWSTR::default(), options, environmentcreatedhandler)
+					CreateCoreWebView2EnvironmentWithOptions(PCWSTR::null(), PCWSTR::null(), &options, &environmentcreatedhandler)
 				}
 				.map_err(webview2_com::Error::WindowsError)
 			}),
@@ -138,7 +145,10 @@ impl InnerWebView {
 		let env = env.clone();
 
 		CreateCoreWebView2ControllerCompletedHandler::wait_for_async_operation(
-			Box::new(move |handler| unsafe { env.CreateCoreWebView2Controller(hwnd, handler).map_err(webview2_com::Error::WindowsError) }),
+			Box::new(move |handler| unsafe {
+				env.CreateCoreWebView2Controller(hwnd, &handler)
+					.map_err(webview2_com::Error::WindowsError)
+			}),
 			Box::new(move |error_code, controller| {
 				error_code?;
 				tx.send(controller.ok_or_else(|| windows::core::Error::from(E_POINTER)))
@@ -185,7 +195,7 @@ impl InnerWebView {
 					move |_, _| if win32wm::DestroyWindow(hwnd).as_bool() { Ok(()) } else { Err(E_FAIL.into()) }
 				));
 			webview
-				.add_WindowCloseRequested(handler, &mut token)
+				.add_WindowCloseRequested(&handler, &mut token)
 				.map_err(webview2_com::Error::WindowsError)?;
 
 			let settings = webview.Settings().map_err(webview2_com::Error::WindowsError)?;
@@ -232,9 +242,9 @@ impl InnerWebView {
 		let ipc_handler = attributes.ipc_handler.take();
 		unsafe {
 			webview.add_WebMessageReceived(
-				WebMessageReceivedEventHandler::create(Box::new(move |_, args| {
+				&WebMessageReceivedEventHandler::create(Box::new(move |_, args| {
 					if let Some(args) = args {
-						let mut js = PWSTR::default();
+						let mut js = PWSTR::null();
 						args.TryGetWebMessageAsString(&mut js)?;
 						let js = take_pwstr(js);
 						if js == "__WEBVIEW_LEFT_MOUSE_DOWN__" || js == "__WEBVIEW_MOUSE_MOVE__" {
@@ -290,9 +300,9 @@ impl InnerWebView {
 			unsafe {
 				webview
 					.add_NavigationStarting(
-						NavigationStartingEventHandler::create(Box::new(move |_, args| {
+						&NavigationStartingEventHandler::create(Box::new(move |_, args| {
 							if let Some(args) = args {
-								let mut uri = PWSTR::default();
+								let mut uri = PWSTR::null();
 								args.Uri(&mut uri)?;
 								let uri = take_pwstr(uri);
 
@@ -311,9 +321,9 @@ impl InnerWebView {
 			unsafe {
 				webview
 					.add_NewWindowRequested(
-						NewWindowRequestedEventHandler::create(Box::new(move |_, args| {
+						&NewWindowRequestedEventHandler::create(Box::new(move |_, args| {
 							if let Some(args) = args {
-								let mut uri = PWSTR::default();
+								let mut uri = PWSTR::null();
 								args.Uri(&mut uri)?;
 								let uri = take_pwstr(uri);
 
@@ -335,8 +345,13 @@ impl InnerWebView {
 				// WebView2 doesn't support non-standard protocols yet, so we have to use this
 				// workaround See https://github.com/MicrosoftEdge/WebView2Feedback/issues/73
 				custom_protocol_names.insert(name.clone());
-				unsafe { webview.AddWebResourceRequestedFilter(format!("https://{}.*", name), COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL) }
-					.map_err(webview2_com::Error::WindowsError)?;
+				unsafe {
+					webview.AddWebResourceRequestedFilter(
+						PCWSTR::from_raw(encode_wide(format!("https://{}.*", name)).as_ptr()),
+						COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL
+					)
+				}
+				.map_err(webview2_com::Error::WindowsError)?;
 			}
 
 			let custom_protocols = attributes.custom_protocols;
@@ -344,13 +359,13 @@ impl InnerWebView {
 			unsafe {
 				webview
 					.add_WebResourceRequested(
-						WebResourceRequestedEventHandler::create(Box::new(move |_, args| {
+						&WebResourceRequestedEventHandler::create(Box::new(move |_, args| {
 							if let Some(args) = args {
 								let webview_request = args.Request()?;
 								let mut request = HttpRequestBuilder::new();
 
 								// request method (GET, POST, PUT etc..)
-								let mut request_method = PWSTR::default();
+								let mut request_method = PWSTR::null();
 								webview_request.Method(&mut request_method)?;
 								let request_method = take_pwstr(request_method);
 
@@ -360,8 +375,8 @@ impl InnerWebView {
 								headers.HasCurrentHeader(&mut has_current)?;
 								if has_current.as_bool() {
 									loop {
-										let mut key = PWSTR::default();
-										let mut value = PWSTR::default();
+										let mut key = PWSTR::null();
+										let mut value = PWSTR::null();
 										headers.GetCurrentHeader(&mut key, &mut value)?;
 										let (key, value) = (take_pwstr(key), take_pwstr(value));
 										request = request.header(&key, &value);
@@ -391,7 +406,7 @@ impl InnerWebView {
 								}
 
 								// uri
-								let mut uri = PWSTR::default();
+								let mut uri = PWSTR::null();
 								webview_request.Uri(&mut uri)?;
 								let uri = take_pwstr(uri);
 
@@ -409,14 +424,14 @@ impl InnerWebView {
 
 											// set mime type if provided
 											if let Some(mime) = sent_response.mimetype() {
-												writeln!(headers_map, "Content-Type: {}", mime).unwrap();
+												let _ = writeln!(headers_map, "Content-Type: {}", mime);
 											}
 
 											// build headers
 											for (name, value) in sent_response.headers().iter() {
 												let header_key = name.to_string();
 												if let Ok(value) = value.to_str() {
-													writeln!(headers_map, "{}: {}", header_key, value).unwrap();
+													let _ = writeln!(headers_map, "{}: {}", header_key, value);
 												}
 											}
 
@@ -435,10 +450,14 @@ impl InnerWebView {
 
 											// FIXME: Set http response version
 
-											let body_sent = body_sent.map(|content| content.cast().unwrap());
-											let response = env.CreateWebResourceResponse(body_sent, status_code, "OK", headers_map)?;
+											let response = env.CreateWebResourceResponse(
+												body_sent.as_ref(),
+												status_code,
+												PCWSTR::from_raw(encode_wide("OK").as_ptr()),
+												PCWSTR::from_raw(encode_wide(headers_map).as_ptr())
+											)?;
 
-											args.SetResponse(response)?;
+											args.SetResponse(&response)?;
 											Ok(())
 										}
 										Err(_) => Err(E_FAIL.into())
@@ -459,7 +478,7 @@ impl InnerWebView {
 			unsafe {
 				webview
 					.add_PermissionRequested(
-						PermissionRequestedEventHandler::create(Box::new(|_, args| {
+						&PermissionRequestedEventHandler::create(Box::new(|_, args| {
 							if let Some(args) = args {
 								let mut kind = COREWEBVIEW2_PERMISSION_KIND_UNKNOWN_PERMISSION;
 								args.PermissionKind(&mut kind)?;
@@ -479,7 +498,7 @@ impl InnerWebView {
 		if let Some(user_agent) = attributes.user_agent {
 			unsafe {
 				let settings: ICoreWebView2Settings2 = webview.Settings()?.cast().map_err(webview2_com::Error::WindowsError)?;
-				settings.SetUserAgent(String::from(user_agent.as_str()))?;
+				settings.SetUserAgent(PCWSTR::from_raw(encode_wide(user_agent).as_ptr()))?;
 			}
 		}
 
@@ -490,7 +509,9 @@ impl InnerWebView {
 				if let Some(pos) = s.find(',') {
 					let (_, path) = s.split_at(pos + 1);
 					unsafe {
-						webview.NavigateToString(path.to_string()).map_err(webview2_com::Error::WindowsError)?;
+						webview
+							.NavigateToString(PCWSTR::from_raw(encode_wide(path).as_ptr()))
+							.map_err(webview2_com::Error::WindowsError)?;
 					}
 				}
 			} else {
@@ -502,12 +523,16 @@ impl InnerWebView {
 					url_string = url.as_str().replace(&format!("{}://", name), &format!("https://{}.", name))
 				}
 				unsafe {
-					webview.Navigate(url_string).map_err(webview2_com::Error::WindowsError)?;
+					webview
+						.Navigate(PCWSTR::from_raw(encode_wide(url_string).as_ptr()))
+						.map_err(webview2_com::Error::WindowsError)?;
 				}
 			}
 		} else if let Some(html) = attributes.html {
 			unsafe {
-				webview.NavigateToString(html).map_err(webview2_com::Error::WindowsError)?;
+				webview
+					.NavigateToString(PCWSTR::from_raw(encode_wide(html).as_ptr()))
+					.map_err(webview2_com::Error::WindowsError)?;
 			}
 		}
 
@@ -516,7 +541,7 @@ impl InnerWebView {
 				win32wm::WM_SIZE => {
 					let controller = dwrefdata as *mut ICoreWebView2Controller;
 					let mut client_rect = RECT::default();
-					win32wm::GetClientRect(hwnd, &mut client_rect as *mut RECT);
+					win32wm::GetClientRect(hwnd, &mut client_rect);
 					let _ = (*controller).SetBounds(RECT {
 						left: 0,
 						top: 0,
@@ -557,7 +582,7 @@ impl InnerWebView {
 		AddScriptToExecuteOnDocumentCreatedCompletedHandler::wait_for_async_operation(
 			Box::new(move |handler| unsafe {
 				handler_webview
-					.AddScriptToExecuteOnDocumentCreated(js, handler)
+					.AddScriptToExecuteOnDocumentCreated(PCWSTR::from_raw(encode_wide(js).as_ptr()), &handler)
 					.map_err(webview2_com::Error::WindowsError)
 			}),
 			Box::new(|_, _| Ok(()))
@@ -565,7 +590,7 @@ impl InnerWebView {
 	}
 
 	fn execute_script(webview: &ICoreWebView2, js: String) -> windows::core::Result<()> {
-		unsafe { webview.ExecuteScript(js, ExecuteScriptCompletedHandler::create(Box::new(|_, _| (Ok(()))))) }
+		unsafe { webview.ExecuteScript(PCWSTR::from_raw(encode_wide(js).as_ptr()), &ExecuteScriptCompletedHandler::create(Box::new(|_, _| (Ok(()))))) }
 	}
 
 	pub fn print(&self) {
@@ -596,9 +621,13 @@ impl InnerWebView {
 	}
 }
 
+fn encode_wide(string: impl AsRef<std::ffi::OsStr>) -> Vec<u16> {
+	string.as_ref().encode_wide().chain(once(0)).collect()
+}
+
 pub fn platform_webview_version() -> Result<String> {
-	let mut versioninfo = PWSTR::default();
-	unsafe { GetAvailableCoreWebView2BrowserVersionString(PCWSTR::default(), &mut versioninfo) }.map_err(webview2_com::Error::WindowsError)?;
+	let mut versioninfo = PWSTR::null();
+	unsafe { GetAvailableCoreWebView2BrowserVersionString(PCWSTR::null(), &mut versioninfo) }.map_err(webview2_com::Error::WindowsError)?;
 	Ok(take_pwstr(versioninfo))
 }
 
@@ -613,10 +642,11 @@ fn is_windows_7() -> bool {
 }
 
 fn get_function_impl(library: &str, function: &str) -> Option<FARPROC> {
-	assert_eq!(library.chars().last(), Some('\0'));
+	let library = encode_wide(library);
 	assert_eq!(function.chars().last(), Some('\0'));
+	let function = PCSTR::from_raw(function.as_ptr());
 
-	let module = unsafe { LoadLibraryA(library) }.unwrap_or_default();
+	let module = unsafe { LoadLibraryW(PCWSTR::from_raw(library.as_ptr())) }.unwrap_or_default();
 	if module.is_invalid() { None } else { Some(unsafe { GetProcAddress(module, function) }) }
 }
 
