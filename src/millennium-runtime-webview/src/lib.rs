@@ -2295,21 +2295,6 @@ fn handle_event_loop<T: UserEvent>(
 		}
 		Event::WindowEvent { event, window_id, .. } => {
 			let window_id = webview_id_map.get(&window_id);
-			// NOTE(amrbashir): we handle this event here instead of `match` statement below
-			// because we want to focus the webview as soon as possible, especially on
-			// windows.
-			if event == MillenniumWindowEvent::Focused(true) {
-				if let Some(WindowHandle::Webview(webview)) = windows
-					.lock()
-					.expect("poisoned webview collection")
-					.get(&window_id)
-					.and_then(|w| w.inner.as_ref())
-				{
-					if webview.window().is_visible() {
-						webview.focus();
-					}
-				}
-			}
 
 			{
 				let windows_lock = windows.lock().expect("poisoned webview collection");
@@ -2569,7 +2554,7 @@ fn create_webview<T: UserEvent>(
 		let mut token = EventRegistrationToken::default();
 		unsafe {
 			controller.add_GotFocus(
-				FocusChangedEventHandler::create(Box::new(move |_, _| {
+				&FocusChangedEventHandler::create(Box::new(move |_, _| {
 					let _ = proxy_.send_event(Message::Webview(window_id, WebviewMessage::WebviewEvent(WebviewEvent::Focused(true))));
 					Ok(())
 				})),
@@ -2579,7 +2564,7 @@ fn create_webview<T: UserEvent>(
 		.unwrap();
 		unsafe {
 			controller.add_LostFocus(
-				FocusChangedEventHandler::create(Box::new(move |_, _| {
+				&FocusChangedEventHandler::create(Box::new(move |_, _| {
 					let _ = proxy.send_event(Message::Webview(window_id, WebviewMessage::WebviewEvent(WebviewEvent::Focused(false))));
 					Ok(())
 				})),

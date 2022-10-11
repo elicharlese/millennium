@@ -511,9 +511,9 @@ impl InnerWebView {
 			}
 		}
 
-		unsafe {
-			unsafe extern "system" fn subclass_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM, _uidsubclass: usize, dwrefdata: usize) -> LRESULT {
-				if msg == win32wm::WM_SIZE {
+		unsafe extern "system" fn subclass_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM, _uidsubclass: usize, dwrefdata: usize) -> LRESULT {
+			match msg {
+				win32wm::WM_SIZE => {
 					let controller = dwrefdata as *mut ICoreWebView2Controller;
 					let mut client_rect = RECT::default();
 					win32wm::GetClientRect(hwnd, &mut client_rect as *mut RECT);
@@ -525,12 +525,20 @@ impl InnerWebView {
 					});
 				}
 
-				if msg == win32wm::WM_DESTROY {
-					std::mem::drop(Box::from_raw(dwrefdata as *mut ICoreWebView2Controller));
+				win32wm::WM_SETFOCUS => {
+					let controller = dwrefdata as *mut ICoreWebView2Controller;
+					let _ = (*controller).MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
 				}
 
-				DefSubclassProc(hwnd, msg, wparam, lparam)
+				win32wm::WM_DESTROY => {
+					std::mem::drop(Box::from_raw(dwrefdata as *mut ICoreWebView2Controller));
+				}
+				_ => ()
 			}
+
+			DefSubclassProc(hwnd, msg, wparam, lparam)
+		}
+		unsafe {
 			SetWindowSubclass(hwnd, Some(subclass_proc), 8080, Box::into_raw(Box::new(controller.clone())) as _);
 		}
 
@@ -566,10 +574,6 @@ impl InnerWebView {
 
 	pub fn eval(&self, js: &str) -> Result<()> {
 		Self::execute_script(&self.webview, js.to_string()).map_err(|err| Error::WebView2Error(webview2_com::Error::WindowsError(err)))
-	}
-
-	pub fn focus(&self) {
-		let _ = unsafe { self.controller.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC) };
 	}
 
 	#[cfg(any(debug_assertions, feature = "devtools"))]
