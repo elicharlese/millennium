@@ -44,14 +44,17 @@ fn main() {
 			let file = file.unwrap();
 
 			let class_extension_env = format!("MILLENNIUM_{}_CLASS_EXTENSION", file.path().file_stem().unwrap().to_string_lossy().to_uppercase());
+			let class_init_env = format!("MILLENNIUM_{}_CLASS_INIT", file.path().file_stem().unwrap().to_string_lossy().to_uppercase());
 
 			println!("cargo:rerun-if-env-changed={}", class_extension_env);
+			println!("cargo:rerun-if-env-changed={}", class_init_env);
 
 			let content = fs::read_to_string(file.path())
 				.expect("failed to read kotlin file as string")
 				.replace("{{app-domain-reversed}}", &reversed_domain)
 				.replace("{{app-name-snake-case}}", &app_name_snake_case)
-				.replace("{{class-extension}}", &std::env::var(&class_extension_env).unwrap_or_default());
+				.replace("{{class-extension}}", &std::env::var(&class_extension_env).unwrap_or_default())
+				.replace("{{class-init}}", &std::env::var(&class_init_env).unwrap_or_default());
 
 			fs::write(kotlin_out_dir.join(file.file_name()), content).expect("Failed to write kotlin file");
 		}
