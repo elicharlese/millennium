@@ -42,7 +42,6 @@ macro_rules! android_binding {
 			webview::prelude::*
 		};
 		core_android_binding!($domain, $package, setup, $main);
-		android_fn!($domain, $package, RustWebChromeClient, runInitializationScripts);
 		android_fn!($domain, $package, RustWebViewClient, handleRequest, JObject, jobject);
 		android_fn!($domain, $package, Ipc, ipc, JString);
 	};
@@ -70,12 +69,7 @@ unsafe impl Send for UnsafeRequestHandler {}
 unsafe impl Sync for UnsafeRequestHandler {}
 
 pub unsafe fn setup(env: JNIEnv, looper: &ForeignLooper, activity: GlobalRef) {
-	let mut main_pipe = MainPipe {
-		env,
-		activity,
-		initialization_scripts: vec![],
-		webview: None
-	};
+	let mut main_pipe = MainPipe { env, activity, webview: None };
 
 	looper
 		.add_fd_with_callback(MAIN_PIPE[0], FdEvent::INPUT, move |_| {

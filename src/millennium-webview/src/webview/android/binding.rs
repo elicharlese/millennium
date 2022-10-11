@@ -20,16 +20,11 @@ use millennium_core::platform::android::ndk_glue::jni::{
 	JNIEnv
 };
 
-use super::{MainPipe, WebViewMessage, IPC, REQUEST_HANDLER};
+use super::{IPC, REQUEST_HANDLER};
 use crate::http::{
 	header::{HeaderName, HeaderValue},
 	RequestBuilder
 };
-
-#[allow(non_snake_case)]
-pub unsafe fn runInitializationScripts(_: JNIEnv, _: JClass, _: JObject) {
-	MainPipe::send(WebViewMessage::RunInitializationScripts);
-}
 
 fn handle_request(env: JNIEnv, request: JObject) -> Result<jobject, JniError> {
 	let mut request_builder = RequestBuilder::new();
