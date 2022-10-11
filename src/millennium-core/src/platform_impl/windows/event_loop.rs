@@ -35,7 +35,7 @@ use parking_lot::Mutex;
 use raw_window_handle::{RawDisplayHandle, WindowsDisplayHandle};
 use runner::{EventLoopRunner, EventLoopRunnerShared};
 use windows::{
-	core::PCWSTR,
+	core::{s, PCWSTR},
 	Win32::{
 		Devices::HumanInterfaceDevice::*,
 		Foundation::{BOOL, HANDLE, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, WAIT_TIMEOUT, WPARAM},
@@ -495,7 +495,7 @@ lazy_static! {
 	/// WPARAM and LPARAM are unused.
 	static ref USER_EVENT_MSG_ID: u32 = {
 		unsafe {
-			RegisterWindowMessageA("MillenniumCore::WakeupMsg")
+			RegisterWindowMessageA(s!("MillenniumCore::WakeupMsg"))
 		}
 	};
 	/// Message sent when we want to execute a closure in the thread.
@@ -503,48 +503,48 @@ lazy_static! {
 	/// and LPARAM is unused.
 	static ref EXEC_MSG_ID: u32 = {
 		unsafe {
-			RegisterWindowMessageA("MillenniumCore::ExecMsg")
+			RegisterWindowMessageA(s!("MillenniumCore::ExecMsg"))
 		}
 	};
 	static ref PROCESS_NEW_EVENTS_MSG_ID: u32 = {
 		unsafe {
-			RegisterWindowMessageA("MillenniumCore::ProcessNewEvents")
+			RegisterWindowMessageA(s!("MillenniumCore::ProcessNewEvents"))
 		}
 	};
 	/// lparam is the wait thread's message id.
 	static ref SEND_WAIT_THREAD_ID_MSG_ID: u32 = {
 		unsafe {
-			RegisterWindowMessageA("MillenniumCore::SendWaitThreadId")
+			RegisterWindowMessageA(s!("MillenniumCore::SendWaitThreadId"))
 		}
 	};
 	/// lparam points to a `Box<Instant>` signifying the time `PROCESS_NEW_EVENTS_MSG_ID` should
 	/// be sent.
 	static ref WAIT_UNTIL_MSG_ID: u32 = {
 		unsafe {
-			RegisterWindowMessageA("MillenniumCore::WaitUntil")
+			RegisterWindowMessageA(s!("MillenniumCore::WaitUntil"))
 		}
 	};
 	static ref CANCEL_WAIT_UNTIL_MSG_ID: u32 = {
 		unsafe {
-			RegisterWindowMessageA("MillenniumCore::CancelWaitUntil")
+			RegisterWindowMessageA(s!("MillenniumCore::CancelWaitUntil"))
 		}
 	};
 	/// Message sent by a `Window` when it wants to be destroyed by the main thread.
 	/// WPARAM and LPARAM are unused.
 	pub static ref DESTROY_MSG_ID: u32 = {
 		unsafe {
-			RegisterWindowMessageA("MillenniumCore::DestroyMsg")
+			RegisterWindowMessageA(s!("MillenniumCore::DestroyMsg"))
 		}
 	};
 	/// WPARAM is a bool specifying the `WindowFlags::MARKER_RETAIN_STATE_ON_SIZE` flag. See the
 	/// documentation in the `window_state` module for more information.
 	pub static ref SET_RETAIN_STATE_ON_SIZE_MSG_ID: u32 = unsafe {
-		RegisterWindowMessageA("MillenniumCore::SetRetainMaximized")
+		RegisterWindowMessageA(s!("MillenniumCore::SetRetainMaximized"))
 	};
 	/// When the taskbar is created, it registers a message with the "TaskbarCreated" string and then broadcasts this message to all top-level windows.
 	/// When the application receives this message, it should assume that any taskbar icons it added have been removed and add them again.
 	pub static ref S_U_TASKBAR_RESTART: u32 = unsafe {
-		RegisterWindowMessageA("TaskbarCreated")
+		RegisterWindowMessageA(s!("TaskbarCreated"))
 	};
 	static ref THREAD_EVENT_TARGET_WINDOW_CLASS: Vec<u16> = unsafe {
 		let class_name = util::encode_wide("MillenniumCore Thread Event Target");
@@ -555,12 +555,12 @@ lazy_static! {
 			lpfnWndProc: Some(util::call_default_window_proc),
 			cbClsExtra: 0,
 			cbWndExtra: 0,
-			hInstance: GetModuleHandleW(PCWSTR::default()).unwrap_or_default(),
+			hInstance: GetModuleHandleW(PCWSTR::null()).unwrap_or_default(),
 			hIcon: HICON::default(),
 			hCursor: HCURSOR::default(), // must be null in order for cursor state to work properly
 			hbrBackground: HBRUSH::default(),
-			lpszMenuName: Default::default(),
-			lpszClassName: PCWSTR(class_name.as_ptr()),
+			lpszMenuName: PCWSTR::null(),
+			lpszClassName: PCWSTR::from_raw(class_name.as_ptr()),
 			hIconSm: HICON::default(),
 		};
 
@@ -576,8 +576,8 @@ fn create_event_target_window() -> HWND {
 			WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED |
 			// Prevent a ghost window from appearing on the taskbar after an extended period of time.
 			WS_EX_TOOLWINDOW,
-			PCWSTR(THREAD_EVENT_TARGET_WINDOW_CLASS.clone().as_ptr()),
-			PCWSTR::default(),
+			PCWSTR::from_raw(THREAD_EVENT_TARGET_WINDOW_CLASS.clone().as_ptr()),
+			PCWSTR::null(),
 			WS_OVERLAPPED,
 			0,
 			0,
@@ -585,7 +585,7 @@ fn create_event_target_window() -> HWND {
 			0,
 			HWND::default(),
 			HMENU::default(),
-			GetModuleHandleW(PCWSTR::default()).unwrap_or_default(),
+			GetModuleHandleW(PCWSTR::null()).unwrap_or_default(),
 			ptr::null_mut()
 		)
 	};
@@ -1045,7 +1045,7 @@ unsafe fn public_window_callback_inner<T: 'static>(
 
 			let windowpos = lparam.0 as *const WINDOWPOS;
 			if (*windowpos).flags & SWP_NOMOVE != SWP_NOMOVE {
-				let physical_position = PhysicalPosition::new((*windowpos).x as i32, (*windowpos).y as i32);
+				let physical_position = PhysicalPosition::new((*windowpos).x, (*windowpos).y);
 				subclass_input.send_event(Event::WindowEvent {
 					window_id: RootWindowId(WindowId(window.0)),
 					event: Moved(physical_position)

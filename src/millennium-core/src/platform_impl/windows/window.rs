@@ -125,7 +125,7 @@ impl Window {
 					)
 					.into();
 
-					RegisterDragDrop(win.window.0, file_drop_handler.clone()).unwrap();
+					RegisterDragDrop(win.window.0, &file_drop_handler).unwrap();
 					Some(file_drop_handler)
 				} else {
 					None
@@ -146,8 +146,9 @@ impl Window {
 	}
 
 	pub fn set_title(&self, text: &str) {
+		let text = util::encode_wide(text);
 		unsafe {
-			SetWindowTextW(self.window.0, text);
+			SetWindowTextW(self.window.0, PCWSTR::from_raw(text.as_ptr()));
 		}
 	}
 
@@ -193,7 +194,7 @@ impl Window {
 	#[inline]
 	pub fn outer_position(&self) -> Result<PhysicalPosition<i32>, NotSupportedError> {
 		util::get_window_rect(self.window.0)
-			.map(|rect| Ok(PhysicalPosition::new(rect.left as i32, rect.top as i32)))
+			.map(|rect| Ok(PhysicalPosition::new(rect.left, rect.top)))
 			.expect("Unexpected GetWindowRect failure")
 	}
 
@@ -203,7 +204,7 @@ impl Window {
 		if !unsafe { ClientToScreen(self.window.0, &mut position) }.as_bool() {
 			panic!("Unexpected ClientToScreen failure")
 		}
-		Ok(PhysicalPosition::new(position.x as i32, position.y as i32))
+		Ok(PhysicalPosition::new(position.x, position.y))
 	}
 
 	#[inline]
@@ -217,7 +218,7 @@ impl Window {
 		});
 
 		unsafe {
-			SetWindowPos(self.window.0, HWND::default(), x as i32, y as i32, 0, 0, SWP_ASYNCWINDOWPOS | SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
+			SetWindowPos(self.window.0, HWND::default(), x, y, 0, 0, SWP_ASYNCWINDOWPOS | SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
 			InvalidateRgn(self.window.0, HRGN::default(), false);
 		}
 	}
@@ -486,8 +487,7 @@ impl Window {
 					assert_eq!(res, DISP_CHANGE_SUCCESSFUL);
 				}
 				(&Some(Fullscreen::Exclusive(_)), &None) | (&Some(Fullscreen::Exclusive(_)), &Some(Fullscreen::Borderless(_))) => {
-					let res =
-						unsafe { ChangeDisplaySettingsExW(PCWSTR::default(), std::ptr::null_mut(), HWND::default(), CDS_FULLSCREEN, std::ptr::null_mut()) };
+					let res = unsafe { ChangeDisplaySettingsExW(PCWSTR::null(), std::ptr::null_mut(), HWND::default(), CDS_FULLSCREEN, std::ptr::null_mut()) };
 
 					debug_assert!(res != DISP_CHANGE_BADFLAGS);
 					debug_assert!(res != DISP_CHANGE_BADMODE);
@@ -790,10 +790,11 @@ unsafe fn init<T: 'static>(
 	// `extra_functions`
 	let real_window = {
 		let (style, ex_style) = window_flags.to_window_styles();
+		let title = util::encode_wide(&attributes.title);
 		let handle = CreateWindowExW(
 			ex_style,
-			PCWSTR(class_name.as_ptr()),
-			attributes.title.as_str(),
+			PCWSTR::from_raw(class_name.as_ptr()),
+			PCWSTR::from_raw(title.as_ptr()),
 			style,
 			CW_USEDEFAULT,
 			CW_USEDEFAULT,
@@ -801,7 +802,7 @@ unsafe fn init<T: 'static>(
 			CW_USEDEFAULT,
 			parent.unwrap_or_default(),
 			pl_attribs.menu.unwrap_or_default(),
-			GetModuleHandleW(PCWSTR::default()).unwrap_or_default(),
+			GetModuleHandleW(PCWSTR::null()).unwrap_or_default(),
 			Box::into_raw(Box::new(window_flags)) as _
 		);
 
@@ -915,12 +916,12 @@ unsafe fn register_window_class(window_icon: &Option<Icon>, taskbar_icon: &Optio
 		lpfnWndProc: Some(window_proc),
 		cbClsExtra: 0,
 		cbWndExtra: 0,
-		hInstance: GetModuleHandleW(PCWSTR::default()).unwrap_or_default(),
+		hInstance: GetModuleHandleW(PCWSTR::null()).unwrap_or_default(),
 		hIcon: h_icon,
 		hCursor: HCURSOR::default(), // must be null in order for cursor state to work properly
 		hbrBackground: HBRUSH::default(),
-		lpszMenuName: PCWSTR::default(),
-		lpszClassName: PCWSTR(class_name.as_ptr()),
+		lpszMenuName: PCWSTR::null(),
+		lpszClassName: PCWSTR::from_raw(class_name.as_ptr()),
 		hIconSm: h_icon_small
 	};
 
