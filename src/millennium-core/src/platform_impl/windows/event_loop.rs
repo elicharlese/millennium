@@ -1030,6 +1030,12 @@ unsafe fn public_window_callback_inner<T: 'static>(
 				}
 			}
 
+			let window_flags = window_state.window_flags;
+			if window_flags.contains(WindowFlags::ALWAYS_ON_BOTTOM) {
+				let window_pos = &mut *(lparam.0 as *mut WINDOWPOS);
+				window_pos.hwndInsertAfter = HWND_BOTTOM;
+			}
+
 			result = ProcResult::Value(LRESULT(0));
 		}
 

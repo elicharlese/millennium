@@ -226,6 +226,10 @@ fn create_window(attrs: &WindowAttributes, pl_attrs: &PlatformSpecificWindowBuil
 				let _: () = msg_send![*ns_window, setLevel: ffi::NSWindowLevel::NSFloatingWindowLevel];
 			}
 
+			if attrs.always_on_bottom {
+				let _: () = msg_send![*ns_window, setLevel: ffi::NSWindowLevel::BelowNormalWindowLevel];
+			}
+
 			if let Some(increments) = pl_attrs.resize_increments {
 				let (x, y) = (increments.width, increments.height);
 				if x >= 1.0 && y >= 1.0 {
@@ -1007,6 +1011,16 @@ impl UnownedWindow {
 			};
 			self.set_style_mask_async(new_mask);
 		}
+	}
+
+	#[inline]
+	pub fn set_always_on_bottom(&self, always_on_bottom: bool) {
+		let level = if always_on_bottom {
+			ffi::NSWindowLevel::BelowNormalWindowLevel
+		} else {
+			ffi::NSWindowLevel::NSNormalWindowLevel
+		};
+		unsafe { util::set_level_async(*self.ns_window, level) };
 	}
 
 	#[inline]

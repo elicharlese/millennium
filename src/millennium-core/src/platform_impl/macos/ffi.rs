@@ -121,6 +121,7 @@ pub const kCGNumberOfWindowLevelKeys: NSInteger = 20;
 #[derive(Debug, Clone, Copy)]
 #[repr(isize)]
 pub enum NSWindowLevel {
+	BelowNormalWindowLevel = (kCGBaseWindowLevelKey - 1) as _,
 	NSNormalWindowLevel = kCGBaseWindowLevelKey as _,
 	NSFloatingWindowLevel = kCGFloatingWindowLevelKey as _,
 	NSTornOffMenuWindowLevel = kCGTornOffMenuWindowLevelKey as _,
