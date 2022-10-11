@@ -67,7 +67,7 @@ impl MainPipe<'_> {
 					}
 
 					// Enable devtools
-					#[cfg(debug_assertions)]
+					#[cfg(any(debug_assertions, feature = "devtools"))]
 					env.call_static_method(rust_webview_class, "setWebContentsDebuggingEnabled", "(Z)V", &[devtools.into()])?;
 
 					let string_class = env.find_class("java/lang/String")?;
