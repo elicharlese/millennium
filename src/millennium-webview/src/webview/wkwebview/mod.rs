@@ -462,11 +462,18 @@ impl InnerWebView {
 			// Inject the web view into the window as main content
 			#[cfg(target_os = "macos")]
 			{
+				// Create a view to contain the webview, as without it, devtools will try to
+				// inject a subview into the frame causing an obnoxious warning.
+				let parent_view: id = msg_send![class!(NSView), alloc];
+				let _: () = msg_send![parent_view, init];
+				parent_view.setAutoresizingMask_(NSViewHeightSizable | NSViewWidthSizable);
+				let _: () = msg_send![parent_view, addSubview: webview];
+
 				// Tell the webview we use layers (macOS only)
 				let _: () = msg_send![webview, setWantsLayer: YES];
 				// inject the webview into the window
 				let ns_window = window.ns_window() as id;
-				let _: () = msg_send![ns_window, setContentView: webview];
+				let _: () = msg_send![ns_window, setContentView: parent_view];
 
 				// make sure the window is always on top when we create a new webview
 				let app_class = class!(NSApplication);
