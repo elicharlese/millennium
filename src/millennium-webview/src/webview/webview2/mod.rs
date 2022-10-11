@@ -25,6 +25,7 @@ use windows::{
 	core::{Interface, PCWSTR, PWSTR},
 	Win32::{
 		Foundation::{BOOL, E_FAIL, E_POINTER, FARPROC, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM},
+		Globalization::{self, MAX_LOCALE_NAME},
 		System::{
 			Com::{IStream, StructuredStorage::CreateStreamOnHGlobal},
 			LibraryLoader::{GetProcAddress, LoadLibraryA},
@@ -97,7 +98,17 @@ impl InnerWebView {
 
 		CreateCoreWebView2EnvironmentCompletedHandler::wait_for_async_operation(
 			Box::new(move |environmentcreatedhandler| unsafe {
-				let options: ICoreWebView2EnvironmentOptions = CoreWebView2EnvironmentOptions::default().into();
+				let options = {
+					let options: ICoreWebView2EnvironmentOptions = CoreWebView2EnvironmentOptions::default().into();
+
+					// Get user's system language
+					let lcid = Globalization::GetUserDefaultUILanguage();
+					let mut lang = [0; MAX_LOCALE_NAME as usize];
+					Globalization::LCIDToLocaleName(lcid as u32, &mut lang, Globalization::LOCALE_ALLOW_NEUTRAL_NAMES);
+
+					options.SetLanguage(PCWSTR(lang.as_ptr())).map_err(webview2_com::Error::WindowsError)?;
+					options
+				};
 
 				// remove "mini menu"
 				let _ = options.SetAdditionalBrowserArguments("--disable-features=msWebOOUI,msPdfOOUI");
