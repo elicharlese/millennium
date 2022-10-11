@@ -36,8 +36,7 @@ impl InnerWebView {
 		if let Some(u) = url {
 			let mut url_string = String::from(u.as_str());
 			let name = u.scheme();
-			// TODO: Expands custom protocols with real configurations
-			let schemes = vec!["assets", "res"];
+			let schemes = attributes.custom_protocols.iter().map(|(name, _)| name.as_str()).collect::<Vec<_>>();
 			if schemes.contains(&name) {
 				url_string = u.as_str().replace(&format!("{}://", name), "https://millennium.pyke.io/")
 			}
