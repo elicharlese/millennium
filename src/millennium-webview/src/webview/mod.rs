@@ -36,12 +36,6 @@ use wkwebview::*;
 pub(crate) mod webview2;
 use std::{path::PathBuf, rc::Rc};
 
-#[cfg(target_os = "android")]
-use jni::{
-	objects::{JClass, JObject},
-	sys::jobject,
-	JNIEnv
-};
 pub use url::Url;
 #[cfg(target_os = "windows")]
 use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller;
@@ -549,16 +543,6 @@ impl WebView {
 	/// - **iOS**: Available on iOS 14+ only.
 	pub fn zoom(&self, scale_factor: f64) {
 		self.webview.zoom(scale_factor);
-	}
-
-	#[cfg(target_os = "android")]
-	pub fn run(self, env: JNIEnv, jclass: JClass, jobject: JObject) -> jobject {
-		self.webview.run(env, jclass, jobject).unwrap()
-	}
-
-	#[cfg(target_os = "android")]
-	pub fn ipc_handler(window: &Window, arg: String) {
-		InnerWebView::ipc_handler(window, arg)
 	}
 }
 
