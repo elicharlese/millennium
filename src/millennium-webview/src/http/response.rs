@@ -132,7 +132,7 @@ impl ResponseParts {
 	/// Creates a new default instance of `ResponseParts`
 	fn new() -> ResponseParts {
 		ResponseParts {
-			status: StatusCode::default(),
+			status: StatusCode::OK,
 			version: Version::default(),
 			headers: HeaderMap::default(),
 			mimetype: None

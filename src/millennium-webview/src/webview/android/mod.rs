@@ -13,11 +13,15 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 
-use std::rc::Rc;
+use std::{rc::Rc, str::FromStr};
 
 use millennium_core::android::ndk_glue::*;
 
-use crate::{application::window::Window, Result};
+use crate::{
+	application::window::Window,
+	http::{method::Method, Request as HttpRequest, RequestParts},
+	Result
+};
 
 pub struct InnerWebView {
 	pub window: Rc<Window>
@@ -30,18 +34,53 @@ impl InnerWebView {
 			initialization_scripts,
 			ipc_handler,
 			devtools,
+			custom_protocols,
 			..
 		} = attributes;
 
 		if let Some(u) = url {
 			let mut url_string = String::from(u.as_str());
 			let name = u.scheme();
-			let schemes = attributes.custom_protocols.iter().map(|(name, _)| name.as_str()).collect::<Vec<_>>();
+			let schemes = custom_protocols.iter().map(|(name, _)| name.as_str()).collect::<Vec<_>>();
 			if schemes.contains(&name) {
-				url_string = u.as_str().replace(&format!("{}://", name), "https://millennium.pyke.io/")
+				url_string = u.as_str().replace(&format!("{}://", name), &format!("https://{}.", name))
 			}
+
 			MainPipe::send(WebViewMessage::CreateWebView(url_string, initialization_scripts, devtools));
 		}
+
+		REQUEST_HANDLER.get_or_init(move || {
+			UnsafeRequestHandler::new(Box::new(move |request: WebResourceRequest| {
+				if let Some(custom_protocol) = custom_protocols
+					.iter()
+					.find(|(name, _)| request.url.starts_with(&format!("https://{}.", name)))
+				{
+					let path = request
+						.url
+						.replace(&format!("https://{}.", custom_protocol.0), &format!("{}://", custom_protocol.0));
+
+					let request = HttpRequest {
+						head: RequestParts {
+							method: Method::from_str(&request.method).unwrap_or(Method::GET),
+							uri: path,
+							headers: request.headers
+						},
+						body: Vec::new()
+					};
+
+					if let Ok(response) = (custom_protocol.1)(&request) {
+						return Some(WebResourceResponse {
+							status: response.head.status,
+							headers: response.head.headers,
+							mimetype: response.head.mimetype,
+							body: response.body
+						});
+					}
+				}
+
+				None
+			}))
+		});
 
 		let w = window.clone();
 		if let Some(i) = ipc_handler {
