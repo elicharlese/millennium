@@ -26,6 +26,6 @@ Millennium is a fork of [Tauri](https://tauri.studio/), its [official plugins](h
 <table>
     <tr><th align="center">Join the Discord server!</th></tr>
     <tr>
-        <td><a href="https://discord.gg/CETPevXFgD"><img src="https://invidget.switchblade.xyz/958136515010101248"></a></td>
+        <td><a href="https://discord.gg/BAkXJ6VjCz"><img src="https://invidget.switchblade.xyz/BAkXJ6VjCz"></a></td>
     </tr>
 </table>
