@@ -18,8 +18,13 @@ use std::rc::Rc;
 use html5ever::{interface::QualName, namespace_url, ns, tendril::TendrilSink, LocalName};
 use kuchiki::NodeRef;
 use millennium_core::platform::android::ndk_glue::{
-	jni::{objects::GlobalRef, JNIEnv},
-	ndk::looper::{FdEvent, ForeignLooper}
+	jni::{
+		errors::Error as JniError,
+		objects::{GlobalRef, JClass, JObject},
+		JNIEnv
+	},
+	ndk::looper::{FdEvent, ForeignLooper},
+	PACKAGE
 };
 use once_cell::sync::OnceCell;
 use sha2::{Digest, Sha256};
@@ -73,7 +78,20 @@ unsafe impl Send for UnsafeRequestHandler {}
 unsafe impl Sync for UnsafeRequestHandler {}
 
 pub unsafe fn setup(env: JNIEnv, looper: &ForeignLooper, activity: GlobalRef) {
-	let mut main_pipe = MainPipe { env, activity, webview: None };
+	// we must create the `WebChromeClient` here because it calls `registerForActivityResult`,
+	// which gives a `LifecycleOwners must call register before they are STARTED.` error when
+	// called outside the onCreate hook
+	let rust_webchrome_client_class = find_my_class(env, activity.as_obj(), format!("{}/RustWebChromeClient", PACKAGE.get().unwrap())).unwrap();
+	let webchrome_client = env
+		.new_object(rust_webchrome_client_class, "(Landroidx/appcompat/app/AppCompatActivity;)V", &[activity.as_obj().into()])
+		.unwrap();
+
+	let mut main_pipe = MainPipe {
+		env,
+		activity,
+		webview: None,
+		webchrome_client: env.new_global_ref(webchrome_client).unwrap()
+	};
 
 	looper
 		.add_fd_with_callback(MAIN_PIPE[0], FdEvent::INPUT, move |_| {
@@ -226,4 +244,12 @@ fn hash_script(script: &str) -> String {
 	hasher.update(script);
 	let hash = hasher.finalize();
 	format!("'sha256-{}'", base64::encode(hash))
+}
+
+fn find_my_class<'a>(env: JNIEnv<'a>, activity: JObject<'a>, name: String) -> Result<JClass<'a>, JniError> {
+	let class_name = env.new_string(name.replace('/', "."))?;
+	let my_class = env
+		.call_method(activity, "getAppClass", "(Ljava/lang/String;)Ljava/lang/Class;", &[class_name.into()])?
+		.l()?;
+	Ok(my_class.into())
 }
