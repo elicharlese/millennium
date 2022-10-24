@@ -18,8 +18,6 @@ package {{app-domain-reversed}}.{{app-name-snake-case}}
 
 import android.webkit.*
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 
 class RustWebView(context: Context): WebView(context) {
     init {
@@ -28,7 +26,7 @@ class RustWebView(context: Context): WebView(context) {
     }
 
 	fun loadUrlMainThread(url: String) {
-		Handler(Looper.getMainLooper()).post {
+		post {
 			super.loadUrl(url)
 		}
 	}
