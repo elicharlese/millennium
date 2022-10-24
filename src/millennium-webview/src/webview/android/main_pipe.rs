@@ -26,6 +26,8 @@ use millennium_core::platform::android::ndk_glue::{
 };
 use once_cell::sync::Lazy;
 
+use crate::webview::Rgba;
+
 static CHANNEL: Lazy<(Sender<WebViewMessage>, Receiver<WebViewMessage>)> = Lazy::new(|| bounded(8));
 pub static MAIN_PIPE: Lazy<[RawFd; 2]> = Lazy::new(|| {
 	let mut pipe: [RawFd; 2] = Default::default();
@@ -52,7 +54,14 @@ impl MainPipe<'_> {
 		let activity = self.activity.as_obj();
 		if let Ok(message) = CHANNEL.1.recv() {
 			match message {
-				WebViewMessage::CreateWebView(url, devtools) => {
+				WebViewMessage::CreateWebView(attrs) => {
+					let CreateWebViewAttributes {
+						url,
+						devtools,
+						transparent,
+						background_color
+					} = attrs;
+
 					// Create webview
 					let rust_webview_class = find_my_class(env, activity, format!("{}/RustWebView", PACKAGE.get().unwrap()))?;
 					let webview = env.new_object(rust_webview_class, "(Landroid/content/Context;)V", &[activity.into()])?;
@@ -69,6 +78,14 @@ impl MainPipe<'_> {
 					// Enable devtools
 					#[cfg(any(debug_assertions, feature = "devtools"))]
 					env.call_static_method(rust_webview_class, "setWebContentsDebuggingEnabled", "(Z)V", &[devtools.into()])?;
+
+					if transparent {
+						set_background_color(env, webview, (0, 0, 0, 0))?;
+					} else {
+						if let Some(color) = background_color {
+							set_background_color(env, webview, color)?;
+						}
+					}
 
 					// Create and set webview client
 					let rust_webview_client_class = find_my_class(env, activity, format!("{}/RustWebViewClient", PACKAGE.get().unwrap()))?;
@@ -97,6 +114,11 @@ impl MainPipe<'_> {
 						)?;
 					}
 				}
+				WebViewMessage::SetBackgroundColor(background_color) => {
+					if let Some(webview) = &self.webview {
+						set_background_color(env, webview.as_obj(), background_color)?;
+					}
+				}
 			}
 		}
 		Ok(())
@@ -111,8 +133,28 @@ fn find_my_class<'a>(env: JNIEnv<'a>, activity: JObject<'a>, name: String) -> Re
 	Ok(my_class.into())
 }
 
+fn set_background_color<'a>(env: JNIEnv<'a>, webview: JObject<'a>, background_color: RGBA) -> Result<(), JniError> {
+	let color_class = env.find_class("android/graphics/Color")?;
+	let color = env.call_static_method(
+		color_class,
+		"argb",
+		"(IIII)I",
+		&[background_color.3.into(), background_color.0.into(), background_color.1.into(), background_color.2.into()]
+	)?;
+	env.call_method(webview, "setBackgroundColor", "(I)V", &[color])?;
+	Ok(())
+}
+
 #[derive(Debug)]
 pub enum WebViewMessage {
-	CreateWebView(String, bool),
+	CreateWebView(CreateWebViewAttributes),
 	Eval(String)
+}
+
+#[derive(Debug)]
+pub struct CreateWebViewAttributes {
+	pub url: String,
+	pub devtools: bool,
+	pub transparent: bool,
+	pub background_color: Option<Rgba>
 }

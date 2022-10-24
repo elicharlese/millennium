@@ -59,8 +59,24 @@ pub struct WebViewAttributes {
 	pub user_agent: Option<String>,
 	/// Whether the WebView window should be visible.
 	pub visible: bool,
-	/// Whether the WebView should be transparent. Not supported on Windows 7.
+	/// Whether the WebView should be transparent.
+	///
+	/// ## Platform-specific
+	///
+	/// - **Windows**: Not supported on Windows 7.
 	pub transparent: bool,
+	/// Specify the webview background color. This will be ignored if `transparent` is set to `true`.
+	///
+	/// The color uses the RGBA format.
+	///
+	/// ## Platform-specific
+	///
+	/// - **macOS / iOS**: Not implemented.
+	/// - **Windows**:
+	///   * On Windows 7, transparency is not supported and the alpha value will be ignored.
+	///   * On Windows higher than 7: translucent colors are not supported, so any alpha value other than `0` will be
+	///     set to `255`.
+	pub background_color: Option<Rgba>,
 	/// Whether load the provided URL to [`WebView`].
 	pub url: Option<Url>,
 	/// Whether page zooming via hotkeys is enabled.
@@ -186,6 +202,7 @@ impl Default for WebViewAttributes {
 			user_agent: None,
 			visible: true,
 			transparent: false,
+			background_color: None,
 			url: None,
 			html: None,
 			initialization_scripts: vec![],
@@ -200,6 +217,8 @@ impl Default for WebViewAttributes {
 		}
 	}
 }
+
+pub type Rgba = (u8, u8, u8, u8);
 
 /// Builder type of [`WebView`].
 ///
@@ -222,14 +241,33 @@ impl<'a> WebViewBuilder<'a> {
 		Ok(Self { webview, web_context, window })
 	}
 
-	/// Sets whether the WebView should be transparent. Not supported on Windows
-	/// 7.
+	/// Sets whether the webview should be transparent.
+	///
+	/// ## Platform-specific
+	///
+	/// **Windows**: Not supported on Windows 7.
 	pub fn with_transparent(mut self, transparent: bool) -> Self {
 		self.webview.transparent = transparent;
 		self
 	}
 
-	/// Sets whether the WebView should be transparent.
+	/// Specify the webview background color. This will be ignored if `transparent` is set to `true`.
+	///
+	/// The color uses the RGBA format.
+	///
+	/// ## Platform-specific
+	///
+	/// - **macOS / iOS**: Not implemented.
+	/// - **Windows**:
+	///   * On Windows 7, transparency is not supported and the alpha value will be ignored.
+	///   * On Windows higher than 7: translucent colors are not supported, so any alpha value other than `0` will be
+	///     set to `255`.
+	pub fn with_background_color(mut self, background_color: Rgba) -> Self {
+		self.webview.background_color = Some(background_color);
+		self
+	}
+
+	/// Sets whether the webview should be visible.
 	pub fn with_visible(mut self, visible: bool) -> Self {
 		self.webview.visible = visible;
 		self
@@ -547,6 +585,21 @@ impl WebView {
 	/// - **iOS**: Available on iOS 14+ only.
 	pub fn zoom(&self, scale_factor: f64) {
 		self.webview.zoom(scale_factor);
+	}
+
+	/// Sets the webview background color. This will be ignored if `transparent` is set to `true`.
+	///
+	/// The color uses the RGBA format.
+	///
+	/// ## Platform-specific
+	///
+	/// - **macOS / iOS**: Not implemented.
+	/// - **Windows**:
+	///   * On Windows 7, transparency is not supported and the alpha value will be ignored.
+	///   * On Windows higher than 7: translucent colors are not supported, so any alpha value other than `0` will be
+	///     set to `255`.
+	pub fn set_background_color(&self, background_color: Rgba) -> Result<()> {
+		self.webview.set_background_color(background_color)
 	}
 }
 

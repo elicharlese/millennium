@@ -24,6 +24,7 @@ use millennium_core::platform::android::ndk_glue::{
 use once_cell::sync::OnceCell;
 use sha2::{Digest, Sha256};
 
+use super::{Rgba, WebContext, WebViewAttributes};
 use crate::{
 	application::window::Window,
 	http::{header::HeaderValue, Request as HttpRequest, Response as HttpResponse},
@@ -32,7 +33,7 @@ use crate::{
 
 pub(crate) mod binding;
 mod main_pipe;
-use self::main_pipe::{MainPipe, WebViewMessage, MAIN_PIPE};
+use self::main_pipe::{CreateWebViewAttributes, MainPipe, WebViewMessage, MAIN_PIPE};
 
 #[macro_export]
 macro_rules! android_binding {
@@ -102,6 +103,8 @@ impl InnerWebView {
 			ipc_handler,
 			devtools,
 			custom_protocols,
+			background_color,
+			transparent,
 			..
 		} = attributes;
 
@@ -113,7 +116,12 @@ impl InnerWebView {
 				url_string = u.as_str().replace(&format!("{}://", name), &format!("https://{}.", name))
 			}
 
-			MainPipe::send(WebViewMessage::CreateWebView(url_string, devtools));
+			MainPipe::send(WebViewMessage::CreateWebView(CreateWebViewAttributes {
+				url: url_string,
+				devtools,
+				background_color,
+				transparent
+			}));
 		}
 
 		REQUEST_HANDLER.get_or_init(move || {
@@ -180,8 +188,6 @@ impl InnerWebView {
 		Ok(())
 	}
 
-	pub fn focus(&self) {}
-
 	#[cfg(any(debug_assertions, feature = "devtools"))]
 	pub fn open_devtools(&self) {}
 
@@ -194,6 +200,11 @@ impl InnerWebView {
 	}
 
 	pub fn zoom(&self, _scale_factor: f64) {}
+
+	pub fn set_background_color(&self, background_color: Rgba) -> Result<()> {
+		MainPipe::send(WebViewMessage::SetBackgroundColor(background_color));
+		Ok(())
+	}
 }
 
 pub fn platform_webview_version() -> Result<String> {

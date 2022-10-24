@@ -52,7 +52,7 @@ use crate::{
 		dpi::{LogicalSize, PhysicalSize},
 		window::Window
 	},
-	webview::{FileDropEvent, WebContext, WebViewAttributes},
+	webview::{FileDropEvent, Rgba, WebContext, WebViewAttributes},
 	Result
 };
 
@@ -610,6 +610,10 @@ impl InnerWebView {
 		unsafe {
 			let _: () = msg_send![self.webview, setPageZoom: scale_factor];
 		}
+	}
+
+	pub fn set_background_color(&self, background_color: Rgba) -> Result<()> {
+		Ok(())
 	}
 }
 
