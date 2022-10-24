@@ -63,7 +63,7 @@ impl MainPipe<'_> {
 
 					// Load URL
 					if let Ok(url) = env.new_string(url) {
-						env.call_method(webview, "loadUrl", "(Ljava/lang/String;)V", &[url.into()])?;
+						env.call_method(webview, "loadUrlMainThread", "(Ljava/lang/String;)V", &[url.into()])?;
 					}
 
 					// Enable devtools
