@@ -136,6 +136,11 @@ impl MainPipe<'_> {
 						Err(e) => tx.send(Err(e.into())).unwrap()
 					}
 				}
+				WebViewMessage::Jni(f) => {
+					if let Some(webview) = &self.webview {
+						f(env, activity, webview.as_obj());
+					}
+				}
 			}
 		}
 		Ok(())
@@ -154,12 +159,12 @@ fn set_background_color<'a>(env: JNIEnv<'a>, webview: JObject<'a>, background_co
 	Ok(())
 }
 
-#[derive(Debug)]
 pub enum WebViewMessage {
 	CreateWebView(CreateWebViewAttributes),
 	Eval(String),
 	SetBackgroundColor(Rgba),
-	GetWebViewVersion(Sender<Result<String, Error>>)
+	GetWebViewVersion(Sender<Result<String, Error>>),
+	Jni(Box<dyn FnOnce(JNIEnv, JObject, JObject) + Send>)
 }
 
 #[derive(Debug)]

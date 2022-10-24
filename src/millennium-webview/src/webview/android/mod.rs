@@ -226,6 +226,21 @@ impl InnerWebView {
 	}
 }
 
+#[derive(Clone, Copy)]
+pub struct JniHandle;
+
+impl JniHandle {
+	/// Execute JNI code on the webview thread.
+	///
+	/// The passed function will be provided with the JNI evironment, Android activity, and WebView instance.
+	pub fn exec<F>(&self, func: F)
+	where
+		F: FnOnce(JNIEnv, JObject, JObject) + Send + 'static
+	{
+		MainPipe::send(WebViewMessage::Jni(Box::new(func)));
+	}
+}
+
 pub fn platform_webview_version() -> Result<String> {
 	let (tx, rx) = bounded(1);
 	MainPipe::send(WebViewMessage::GetWebViewVersion(tx));
