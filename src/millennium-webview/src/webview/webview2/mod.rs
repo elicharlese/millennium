@@ -630,7 +630,7 @@ fn encode_wide(string: impl AsRef<std::ffi::OsStr>) -> Vec<u16> {
 
 pub fn set_background_color(controller: &ICoreWebView2Controller, background_color: Rgba) -> webview2_com::Result<()> {
 	let mut color = background_color;
-	if !is_windows_7() || color.3 != 0 {
+	if is_windows_7() || color.3 != 0 {
 		color.3 = 255;
 	}
 
