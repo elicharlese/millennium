@@ -27,7 +27,7 @@ use millennium_core::platform::android::ndk_glue::{
 use once_cell::sync::Lazy;
 
 use super::find_my_class;
-use crate::webview::Rgba;
+use crate::{webview::Rgba, Error};
 
 static CHANNEL: Lazy<(Sender<WebViewMessage>, Receiver<WebViewMessage>)> = Lazy::new(|| bounded(8));
 pub static MAIN_PIPE: Lazy<[RawFd; 2]> = Lazy::new(|| {
@@ -124,6 +124,18 @@ impl MainPipe<'_> {
 						set_background_color(env, webview.as_obj(), background_color)?;
 					}
 				}
+				WebViewMessage::GetWebViewVersion(tx) => {
+					match env
+						.call_method(activity, "getVersion", "()Ljava/lang/String;", &[])
+						.and_then(|v| v.l())
+						.and_then(|s| env.get_string(s.into()))
+					{
+						Ok(version) => {
+							tx.send(Ok(version.to_string_lossy().into())).unwrap();
+						}
+						Err(e) => tx.send(Err(e.into())).unwrap()
+					}
+				}
 			}
 		}
 		Ok(())
@@ -145,7 +157,9 @@ fn set_background_color<'a>(env: JNIEnv<'a>, webview: JObject<'a>, background_co
 #[derive(Debug)]
 pub enum WebViewMessage {
 	CreateWebView(CreateWebViewAttributes),
-	Eval(String)
+	Eval(String),
+	SetBackgroundColor(Rgba),
+	GetWebViewVersion(Sender<Result<String, Error>>)
 }
 
 #[derive(Debug)]

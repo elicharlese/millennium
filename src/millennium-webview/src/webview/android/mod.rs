@@ -15,6 +15,7 @@
 
 use std::rc::Rc;
 
+use crossbeam_channel::*;
 use html5ever::{interface::QualName, namespace_url, ns, tendril::TendrilSink, LocalName};
 use kuchiki::NodeRef;
 use millennium_core::platform::android::ndk_glue::{
@@ -226,7 +227,9 @@ impl InnerWebView {
 }
 
 pub fn platform_webview_version() -> Result<String> {
-	todo!()
+	let (tx, rx) = bounded(1);
+	MainPipe::send(WebViewMessage::GetWebViewVersion(tx));
+	rx.recv().unwrap()
 }
 
 fn with_html_head<F: FnOnce(&NodeRef)>(document: &mut NodeRef, f: F) {
