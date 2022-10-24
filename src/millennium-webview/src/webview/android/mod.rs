@@ -15,15 +15,18 @@
 
 use std::rc::Rc;
 
+use html5ever::{interface::QualName, namespace_url, ns, tendril::TendrilSink, LocalName};
+use kuchiki::NodeRef;
 use millennium_core::platform::android::ndk_glue::{
 	jni::{objects::GlobalRef, JNIEnv},
 	ndk::looper::{FdEvent, ForeignLooper}
 };
 use once_cell::sync::OnceCell;
+use sha2::{Digest, Sha256};
 
 use crate::{
 	application::window::Window,
-	http::{Request as HttpRequest, Response as HttpResponse},
+	http::{header::HeaderValue, Request as HttpRequest, Response as HttpResponse},
 	Result
 };
 
@@ -110,7 +113,7 @@ impl InnerWebView {
 				url_string = u.as_str().replace(&format!("{}://", name), &format!("https://{}.", name))
 			}
 
-			MainPipe::send(WebViewMessage::CreateWebView(url_string, initialization_scripts, devtools));
+			MainPipe::send(WebViewMessage::CreateWebView(url_string, devtools));
 		}
 
 		REQUEST_HANDLER.get_or_init(move || {
@@ -123,7 +126,37 @@ impl InnerWebView {
 						.uri()
 						.replace(&format!("https://{}.", custom_protocol.0), &format!("{}://", custom_protocol.0));
 
-					if let Ok(response) = (custom_protocol.1)(&request) {
+					if let Ok(mut response) = (custom_protocol.1)(&request) {
+						if response.head.mimetype.as_deref() == Some("text/html") {
+							if !initialization_scripts.is_empty() {
+								let mut document = kuchiki::parse_html().one(String::from_utf8_lossy(&response.body).into_owned());
+								let csp = response.head.headers.get_mut("Content-Security-Policy");
+								let mut hashes = Vec::new();
+								with_html_head(&mut document, |head| {
+									for script in &initialization_scripts {
+										let script_el = NodeRef::new_element(QualName::new(None, ns!(html), "script".into()), None);
+										script_el.append(NodeRef::new_text(script));
+
+										head.prepend(script_el);
+										if csp.is_some() {
+											hashes.push(hash_script(script));
+										}
+									}
+								});
+
+								if let Some(csp) = csp {
+									let csp_string = csp.to_str().unwrap().to_string();
+									let csp_string = if csp_string.contains("script-src") {
+										csp_string.replace("script-src", &format!("script-src {}", hashes.join(" ")))
+									} else {
+										format!("{} script-src {}", csp_string, hashes.join(" "))
+									};
+									*csp = HeaderValue::from_str(&csp_string).unwrap();
+								}
+
+								response.body = document.to_string().as_bytes().to_vec();
+							}
+						}
 						return Some(response);
 					}
 				}
@@ -165,4 +198,21 @@ impl InnerWebView {
 
 pub fn platform_webview_version() -> Result<String> {
 	todo!()
+}
+
+fn with_html_head<F: FnOnce(&NodeRef)>(document: &mut NodeRef, f: F) {
+	if let Ok(ref node) = document.select_first("head") {
+		f(node.as_node())
+	} else {
+		let node = NodeRef::new_element(QualName::new(None, ns!(html), LocalName::from("head")), None);
+		f(&node);
+		document.prepend(node)
+	}
+}
+
+fn hash_script(script: &str) -> String {
+	let mut hasher = Sha256::new();
+	hasher.update(script);
+	let hash = hasher.finalize();
+	format!("'sha256-{}'", base64::encode(hash))
 }

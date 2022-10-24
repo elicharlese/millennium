@@ -88,6 +88,12 @@ pub struct WebViewAttributes {
 	/// Initialize javascript code when loading new pages. When webview load a
 	/// new page, this initialization code will be executed. It is guaranteed
 	/// that code is executed before `window.onload`.
+	///
+	/// ## Platform-specific
+	///
+	/// - **Android**: The Android WebView doesn't provide an API for initialization scripts, so scripts are injected
+	///   into the HTML `head` on custom protocol URLs with the `text/html` content type. **The CSP is modified to allow
+	///   these scripts via a SHA-256 nonce.**
 	pub initialization_scripts: Vec<String>,
 	/// Register custom file loading protocols with pairs of scheme uri string
 	/// and a handling closure.
@@ -232,6 +238,12 @@ impl<'a> WebViewBuilder<'a> {
 	/// Initialize javascript code when loading new pages. When webview load a
 	/// new page, this initialization code will be executed. It is guaranteed
 	/// that code is executed before `window.onload`.
+	///
+	/// ## Platform-specific
+	///
+	/// - **Android**: The Android WebView doesn't provide an API for initialization scripts, so scripts are injected
+	///   into the HTML `head` on custom protocol URLs with the `text/html` content type. **The CSP is modified to allow
+	///   these scripts via a SHA-256 nonce.**
 	pub fn with_initialization_script(mut self, js: &str) -> Self {
 		self.webview.initialization_scripts.push(js.to_string());
 		self
