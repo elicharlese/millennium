@@ -19,6 +19,7 @@ mod file_drop;
 use std::{collections::HashSet, fmt::Write, iter::once, mem::MaybeUninit, os::windows::prelude::OsStrExt, rc::Rc, sync::mpsc};
 
 use file_drop::FileDropController;
+use http::Request;
 use once_cell::unsync::OnceCell;
 use webview2_com::{Microsoft::Web::WebView2::Win32::*, *};
 use windows::{
@@ -41,7 +42,6 @@ use windows::{
 
 use crate::{
 	application::{platform::windows::WindowExtWindows, window::Window},
-	http::RequestBuilder as HttpRequestBuilder,
 	webview::{Rgba, WebContext, WebViewAttributes},
 	Error, Result
 };
@@ -373,7 +373,7 @@ impl InnerWebView {
 						&WebResourceRequestedEventHandler::create(Box::new(move |_, args| {
 							if let Some(args) = args {
 								let webview_request = args.Request()?;
-								let mut request = HttpRequestBuilder::new();
+								let mut request = Request::builder();
 
 								// request method (GET, POST, PUT etc..)
 								let mut request_method = PWSTR::null();
@@ -432,11 +432,6 @@ impl InnerWebView {
 											let status_code = sent_response.status().as_u16() as i32;
 
 											let mut headers_map = String::new();
-
-											// set mime type if provided
-											if let Some(mime) = sent_response.mimetype() {
-												let _ = writeln!(headers_map, "Content-Type: {}", mime);
-											}
 
 											// build headers
 											for (name, value) in sent_response.headers().iter() {

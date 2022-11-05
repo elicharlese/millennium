@@ -13,6 +13,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 
+use http::{
+	header::{HeaderName, HeaderValue, CONTENT_TYPE},
+	Request
+};
 use millennium_core::platform::android::ndk_glue::jni::{
 	errors::Error as JniError,
 	objects::{JClass, JMap, JObject, JString},
@@ -21,13 +25,9 @@ use millennium_core::platform::android::ndk_glue::jni::{
 };
 
 use super::{IPC, REQUEST_HANDLER};
-use crate::http::{
-	header::{HeaderName, HeaderValue},
-	RequestBuilder
-};
 
 fn handle_request(env: JNIEnv, request: JObject) -> Result<jobject, JniError> {
-	let mut request_builder = RequestBuilder::new();
+	let mut request_builder = Request::builder();
 
 	let uri = env.call_method(request, "getUrl", "()Landroid/net/Uri;", &[])?.l()?;
 	let url: JString = env.call_method(uri, "toString", "()Ljava/lang/String;", &[])?.l()?.into();
@@ -52,8 +52,8 @@ fn handle_request(env: JNIEnv, request: JObject) -> Result<jobject, JniError> {
 			let status_code = response.status().as_u16() as i32;
 			let reason_phrase = "OK";
 			let encoding = "UTF-8";
-			let mime_type = if let Some(mime) = response.mimetype() {
-				env.new_string(mime)?.into()
+			let mime_type = if let Some(mime) = response.headers().get(CONTENT_TYPE) {
+				env.new_string(mime.to_str().unwrap())?.into()
 			} else {
 				JObject::null()
 			};
@@ -73,7 +73,7 @@ fn handle_request(env: JNIEnv, request: JObject) -> Result<jobject, JniError> {
 				)?;
 			}
 
-			let bytes = response.body;
+			let bytes = response.body();
 
 			let byte_array_input_stream = env.find_class("java/io/ByteArrayInputStream")?;
 			let byte_array = env.byte_array_from_slice(&bytes)?;

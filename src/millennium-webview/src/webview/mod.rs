@@ -42,6 +42,7 @@ use wkwebview::*;
 pub(crate) mod webview2;
 use std::{path::PathBuf, rc::Rc};
 
+use http::{Request, Response};
 pub use url::Url;
 #[cfg(target_os = "windows")]
 use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller;
@@ -53,7 +54,6 @@ use self::webview2::*;
 #[cfg(target_os = "windows")]
 use crate::application::platform::windows::WindowExtWindows;
 use crate::application::{dpi::PhysicalSize, window::Window};
-use crate::http::{Request as HttpRequest, Response as HttpResponse};
 use crate::Result;
 
 pub struct WebViewAttributes {
@@ -141,7 +141,7 @@ pub struct WebViewAttributes {
 	///   So, a URL like `millennium://assets/index.html` would get the HTML file in the assets directory.
 	///
 	/// [bug]: https://bugs.webkit.org/show_bug.cgi?id=229034
-	pub custom_protocols: Vec<(String, Box<dyn Fn(&HttpRequest) -> Result<HttpResponse>>)>,
+	pub custom_protocols: Vec<(String, Box<dyn Fn(&Request<Vec<u8>>) -> Result<Response<Vec<u8>>>>)>,
 	/// Set the IPC handler to receive the message from Javascript on webview to
 	/// host Rust code. The message sent from webview should call
 	/// `window.ipc.postMessage("insert_message_here");`.
@@ -346,7 +346,7 @@ impl<'a> WebViewBuilder<'a> {
 	#[cfg(feature = "protocol")]
 	pub fn with_custom_protocol<F>(mut self, name: String, handler: F) -> Self
 	where
-		F: Fn(&HttpRequest) -> Result<HttpResponse> + 'static
+		F: Fn(&Request<Vec<u8>>) -> Result<Response<Vec<u8>>> + 'static
 	{
 		self.webview.custom_protocols.push((name, Box::new(handler)));
 		self

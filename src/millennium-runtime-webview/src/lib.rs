@@ -32,7 +32,7 @@ use std::{
 
 use millennium_runtime::window::MenuEvent;
 use millennium_runtime::{
-	http::{Request as HttpRequest, RequestParts as HttpRequestParts, Response as HttpResponse, ResponseParts as HttpResponseParts},
+	http::{header::CONTENT_TYPE, Request as HttpRequest, RequestParts, Response as HttpResponse},
 	menu::{AboutMetadata, CustomMenuItem, Menu, MenuEntry, MenuHash, MenuId, MenuItem, MenuUpdate},
 	monitor::Monitor,
 	webview::{WebviewIpcHandler, WindowBuilder, WindowBuilderBase},
@@ -84,9 +84,7 @@ use millennium_webview::{
 			UserAttentionType as MillenniumUserAttentionType
 		}
 	},
-	http::{
-		Request as MillenniumHttpRequest, RequestParts as MillenniumRequestParts, Response as MillenniumHttpResponse, ResponseParts as MillenniumResponseParts
-	},
+	http::{Request as MillenniumRequest, Response as MillenniumResponse},
 	webview::{FileDropEvent as MillenniumFileDropEvent, WebContext, WebView, WebViewBuilder}
 };
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle};
@@ -252,67 +250,35 @@ impl<T: UserEvent> fmt::Debug for Context<T> {
 	}
 }
 
-struct HttpRequestPartsWrapper(HttpRequestParts);
-
-impl From<HttpRequestPartsWrapper> for HttpRequestParts {
-	fn from(parts: HttpRequestPartsWrapper) -> Self {
-		Self {
-			method: parts.0.method,
-			uri: parts.0.uri,
-			headers: parts.0.headers
-		}
-	}
-}
-
-impl From<HttpRequestParts> for HttpRequestPartsWrapper {
-	fn from(request: HttpRequestParts) -> Self {
-		Self(HttpRequestParts {
-			method: request.method,
-			uri: request.uri,
-			headers: request.headers
-		})
-	}
-}
-
-impl From<MillenniumRequestParts> for HttpRequestPartsWrapper {
-	fn from(request: MillenniumRequestParts) -> Self {
-		Self(HttpRequestParts {
-			method: request.method,
-			uri: request.uri,
-			headers: request.headers
-		})
-	}
-}
-
 struct HttpRequestWrapper(HttpRequest);
 
-impl From<&MillenniumHttpRequest> for HttpRequestWrapper {
-	fn from(req: &MillenniumHttpRequest) -> Self {
-		Self(HttpRequest::new_internal(HttpRequestPartsWrapper::from(req.head.clone()).0, req.body.clone()))
+impl From<&MillenniumRequest<Vec<u8>>> for HttpRequestWrapper {
+	fn from(req: &MillenniumRequest<Vec<u8>>) -> Self {
+		let parts = RequestParts {
+			uri: req.uri().to_string(),
+			method: req.method().clone(),
+			headers: req.headers().clone()
+		};
+		Self(HttpRequest::new_internal(parts, req.body().clone()))
 	}
 }
 
 // response
-struct HttpResponsePartsWrapper(MillenniumResponseParts);
-impl From<HttpResponseParts> for HttpResponsePartsWrapper {
-	fn from(response: HttpResponseParts) -> Self {
-		Self(MillenniumResponseParts {
-			mimetype: response.mimetype,
-			status: response.status,
-			version: response.version,
-			headers: response.headers
-		})
-	}
-}
-
-struct HttpResponseWrapper(MillenniumHttpResponse);
+struct HttpResponseWrapper(MillenniumResponse<Vec<u8>>);
 impl From<HttpResponse> for HttpResponseWrapper {
 	fn from(response: HttpResponse) -> Self {
 		let (parts, body) = response.into_parts();
-		Self(MillenniumHttpResponse {
-			body,
-			head: HttpResponsePartsWrapper::from(parts).0
-		})
+
+		let mut res_builder = MillenniumResponse::builder().status(parts.status).version(parts.version);
+		if let Some(mime) = parts.mimetype {
+			res_builder = res_builder.header(CONTENT_TYPE, mime);
+		}
+		for (name, val) in parts.headers.iter() {
+			res_builder = res_builder.header(name, val);
+		}
+
+		let res = res_builder.body(body).unwrap();
+		Self(res)
 	}
 }
 
