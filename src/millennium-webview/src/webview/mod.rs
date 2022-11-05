@@ -223,7 +223,7 @@ impl Default for WebViewAttributes {
 #[cfg(windows)]
 #[derive(Default)]
 pub(crate) struct PlatformSpecificWebViewAttributes {
-	disable_additional_browser_args: bool
+	additional_browser_args: Option<String>
 }
 
 #[cfg(any(
@@ -494,29 +494,18 @@ impl<'a> WebViewBuilder<'a> {
 
 #[cfg(windows)]
 pub trait WebViewBuilderExtWindows {
-	/// Disables `millennium-webview` adding its own WebView2 browser arguments.
-	///
-	/// By default, `millennium-webview` passes its own set of arguments to disable certain Edge features, which will
-	/// override the `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` environment variable and make it difficult to set custom
-	/// browser arguments.
-	///
-	/// If you disable the default arguments, custom arguments can then be configured like so (**before** creating the
-	/// webview):
-	///
-	/// ```
-	/// std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-features=msSmartScreenProtection");
-	/// ```
+	/// Pass additional browser arguments to WebView2 when creating the webview.
 	///
 	/// The default arguments are `--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection` - if you'd like to
-	/// disable OOUI (the menu that appears when selecting text) and Smart Screen, make sure to include those arguments
+	/// disable OOUI (the menu that appears when selecting text) and SmartScreen, make sure to include those arguments
 	/// in your custom arguments.
-	fn disable_additional_browser_args(self) -> Self;
+	fn with_additional_browser_args<S: AsRef<str>>(self, additional_args: S) -> Self;
 }
 
 #[cfg(windows)]
 impl WebViewBuilderExtWindows for WebViewBuilder<'_> {
-	fn disable_additional_browser_args(mut self) -> Self {
-		self.platform_attrs.disable_additional_browser_args = true;
+	fn with_additional_browser_args<S: AsRef<str>>(mut self, additional_args: S) -> Self {
+		self.platform_attrs.additional_browser_args = Some(additional_args.as_ref().to_string());
 		self
 	}
 }

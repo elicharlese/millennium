@@ -118,12 +118,13 @@ impl InnerWebView {
 					options
 				};
 
-				if !pl_attrs.disable_additional_browser_args {
-					// remove "mini menu" and Smart Screen
-					let _ = options.SetAdditionalBrowserArguments(PCWSTR::from_raw(
-						encode_wide("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection").as_ptr()
-					));
-				}
+				let _ = options.SetAdditionalBrowserArguments(PCWSTR::from_raw(
+					encode_wide(pl_attrs.additional_browser_args.unwrap_or_else(|| {
+						// remove "mini menu" and SmartScreen
+						"--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection".to_string()
+					}))
+					.as_ptr()
+				));
 
 				if let Some(data_directory) = data_directory {
 					CreateCoreWebView2EnvironmentWithOptions(
