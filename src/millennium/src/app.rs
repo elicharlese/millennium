@@ -41,6 +41,8 @@ use crate::runtime::SystemTrayEvent as RuntimeSystemTrayEvent;
 use crate::scope::ShellScope;
 #[cfg(updater)]
 use crate::updater;
+#[cfg(target_os = "windows")]
+use crate::utils::config::WebviewInstallMode;
 #[cfg(target_os = "macos")]
 use crate::ActivationPolicy;
 use crate::{
@@ -57,12 +59,7 @@ use crate::{
 	},
 	scope::FsScope,
 	sealed::{ManagerBase, RuntimeOrDispatch},
-	utils::{
-		assets::Assets,
-		config::{Config, WebviewInstallMode},
-		resources::resource_relpath,
-		Env
-	},
+	utils::{assets::Assets, config::Config, resources::resource_relpath, Env},
 	Context, EventLoopMessage, Invoke, InvokeError, InvokeResponse, Manager, Runtime, Scopes, StateManager, Theme, Window
 };
 

@@ -231,7 +231,7 @@ impl Cmd {
 	#[module_command_handler(fs_exists)]
 	fn exists<R: Runtime>(context: InvokeContext<R>, path: SafePathBuf, options: Option<FileOperationOptions>) -> super::Result<bool> {
 		let resolved_path = resolve_path(&context.config, &context.package_info, &context.window, path, options.and_then(|o| o.dir))?;
-		Ok(fs::metadata(&resolved_path).is_ok())
+		Ok(fs::metadata(resolved_path).is_ok())
 	}
 }
 

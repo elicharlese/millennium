@@ -58,7 +58,7 @@ fn override_msvcrt_lib() {
 	// Write the empty "msvcrt.lib" to the output directory.
 	let out_dir = env::var("OUT_DIR").unwrap();
 	let path = Path::new(&out_dir).join("msvcrt.lib");
-	let f = fs::OpenOptions::new().write(true).create_new(true).open(&path);
+	let f = fs::OpenOptions::new().write(true).create_new(true).open(path);
 	if let Ok(mut f) = f {
 		f.write_all(machine).unwrap();
 		f.write_all(bytes).unwrap();

@@ -913,7 +913,7 @@ impl<R: Runtime> WindowManager<R> {
 		app_handle: AppHandle<R>,
 		mut pending: PendingWindow<EventLoopMessage, R>,
 		window_labels: &[String],
-		web_resource_request_handler: Option<Box<dyn Fn(&HttpRequest, &mut HttpResponse) + Send + Sync>>
+		web_resource_request_handler: Option<Box<WebResourceRequestHandler>>
 	) -> crate::Result<PendingWindow<EventLoopMessage, R>> {
 		if self.windows_lock().contains_key(&pending.label) {
 			return Err(crate::Error::WindowLabelAlreadyExists(pending.label));

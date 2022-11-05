@@ -67,7 +67,7 @@ impl ShortcutManager {
 					let root = (xlib.XDefaultRootWindow)(display);
 
 					// Only trigger key release at end of repeated keys
-					#[allow(clippy::uninit_assumed_init)]
+					#[allow(invalid_value, clippy::uninit_assumed_init)]
 					let mut supported_rtrn: i32 = std::mem::MaybeUninit::uninit().assume_init();
 					(xlib.XkbSetDetectableAutoRepeat)(display, 1, &mut supported_rtrn);
 

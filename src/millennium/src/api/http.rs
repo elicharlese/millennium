@@ -342,7 +342,7 @@ impl TryFrom<FilePart> for Vec<u8> {
 	type Error = crate::api::Error;
 	fn try_from(file: FilePart) -> crate::api::Result<Self> {
 		let bytes = match file {
-			FilePart::Path(path) => std::fs::read(&path)?,
+			FilePart::Path(path) => std::fs::read(path)?,
 			FilePart::Contents(bytes) => bytes
 		};
 		Ok(bytes)
@@ -641,7 +641,7 @@ impl Response {
 		let data = match self.0 {
 			ResponseType::Json => self.1.json()?,
 			ResponseType::Text => Value::String(self.1.text()?),
-			ResponseType::Binary => serde_json::to_value(&self.1.bytes()?)?
+			ResponseType::Binary => serde_json::to_value(self.1.bytes()?)?
 		};
 
 		Ok(ResponseData {

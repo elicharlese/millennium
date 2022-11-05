@@ -23,6 +23,7 @@ use std::{
 
 /// The archive reader.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum ArchiveReader<R: Read + Seek> {
 	/// A plain reader.
 	Plain(R),
@@ -244,12 +245,12 @@ impl<'a, R: Read + Seek> Extract<'a, R> {
 						// such as: τê▒Σ║ñµÿô.app/, that does not work as expected.
 						// Here we require the file name must be a valid UTF-8.
 						let file_name = String::from_utf8(file.name_raw().to_vec())?;
-						let out_path = into_dir.join(&file_name);
+						let out_path = into_dir.join(file_name);
 						if file.is_dir() {
 							fs::create_dir_all(&out_path)?;
 						} else {
 							if let Some(out_path_parent) = out_path.parent() {
-								fs::create_dir_all(&out_path_parent)?;
+								fs::create_dir_all(out_path_parent)?;
 							}
 							let mut out_file = fs::File::create(&out_path)?;
 							io::copy(&mut file, &mut out_file)?;

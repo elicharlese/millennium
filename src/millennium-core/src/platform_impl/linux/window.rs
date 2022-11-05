@@ -47,7 +47,7 @@ impl WindowId {
 
 // Currently GTK doesn't provide any features for detecting the theme, so we need to check the theme manually.
 // ref: https://github.com/WebKit/WebKit/blob/e44ffaa0d999a9807f76f1805943eea204cfdfbc/Source/WebKit/UIProcess/API/gtk/PageClientImpl.cpp#L587
-const GTK_THEME_SUFFIX_LIST: [&'static str; 3] = ["-dark", "-Dark", "-Darker"];
+const GTK_THEME_SUFFIX_LIST: [&str; 3] = ["-dark", "-Dark", "-Darker"];
 
 pub struct Window {
 	/// Window id.
@@ -92,14 +92,12 @@ impl Window {
 		if attributes.resizable {
 			window.set_resizable(attributes.resizable);
 			window.set_default_size(width, height);
+		} else if attributes.maximized {
+			window.set_resizable(true);
+			window.set_size_request(100, 100);
 		} else {
-			if attributes.maximized {
-				window.set_resizable(true);
-				window.set_size_request(100, 100);
-			} else {
-				window.set_resizable(false);
-				window.set_size_request(width, height);
-			}
+			window.set_resizable(false);
+			window.set_size_request(width, height);
 		}
 
 		// Set Min/Max Size
@@ -638,7 +636,7 @@ impl Window {
 				}
 			}
 		}
-		return Theme::Light;
+		Theme::Light
 	}
 }
 
@@ -694,10 +692,10 @@ pub fn hit_test(window: &gdk::Window, cx: f64, cy: f64) -> WindowEdge {
 	let inset = BORDERLESS_RESIZE_INSET * window.scale_factor();
 	#[rustfmt::skip]
 	let result =
-		  (LEFT * (if cx < (left + inset) { 1 } else { 0 }))
-		| (RIGHT * (if cx >= (right - inset) { 1 } else { 0 }))
-		| (TOP * (if cy < (top + inset) { 1 } else { 0 }))
-		| (BOTTOM * (if cy >= (bottom - inset) { 1 } else { 0 }));
+		  (LEFT * i32::from(cx < (left + inset)))
+		| (RIGHT * i32::from(cx >= (right - inset)))
+		| (TOP * i32::from(cy < (top + inset)))
+		| (BOTTOM * i32::from(cy >= (bottom - inset)));
 
 	match result {
 		LEFT => WindowEdge::West,

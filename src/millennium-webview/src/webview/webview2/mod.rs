@@ -118,7 +118,7 @@ impl InnerWebView {
 					options
 				};
 
-				if !pl_attrs.disable_additionl_browser_args {
+				if !pl_attrs.disable_additional_browser_args {
 					// remove "mini menu" and Smart Screen
 					let _ = options.SetAdditionalBrowserArguments(PCWSTR::from_raw(
 						encode_wide("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection").as_ptr()
