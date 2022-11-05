@@ -56,6 +56,8 @@ use crate::{
 	Result
 };
 
+const IPC_MESSAGE_HANDLER_NAME: &str = "ipc";
+
 pub(crate) struct InnerWebView {
 	pub webview: id,
 	#[cfg(target_os = "macos")]
@@ -306,7 +308,7 @@ impl InnerWebView {
 				let ipc_handler_ptr = Box::into_raw(Box::new((ipc_handler, window.clone())));
 
 				(*handler).set_ivar("function", ipc_handler_ptr as *mut _ as *mut c_void);
-				let ipc = NSString::new("ipc");
+				let ipc = NSString::new(IPC_MESSAGE_HANDLER_NAME);
 				let _: () = msg_send![manager, addScriptMessageHandler:handler name:ipc];
 				ipc_handler_ptr
 			} else {
@@ -639,6 +641,9 @@ impl Drop for InnerWebView {
 		unsafe {
 			if !self.ipc_handler_ptr.is_null() {
 				let _ = Box::from_raw(self.ipc_handler_ptr);
+
+				let ipc = NSString::new(IPC_MESSAGE_HANDLER_NAME);
+				let _: () = msg_send![self.manager, removeScriptMessageHandlerForName: ipc];
 			}
 
 			if !self.nav_decide_policy_ptr.is_null() {
