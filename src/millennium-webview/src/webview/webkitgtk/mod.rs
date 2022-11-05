@@ -45,14 +45,19 @@ use crate::{
 mod file_drop;
 mod web_context;
 
-pub struct InnerWebView {
-	pub(crate) webview: Rc<WebView>,
+pub(crate) struct InnerWebView {
+	pub webview: Rc<WebView>,
 	#[cfg(any(debug_assertions, feature = "devtools"))]
 	is_inspector_open: Arc<AtomicBool>
 }
 
 impl InnerWebView {
-	pub fn new(window: Rc<Window>, mut attributes: WebViewAttributes, web_context: Option<&mut WebContext>) -> Result<Self> {
+	pub fn new(
+		window: Rc<Window>,
+		mut attributes: WebViewAttributes,
+		_pl_attrs: super::PlatformSpecificWebViewAttributes,
+		web_context: Option<&mut WebContext>
+	) -> Result<Self> {
 		let window_rc = Rc::clone(&window);
 		let window = &window.gtk_window();
 

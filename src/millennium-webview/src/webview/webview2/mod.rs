@@ -52,8 +52,8 @@ impl From<webview2_com::Error> for Error {
 	}
 }
 
-pub struct InnerWebView {
-	pub(crate) controller: ICoreWebView2Controller,
+pub(crate) struct InnerWebView {
+	pub controller: ICoreWebView2Controller,
 	webview: ICoreWebView2,
 	// Store FileDropController in here to make sure it gets dropped when
 	// the webview gets dropped, otherwise we'll have a memory leak
@@ -62,13 +62,18 @@ pub struct InnerWebView {
 }
 
 impl InnerWebView {
-	pub fn new(window: Rc<Window>, mut attributes: WebViewAttributes, web_context: Option<&mut WebContext>) -> Result<Self> {
+	pub fn new(
+		window: Rc<Window>,
+		mut attributes: WebViewAttributes,
+		pl_attrs: super::PlatformSpecificWebViewAttributes,
+		web_context: Option<&mut WebContext>
+	) -> Result<Self> {
 		let hwnd = HWND(window.hwnd() as _);
 		let file_drop_controller: Rc<OnceCell<FileDropController>> = Rc::new(OnceCell::new());
 		let file_drop_handler = attributes.file_drop_handler.take();
 		let file_drop_window = window.clone();
 
-		let env = Self::create_environment(&web_context)?;
+		let env = Self::create_environment(&web_context, pl_attrs)?;
 		let controller = Self::create_controller(hwnd, &env)?;
 		let webview = Self::init_webview(window, hwnd, attributes, &env, &controller)?;
 
@@ -85,7 +90,10 @@ impl InnerWebView {
 		})
 	}
 
-	fn create_environment(web_context: &Option<&mut WebContext>) -> webview2_com::Result<ICoreWebView2Environment> {
+	fn create_environment(
+		web_context: &Option<&mut WebContext>,
+		pl_attrs: super::PlatformSpecificWebViewAttributes
+	) -> webview2_com::Result<ICoreWebView2Environment> {
 		let (tx, rx) = mpsc::channel();
 
 		let data_directory = web_context
@@ -110,8 +118,12 @@ impl InnerWebView {
 					options
 				};
 
-				// remove "mini menu"
-				let _ = options.SetAdditionalBrowserArguments(PCWSTR::from_raw(encode_wide("--disable-features=msWebOOUI,msPdfOOUI").as_ptr()));
+				if !pl_attrs.disable_additionl_browser_args {
+					// remove "mini menu" and Smart Screen
+					let _ = options.SetAdditionalBrowserArguments(PCWSTR::from_raw(
+						encode_wide("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection").as_ptr()
+					));
+				}
 
 				if let Some(data_directory) = data_directory {
 					CreateCoreWebView2EnvironmentWithOptions(

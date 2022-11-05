@@ -110,12 +110,17 @@ pub unsafe fn setup(env: JNIEnv, looper: &ForeignLooper, activity: GlobalRef) {
 		.unwrap();
 }
 
-pub struct InnerWebView {
+pub(crate) struct InnerWebView {
 	pub window: Rc<Window>
 }
 
 impl InnerWebView {
-	pub fn new(window: Rc<Window>, attributes: WebViewAttributes, _web_context: Option<&mut WebContext>) -> Result<Self> {
+	pub fn new(
+		window: Rc<Window>,
+		attributes: WebViewAttributes,
+		_pl_attrs: super::PlatformSpecificWebViewAttributes,
+		_web_context: Option<&mut WebContext>
+	) -> Result<Self> {
 		let WebViewAttributes {
 			url,
 			initialization_scripts,

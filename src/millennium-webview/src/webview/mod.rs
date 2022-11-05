@@ -220,6 +220,25 @@ impl Default for WebViewAttributes {
 	}
 }
 
+#[cfg(windows)]
+#[derive(Default)]
+pub(crate) struct PlatformSpecificWebViewAttributes {
+	disable_additional_browser_args: bool
+}
+
+#[cfg(any(
+	target_os = "linux",
+	target_os = "dragonfly",
+	target_os = "freebsd",
+	target_os = "netbsd",
+	target_os = "openbsd",
+	target_os = "macos",
+	target_os = "android",
+	target_os = "ios"
+))]
+#[derive(Default)]
+pub(crate) struct PlatformSpecificWebViewAttributes;
+
 pub type Rgba = (u8, u8, u8, u8);
 
 /// Builder type of [`WebView`].
@@ -230,6 +249,7 @@ pub type Rgba = (u8, u8, u8, u8);
 /// setup initialization before web engine starts.
 pub struct WebViewBuilder<'a> {
 	pub webview: WebViewAttributes,
+	platform_attrs: PlatformSpecificWebViewAttributes,
 	web_context: Option<&'a mut WebContext>,
 	window: Window
 }
@@ -239,8 +259,14 @@ impl<'a> WebViewBuilder<'a> {
 	pub fn new(window: Window) -> Result<Self> {
 		let webview = WebViewAttributes::default();
 		let web_context = None;
+		let platform_attrs = PlatformSpecificWebViewAttributes::default();
 
-		Ok(Self { webview, web_context, window })
+		Ok(Self {
+			webview,
+			platform_attrs,
+			web_context,
+			window
+		})
 	}
 
 	/// Sets whether the webview should be transparent.
@@ -461,8 +487,37 @@ impl<'a> WebViewBuilder<'a> {
 	/// [`EventLoop`]: crate::application::event_loop::EventLoop
 	pub fn build(self) -> Result<WebView> {
 		let window = Rc::new(self.window);
-		let webview = InnerWebView::new(window.clone(), self.webview, self.web_context)?;
+		let webview = InnerWebView::new(window.clone(), self.webview, self.platform_attrs, self.web_context)?;
 		Ok(WebView { window, webview })
+	}
+}
+
+#[cfg(windows)]
+pub trait WebViewBuilderExtWindows {
+	/// Disables `millennium-webview` adding its own WebView2 browser arguments.
+	///
+	/// By default, `millennium-webview` passes its own set of arguments to disable certain Edge features, which will
+	/// override the `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` environment variable and make it difficult to set custom
+	/// browser arguments.
+	///
+	/// If you disable the default arguments, custom arguments can then be configured like so (**before** creating the
+	/// webview):
+	///
+	/// ```
+	/// std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-features=msSmartScreenProtection");
+	/// ```
+	///
+	/// The default arguments are `--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection` - if you'd like to
+	/// disable OOUI (the menu that appears when selecting text) and Smart Screen, make sure to include those arguments
+	/// in your custom arguments.
+	fn disable_additional_browser_args(self) -> Self;
+}
+
+#[cfg(windows)]
+impl WebViewBuilderExtWindows for WebViewBuilder<'_> {
+	fn disable_additional_browser_args(mut self) -> Self {
+		self.platform_attrs.disable_additional_browser_args = true;
+		self
 	}
 }
 

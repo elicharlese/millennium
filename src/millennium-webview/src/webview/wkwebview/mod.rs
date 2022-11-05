@@ -56,11 +56,11 @@ use crate::{
 	Result
 };
 
-pub struct InnerWebView {
-	pub(crate) webview: id,
+pub(crate) struct InnerWebView {
+	pub webview: id,
 	#[cfg(target_os = "macos")]
-	pub(crate) ns_window: id,
-	pub(crate) manager: id,
+	pub ns_window: id,
+	pub manager: id,
 	// Note that if following functions signatures are changed in the future,
 	// all fucntions pointer declarations in objc callbacks below all need to get updated.
 	ipc_handler_ptr: *mut (Box<dyn Fn(&Window, String)>, Rc<Window>),
@@ -71,7 +71,12 @@ pub struct InnerWebView {
 }
 
 impl InnerWebView {
-	pub fn new(window: Rc<Window>, attributes: WebViewAttributes, mut web_context: Option<&mut WebContext>) -> Result<Self> {
+	pub fn new(
+		window: Rc<Window>,
+		attributes: WebViewAttributes,
+		_pl_attrs: super::PlatformSpecificWebViewAttributes,
+		mut web_context: Option<&mut WebContext>
+	) -> Result<Self> {
 		// Function for ipc handler
 		extern "C" fn did_receive(this: &Object, _: Sel, _: id, msg: id) {
 			// Safety: objc runtime calls are unsafe
