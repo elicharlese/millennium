@@ -272,13 +272,15 @@ impl AppState {
 
 	pub fn launched(app_delegate: &Object) {
 		apply_activation_policy(app_delegate);
+
 		unsafe {
 			let ns_app = NSApp();
 			window_activation_hack(ns_app);
-			// TODO: Consider allowing the user to specify they don't want their application
-			// activated
-			ns_app.activateIgnoringOtherApps_(YES);
+
+			let ignore = if get_aux_state_mut(app_delegate).activate_ignoring_other_apps { YES } else { NO };
+			ns_app.activateIgnoringOtherApps_(ignore);
 		};
+
 		HANDLER.set_ready();
 		HANDLER.waker().start();
 		HANDLER.set_in_callback(true);

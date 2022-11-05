@@ -18,7 +18,10 @@ use std::{
 	cell::RefCell,
 	collections::VecDeque,
 	rc::Rc,
-	sync::atomic::{AtomicBool, AtomicI32, Ordering}
+	sync::{
+		atomic::{AtomicBool, AtomicI32, Ordering},
+		Arc
+	}
 };
 
 use gdk::{WindowEdge, WindowState};
@@ -65,7 +68,9 @@ pub struct Window {
 	size: Rc<(AtomicI32, AtomicI32)>,
 	maximized: Rc<AtomicBool>,
 	minimized: Rc<AtomicBool>,
-	fullscreen: RefCell<Option<Fullscreen>>
+	fullscreen: RefCell<Option<Fullscreen>>,
+	/// Draw event sender
+	draw_tx: crossbeam_channel::Sender<WindowId>
 }
 
 impl Window {
@@ -76,7 +81,11 @@ impl Window {
 	) -> Result<Self, RootOsError> {
 		let app = &event_loop_window_target.app;
 		let window_requests_tx = event_loop_window_target.window_requests_tx.clone();
-		let window = gtk::ApplicationWindow::new(app);
+		let draw_tx = event_loop_window_target.draw_tx.clone();
+		let window = gtk::ApplicationWindow::builder()
+			.application(app)
+			.accept_focus(attributes.focused)
+			.build();
 		let window_id = WindowId(window.id());
 		event_loop_window_target.windows.borrow_mut().insert(window_id);
 
@@ -89,16 +98,16 @@ impl Window {
 			.inner_size
 			.map(|size| size.to_logical::<f64>(win_scale_factor as f64).into())
 			.unwrap_or((800, 600));
-		if attributes.resizable {
-			window.set_resizable(attributes.resizable);
-			window.set_default_size(width, height);
-		} else if attributes.maximized {
-			window.set_resizable(true);
-			window.set_size_request(100, 100);
-		} else {
-			window.set_resizable(false);
-			window.set_size_request(width, height);
+
+		window.set_default_size(1, 1);
+		window.resize(width, height);
+
+		if attributes.maximized {
+			window.maximize();
 		}
+
+		window.set_resizable(attributes.resizable);
+		window.set_deletable(attributes.closable);
 
 		// Set Min/Max Size
 		let geom_mask = (if attributes.min_inner_size.is_some() {
@@ -132,17 +141,24 @@ impl Window {
 		}
 
 		// Set GDK visual
-		if let Some(screen) = window.screen() {
-			if let Some(visual) = screen.rgba_visual() {
-				window.set_visual(Some(&visual));
+		if pl_attribs.rgba_visual || attributes.transparent {
+			if let Some(screen) = window.screen() {
+				if let Some(visual) = screen.rgba_visual() {
+					window.set_visual(Some(&visual));
+				}
 			}
 		}
 
-		window.set_app_paintable(true);
-		let widget = window.upcast_ref::<gtk::Widget>();
-		if !event_loop_window_target.is_wayland() {
-			unsafe {
-				gtk::ffi::gtk_widget_set_double_buffered(widget.to_glib_none().0, 0);
+		if pl_attribs.app_paintable || attributes.transparent {
+			window.set_app_paintable(true);
+		}
+
+		if !pl_attribs.double_buffered {
+			let widget = window.upcast_ref::<gtk::Widget>();
+			if !event_loop_window_target.is_wayland() {
+				unsafe {
+					gtk::ffi::gtk_widget_set_double_buffered(widget.to_glib_none().0, 0);
+				}
 			}
 		}
 
@@ -170,7 +186,6 @@ impl Window {
 			window_menu.generate_menu(&mut menu_bar, &window_requests_tx, &accel_group, window_id);
 		}
 
-		// Rest attributes
 		window.set_title(&attributes.title);
 		if let Some(Fullscreen::Borderless(m)) = &attributes.fullscreen {
 			if let Some(monitor) = m {
@@ -181,19 +196,7 @@ impl Window {
 				window.fullscreen();
 			}
 		}
-		if attributes.maximized {
-			if !attributes.resizable {
-				let w = app.window_by_id(window.id()).unwrap();
-				glib::timeout_add_seconds_local(0, move || {
-					let (alloc, _) = w.allocated_size();
-					w.set_size_request(alloc.width(), alloc.height());
-					w.set_resizable(false);
-					glib::Continue(false)
-				});
-			}
 
-			window.maximize();
-		}
 		window.set_visible(attributes.visible);
 		window.set_decorated(attributes.decorations);
 
@@ -236,6 +239,20 @@ impl Window {
 
 		if let Parent::ChildOf(parent) = pl_attribs.parent {
 			window.set_transient_for(Some(&parent));
+		}
+
+		// restore accept-focus after the window has been drawn if the window was initially created without focus
+		if !attributes.focused {
+			let signal_id = Arc::new(RefCell::new(None));
+			let signal_id_ = signal_id.clone();
+			let id = window.connect_draw(move |window, _| {
+				if let Some(id) = signal_id_.take() {
+					window.set_accept_focus(true);
+					window.disconnect(id);
+				}
+				Inhibit(false)
+			});
+			signal_id.borrow_mut().replace(id);
 		}
 
 		let w_pos = window.position();
@@ -286,14 +303,15 @@ impl Window {
 			log::warn!("Fail to send wire up events request: {}", e);
 		}
 
-		if let Err(e) = window_requests_tx.send((window_id, WindowRequest::Redraw)) {
-			log::warn!("Fail to send redraw request: {}", e);
+		if let Err(e) = draw_tx.send(window_id) {
+			log::warn!("Failed to send redraw event to event channel: {}", e);
 		}
 
 		let win = Self {
 			window_id,
 			window,
 			window_requests_tx,
+			draw_tx,
 			accel_group,
 			menu_bar,
 			scale_factor,
@@ -318,8 +336,8 @@ impl Window {
 	}
 
 	pub fn request_redraw(&self) {
-		if let Err(e) = self.window_requests_tx.send((self.window_id, WindowRequest::Redraw)) {
-			log::warn!("Fail to send redraw request: {}", e);
+		if let Err(e) = self.draw_tx.send(self.window_id) {
+			log::warn!("Failed to send redraw event to event channel: {}", e);
 		}
 	}
 
@@ -394,6 +412,10 @@ impl Window {
 		}
 	}
 
+	pub fn title(&self) -> String {
+		self.window.title().map(|t| t.as_str().to_string()).unwrap_or_default()
+	}
+
 	pub fn set_menu(&self, menu: Option<menu::Menu>) {
 		if let Err(e) = self
 			.window_requests_tx
@@ -427,6 +449,16 @@ impl Window {
 		}
 	}
 
+	pub fn set_minimizable(&self, _minimizable: bool) {}
+
+	pub fn set_maximizable(&self, _maximizable: bool) {}
+
+	pub fn set_closable(&self, closable: bool) {
+		if let Err(e) = self.window_requests_tx.send((self.window_id, WindowRequest::Closable(closable))) {
+			log::warn!("Failed to send closable request: {}", e);
+		}
+	}
+
 	pub fn set_minimized(&self, minimized: bool) {
 		if let Err(e) = self.window_requests_tx.send((self.window_id, WindowRequest::Minimized(minimized))) {
 			log::warn!("Fail to send minimized request: {}", e);
@@ -449,6 +481,18 @@ impl Window {
 
 	pub fn is_resizable(&self) -> bool {
 		self.window.is_resizable()
+	}
+
+	pub fn is_minimizable(&self) -> bool {
+		true
+	}
+
+	pub fn is_maximizable(&self) -> bool {
+		true
+	}
+
+	pub fn is_closable(&self) -> bool {
+		self.window.is_deletable()
 	}
 
 	pub fn is_decorated(&self) -> bool {
@@ -548,6 +592,14 @@ impl Window {
 	}
 
 	pub fn set_cursor_grab(&self, _grab: bool) -> Result<(), ExternalError> {
+		Ok(())
+	}
+
+	pub fn set_ignore_cursor_events(&self, ignore: bool) -> Result<(), ExternalError> {
+		if let Err(e) = self.window_requests_tx.send((self.window_id, WindowRequest::CursorIgnoreEvents(ignore))) {
+			log::warn!("Fail to send cursor position request: {}", e);
+		}
+
 		Ok(())
 	}
 
@@ -655,6 +707,7 @@ pub enum WindowRequest {
 	Visible(bool),
 	Focus,
 	Resizable(bool),
+	Closable(bool),
 	Minimized(bool),
 	Maximized(bool),
 	DragWindow,
@@ -667,8 +720,8 @@ pub enum WindowRequest {
 	SetSkipTaskbar(bool),
 	CursorIcon(Option<CursorIcon>),
 	CursorPosition((i32, i32)),
+	CursorIgnoreEvents(bool),
 	WireUpEvents { transparent: bool },
-	Redraw,
 	Menu((Option<MenuItem>, Option<MenuId>)),
 	SetMenu((Option<menu::Menu>, AccelGroup, gtk::MenuBar)),
 	GlobalHotKey(u16)

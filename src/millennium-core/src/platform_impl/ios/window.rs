@@ -60,6 +60,10 @@ impl Inner {
 		debug!("`Window::set_title` is ignored on iOS");
 	}
 
+	pub fn title(&self) -> String {
+		String::new()
+	}
+
 	pub fn set_menu(&self, _menu: Option<Menu>) {
 		debug!("`Window::set_menu` is ignored on iOS");
 	}
@@ -184,6 +188,10 @@ impl Inner {
 		warn!("`Window::set_resizable` is ignored on iOS");
 	}
 
+	pub fn set_minimizable(&self, _minimizable: bool) {}
+	pub fn set_maximizable(&self, _maximizable: bool) {}
+	pub fn set_closable(&self, _closable: bool) {}
+
 	pub fn scale_factor(&self) -> f64 {
 		unsafe {
 			let hidpi: CGFloat = msg_send![self.view, contentScaleFactor];
@@ -209,6 +217,10 @@ impl Inner {
 
 	pub fn drag_window(&self) -> Result<(), ExternalError> {
 		return Err(ExternalError::NotSupported(NotSupportedError::new()));
+	}
+
+	pub fn set_ignore_cursor_events(&self, _ignore: bool) -> Result<(), ExternalError> {
+		Err(ExternalError::NotSupported(NotSupportedError::new()))
 	}
 
 	pub fn set_minimized(&self, _minimized: bool) {
@@ -237,6 +249,18 @@ impl Inner {
 	pub fn is_resizable(&self) -> bool {
 		warn!("`Window::is_resizable` is ignored on iOS");
 		return false;
+	}
+
+	pub fn is_minimizable(&self) -> bool {
+		false
+	}
+
+	pub fn is_maximizable(&self) -> bool {
+		false
+	}
+
+	pub fn is_closable(&self) -> bool {
+		false
 	}
 
 	pub fn is_decorated(&self) -> bool {

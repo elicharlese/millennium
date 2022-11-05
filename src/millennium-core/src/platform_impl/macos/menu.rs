@@ -19,14 +19,19 @@ use std::sync::Once;
 use cocoa::{
 	appkit::{NSApp, NSApplication, NSButton, NSEventModifierFlags, NSImage, NSMenu, NSMenuItem},
 	base::{id, nil, selector},
-	foundation::{NSAutoreleasePool, NSData, NSString}
+	foundation::{NSAutoreleasePool, NSData, NSSize, NSString}
 };
 use objc::{
 	declare::ClassDecl,
 	runtime::{Class, Object, Sel, NO, YES}
 };
 
-use super::{app_state::AppState, event::EventWrapper, util::ns_string_to_rust, window::get_window_id};
+use super::{
+	app_state::AppState,
+	event::EventWrapper,
+	util::{app_name_string, ns_string_to_rust},
+	window::get_window_id
+};
 use crate::{
 	accelerator::{Accelerator, RawMods},
 	event::Event,
@@ -92,12 +97,19 @@ impl MenuItemAttributes {
 		}
 	}
 
-	// todo: set custom icon to the menu item
 	pub fn set_icon(&mut self, icon: Icon) {
+		let (width, height) = icon.inner.get_size();
+		let icon = icon.inner.to_png();
+
+		let icon_height: f64 = 18.0;
+		let icon_width: f64 = (width as f64) / (height as f64 / icon_height);
+
 		unsafe {
-			let icon = icon.inner.to_png();
 			let nsdata = NSData::dataWithBytes_length_(nil, icon.as_ptr() as *const std::os::raw::c_void, icon.len() as u64);
+
 			let nsimage = NSImage::initWithData_(NSImage::alloc(nil), nsdata);
+			let new_size = NSSize::new(icon_width, icon_height);
+			let _: () = msg_send![nsimage, setSize: new_size];
 			let _: () = msg_send![self.1, setImage: nsimage];
 		}
 	}
@@ -186,10 +198,24 @@ impl Menu {
 			MenuItem::CloseWindow => {
 				Some((None, make_menu_item("Close Window", Some(selector("performClose:")), Some(Accelerator::new(RawMods::Meta, KeyCode::KeyW)), menu_type)))
 			}
-			MenuItem::Quit => {
-				Some((None, make_menu_item("Quit", Some(selector("terminate:")), Some(Accelerator::new(RawMods::Meta, KeyCode::KeyQ)), menu_type)))
-			}
-			MenuItem::Hide => Some((None, make_menu_item("Hide", Some(selector("hide:")), Some(Accelerator::new(RawMods::Meta, KeyCode::KeyH)), menu_type))),
+			MenuItem::Quit => Some((
+				None,
+				make_menu_item(
+					format!("Quit {}", unsafe { app_name_string() }.unwrap_or_default()).trim(),
+					Some(selector("terminate:")),
+					Some(Accelerator::new(RawMods::Meta, KeyCode::KeyQ)),
+					menu_type
+				)
+			)),
+			MenuItem::Hide => Some((
+				None,
+				make_menu_item(
+					format!("Hide {}", unsafe { app_name_string() }.unwrap_or_default()).trim(),
+					Some(selector("hide:")),
+					Some(Accelerator::new(RawMods::Meta, KeyCode::KeyH)),
+					menu_type
+				)
+			)),
 			MenuItem::HideOthers => Some((
 				None,
 				make_menu_item("Hide Others", Some(selector("hideOtherApplications:")), Some(Accelerator::new(RawMods::AltMeta, KeyCode::KeyH)), menu_type)
@@ -215,10 +241,12 @@ impl Menu {
 			}
 			MenuItem::Services => unsafe {
 				let item = make_menu_item("Services", None, None, MenuType::MenuBar);
+				// we have to assign an empty menu as the app's services menu, macOS will populate it
+				let services_menu = NSMenu::alloc(nil).autorelease();
 				let app_class = class!(NSApplication);
 				let app: id = msg_send![app_class, sharedApplication];
-				let services: id = msg_send![app, servicesMenu];
-				let _: () = msg_send![&*item, setSubmenu: services];
+				let () = msg_send![app, setServicesMenu: services_menu];
+				let () = msg_send![&*item, setSubmenu: services_menu];
 				Some((None, item))
 			}
 		};
@@ -412,6 +440,7 @@ impl Accelerator {
 			KeyCode::Digit9 => "9".into(),
 			KeyCode::Comma => ",".into(),
 			KeyCode::Minus => "-".into(),
+			KeyCode::Plus => "+".into(),
 			KeyCode::Period => ".".into(),
 			KeyCode::Space => "\u{0020}".into(),
 			KeyCode::Equal => "=".into(),

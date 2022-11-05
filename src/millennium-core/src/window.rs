@@ -159,6 +159,7 @@ pub struct WindowAttributes {
 	/// There may be a small gap between this position and the window due to the
 	/// specifics of the Window Manager.
 	/// - **Linux**: The top left corner of the window, the window's "outer" position.
+	/// - **Linux (Wayland)**: Unsupported.
 	/// - **Others**: Ignored.
 	///
 	/// See [`Window::set_outer_position`].
@@ -170,6 +171,27 @@ pub struct WindowAttributes {
 	///
 	/// The default is `true`.
 	pub resizable: bool,
+
+	/// Whether the window is minimizable or not.
+	///
+	/// The default is `true`.
+	///
+	/// See [`Window::set_minimizable`] for details.
+	pub minimizable: bool,
+
+	/// Whether the window is maximizable or not.
+	///
+	/// The default is `true`.
+	///
+	/// See [`Window::set_maximizable`] for details.
+	pub maximizable: bool,
+
+	/// Whether the window is closable or not.
+	///
+	/// The default is `true`.
+	///
+	/// See [`Window::set_closable`] for details.
+	pub closable: bool,
 
 	/// Whether the window should be set as fullscreen upon creation.
 	///
@@ -223,7 +245,21 @@ pub struct WindowAttributes {
 	/// The default is `None`.
 	pub window_menu: Option<platform_impl::Menu>,
 
-	pub preferred_theme: Option<Theme>
+	pub preferred_theme: Option<Theme>,
+
+	/// Whether the window should be initially focused or not.
+	///
+	/// ## Platform-specific
+	///
+	/// - **Android / iOS**: Unsupported.
+	pub focused: bool,
+
+	/// Prevents the window contents from being captured by other apps.
+	///
+	/// ## Platform-specific
+	///
+	/// - **iOS / Android / Linux**: Unsupported.
+	pub content_protection: bool
 }
 
 impl Default for WindowAttributes {
@@ -235,6 +271,9 @@ impl Default for WindowAttributes {
 			max_inner_size: None,
 			position: None,
 			resizable: true,
+			minimizable: true,
+			maximizable: true,
+			closable: true,
 			title: "Millennium Core Window".to_owned(),
 			maximized: false,
 			fullscreen: None,
@@ -245,7 +284,9 @@ impl Default for WindowAttributes {
 			always_on_bottom: false,
 			window_icon: None,
 			window_menu: None,
-			preferred_theme: None
+			preferred_theme: None,
+			focused: false,
+			content_protection: false
 		}
 	}
 }
@@ -309,6 +350,39 @@ impl WindowBuilder {
 	#[inline]
 	pub fn with_resizable(mut self, resizable: bool) -> Self {
 		self.window.resizable = resizable;
+		self
+	}
+
+	/// Sets whether the window is minimizable or not.
+	///
+	/// See [`Window::set_minimizable`] for details.
+	///
+	/// [`Window::set_minimizable`]: crate::window::Window::set_minimizable
+	#[inline]
+	pub fn with_minimizable(mut self, minimizable: bool) -> Self {
+		self.window.minimizable = minimizable;
+		self
+	}
+
+	/// Sets whether the window is maximizable or not.
+	///
+	/// See [`Window::set_maximizable`] for details.
+	///
+	/// [`Window::set_maximizable`]: crate::window::Window::set_maximizable
+	#[inline]
+	pub fn with_maximizable(mut self, maximizable: bool) -> Self {
+		self.window.maximizable = maximizable;
+		self
+	}
+
+	/// Sets whether the window is closable or not.
+	///
+	/// See [`Window::set_closable`] for details.
+	///
+	/// [`Window::set_closable`]: crate::window::Window::set_closable
+	#[inline]
+	pub fn with_closable(mut self, closable: bool) -> Self {
+		self.window.closable = closable;
 		self
 	}
 
@@ -424,6 +498,28 @@ impl WindowBuilder {
 	#[inline]
 	pub fn with_theme(mut self, theme: Option<Theme>) -> WindowBuilder {
 		self.window.preferred_theme = theme;
+		self
+	}
+
+	/// Sets whether the window should be initially focused or not.
+	///
+	/// ## Platform-specific:
+	///
+	/// - **Android / iOS**: Unsupported.
+	#[inline]
+	pub fn with_focused(mut self, focused: bool) -> WindowBuilder {
+		self.window.focused = focused;
+		self
+	}
+
+	/// Prevents the window contents from being captured by other apps.
+	///
+	/// ## Platform-specific
+	///
+	/// - **iOS / Android / Linux**: Unsupported.
+	#[inline]
+	pub fn with_content_protection(mut self, protected: bool) -> WindowBuilder {
+		self.window.content_protection = protected;
 		self
 	}
 
@@ -558,7 +654,7 @@ impl Window {
 	///
 	/// - **iOS:** Can only be called on the main thread. Sets the top left coordinates of the window in the screen
 	///   space coordinate system.
-	/// - **Android:** Unsupported.
+	/// - **Android / Linux (Wayland)**: Unsupported.
 	#[inline]
 	pub fn set_outer_position<P: Into<Position>>(&self, position: P) {
 		self.window.set_outer_position(position.into())
@@ -640,12 +736,21 @@ impl Window {
 		self.window.set_title(title)
 	}
 
+	/// Gets the current title of the window.
+	///
+	/// ## Platform-specific
+	///
+	/// - **iOS / Android**: Unsupported; returns an empty string
+	#[inline]
+	pub fn title(&self) -> String {
+		self.window.title()
+	}
+
 	/// Modifies the menu of the window.
 	///
 	/// ## Platform-specific
 	///
 	/// - **Windows:** Unsupported.
-
 	#[inline]
 	pub fn set_menu(&self, menu: Option<MenuBar>) {
 		if let Some(menu) = menu {
@@ -691,10 +796,48 @@ impl Window {
 	///
 	/// ## Platform-specific
 	///
-	/// - **iOS / Android:** Unsupported.
+	/// - **Linux**: Most size methods like `maximized` are async and do not work well when calling
+	/// sequentially. When setting the inner or outer size, you don't need to set resizable to `true` beforehand, the
+	/// window can resize programmatically no matter what. But if you insist to do so, there is a 100x100 minimum
+	/// window size for some reason. Maximizing does require resizable to be `true`, however. If you want to set
+	/// resizable to false afterwards, you may need a mechanism to check if the window is really maximized.
+	/// - **iOS / Android**: Unsupported.
 	#[inline]
 	pub fn set_resizable(&self, resizable: bool) {
 		self.window.set_resizable(resizable)
+	}
+
+	/// Sets whether the window is minimizable or not.
+	///
+	/// ## Platform-specific
+	///
+	/// - **Linux / iOS / Android**: Unsupported.
+	#[inline]
+	pub fn set_minimizable(&self, minimizable: bool) {
+		self.window.set_minimizable(minimizable)
+	}
+
+	/// Sets whether the window is maximizable or not.
+	///
+	/// ## Platform-specific
+	///
+	/// - **macOS**: Disables the "zoom" button in the window titlebar, which is also used to enter fullscreen mode.
+	/// - **Linux / iOS / Android**: Unsupported.
+	#[inline]
+	pub fn set_maximizable(&self, maximizable: bool) {
+		self.window.set_maximizable(maximizable)
+	}
+
+	/// Sets whether the window is closable or not.
+	///
+	/// ## Platform-specific
+	///
+	/// - **Linux**: "GTK+ will do its best to convince the window manager not to show a close button. Depending on the
+	///   system, this function may not have any effect when called on a window that is already visible"
+	/// - **iOS / Android**: Unsupported.
+	#[inline]
+	pub fn set_closable(&self, closable: bool) {
+		self.window.set_closable(closable)
 	}
 
 	/// Sets the window to minimized or back
@@ -765,6 +908,36 @@ impl Window {
 	#[inline]
 	pub fn is_resizable(&self) -> bool {
 		self.window.is_resizable()
+	}
+
+	/// Gets the window's current minimizable state.
+	///
+	/// ## Platform-specific
+	///
+	/// - **Linux / iOS / Android**: Unsupported.
+	#[inline]
+	pub fn is_minimizable(&self) -> bool {
+		self.window.is_minimizable()
+	}
+
+	/// Gets the window's current maximizable state.
+	///
+	/// ## Platform-specific
+	///
+	/// - **Linux / iOS / Android**: Unsupported.
+	#[inline]
+	pub fn is_maximizable(&self) -> bool {
+		self.window.is_maximizable()
+	}
+
+	/// Gets the window's current closable state.
+	///
+	/// ## Platform-specific
+	///
+	/// - **iOS / Android**: Unsupported.
+	#[inline]
+	pub fn is_closable(&self) -> bool {
+		self.window.is_closable()
 	}
 
 	/// Gets the window's current decoration state.
@@ -925,6 +1098,16 @@ impl Window {
 	pub fn theme(&self) -> Theme {
 		self.window.theme()
 	}
+
+	/// Prevents the window contents from being captured by other apps.
+	///
+	/// ## Platform-specific
+	///
+	/// - **iOS / Android / Linux**: Unsupported.
+	pub fn set_content_protection(&self, #[allow(unused)] enabled: bool) {
+		#[cfg(any(target_os = "macos", target_os = "windows"))]
+		self.window.set_content_protection(enabled);
+	}
 }
 
 /// Cursor functions.
@@ -992,6 +1175,19 @@ impl Window {
 	#[inline]
 	pub fn drag_window(&self) -> Result<(), ExternalError> {
 		self.window.drag_window()
+	}
+
+	/// Sets whether the window receives cursor events.
+	///
+	/// If `true`, the events are passed through the window such that any other window behind it receives them.
+	/// If `false`, the window will catch the cursor events. By default, all cursor events are received.
+	///
+	/// ## Platform-specific
+	///
+	/// - **iOS / Android**: Always returns [`ExternalError::NotSupported`].
+	#[inline]
+	pub fn set_ignore_cursor_events(&self, ignore: bool) -> Result<(), ExternalError> {
+		self.window.set_ignore_cursor_events(ignore)
 	}
 }
 

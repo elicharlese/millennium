@@ -93,25 +93,28 @@ bitflags! {
 		const TRANSPARENT      = 1 << 6;
 		const CHILD            = 1 << 7;
 		const MAXIMIZED        = 1 << 8;
-		const POPUP            = 1 << 14;
-		const HIDDEN_TITLEBAR  = 1 << 15;
-		const ALWAYS_ON_BOTTOM = 1 << 16;
+		const MINIMIZED        = 1 << 9;
+		const POPUP            = 1 << 10;
+		const ALWAYS_ON_BOTTOM = 1 << 11;
+		const HIDDEN_TITLEBAR  = 1 << 12;
+		const MINIMIZABLE      = 1 << 13;
+		const MAXIMIZABLE      = 1 << 14;
+		const CLOSABLE         = 1 << 15;
 
 		/// Marker flag for fullscreen. Should always match `WindowState::fullscreen`, but is
 		/// included here to make masking easier.
-		const MARKER_EXCLUSIVE_FULLSCREEN = 1 << 9;
-		const MARKER_BORDERLESS_FULLSCREEN = 1 << 13;
-
+		const MARKER_EXCLUSIVE_FULLSCREEN = 1 << 20;
+		const MARKER_BORDERLESS_FULLSCREEN = 1 << 21;
 		/// The `WM_SIZE` event contains some parameters that can effect the state of `WindowFlags`.
 		/// In most cases, it's okay to let those parameters change the state. However, when we're
 		/// running the `WindowFlags::apply_diff` function, we *don't* want those parameters to
 		/// effect our stored state, because the purpose of `apply_diff` is to update the actual
 		/// window's state to match our stored state. This controls whether to accept those changes.
-		const MARKER_RETAIN_STATE_ON_SIZE = 1 << 10;
+		const MARKER_RETAIN_STATE_ON_SIZE = 1 << 22;
+		const MARKER_IN_SIZE_MOVE = 1 << 23;
+		const MARKER_DONT_FOCUS = 1 << 24;
 
-		const MARKER_IN_SIZE_MOVE = 1 << 11;
-
-		const MINIMIZED = 1 << 12;
+		const IGNORE_CURSOR_EVENT = 1 << 25;
 
 		const EXCLUSIVE_FULLSCREEN_OR_MASK = WindowFlags::ALWAYS_ON_TOP.bits;
 	}
@@ -232,11 +235,17 @@ impl WindowFlags {
 
 	pub fn to_window_styles(self) -> (WINDOW_STYLE, WINDOW_EX_STYLE) {
 		let (mut style, mut style_ex) = (Default::default(), Default::default());
-		style |= WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_SYSMENU | WS_CAPTION | WS_MINIMIZEBOX;
+		style |= WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_SYSMENU | WS_CAPTION;
 		style_ex |= WS_EX_ACCEPTFILES;
 
 		if self.contains(WindowFlags::RESIZABLE) {
-			style |= WS_SIZEBOX | WS_MAXIMIZEBOX;
+			style |= WS_SIZEBOX;
+		}
+		if self.contains(WindowFlags::RESIZABLE | WindowFlags::MAXIMIZABLE) {
+			style |= WS_MAXIMIZEBOX;
+		}
+		if self.contains(WindowFlags::MINIMIZABLE) {
+			style |= WS_MINIMIZEBOX;
 		}
 		if self.contains(WindowFlags::DECORATIONS) {
 			if !self.contains(WindowFlags::RESIZABLE) {
@@ -268,6 +277,9 @@ impl WindowFlags {
 		if self.contains(WindowFlags::MAXIMIZED) {
 			style |= WS_MAXIMIZE;
 		}
+		if self.contains(WindowFlags::IGNORE_CURSOR_EVENT) {
+			style_ex |= WS_EX_TRANSPARENT | WS_EX_LAYERED;
+		}
 		if self.contains(WindowFlags::HIDDEN_TITLEBAR) {
 			style_ex |= WS_EX_WINDOWEDGE;
 			style &= !(WS_CAPTION);
@@ -292,7 +304,15 @@ impl WindowFlags {
 
 		if new.contains(WindowFlags::VISIBLE) {
 			unsafe {
-				ShowWindow(window, SW_SHOW);
+				ShowWindow(
+					window,
+					if self.contains(WindowFlags::MARKER_DONT_FOCUS) {
+						self.set(WindowFlags::MARKER_DONT_FOCUS, false);
+						SW_SHOWNOACTIVATE
+					} else {
+						SW_SHOW
+					}
+				);
 			}
 		}
 
@@ -355,6 +375,13 @@ impl WindowFlags {
 						false => SW_RESTORE
 					}
 				);
+			}
+		}
+
+		if diff.contains(WindowFlags::CLOSABLE) || new.contains(WindowFlags::CLOSABLE) {
+			unsafe {
+				let system_menu = GetSystemMenu(window, false);
+				EnableMenuItem(system_menu, SC_CLOSE, MF_BYCOMMAND | if new.contains(WindowFlags::CLOSABLE) { MF_ENABLED } else { MF_GRAYED });
 			}
 		}
 

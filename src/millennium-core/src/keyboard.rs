@@ -324,6 +324,14 @@ pub enum KeyCode {
 	KeyZ,
 	/// <kbd>-</kbd> on a US keyboard.
 	Minus,
+	/// <kbd>Shift</kbd>+<kbd>=</kbd> on a US keyboard.
+	///
+	/// When used as a menu accelerator, this is displayed as <kbd>+</kbd>, and on macOS
+	/// and Windows the accelerator can be used without pressing the <kbd>Shift</kbd> key.
+	/// On Linux the <kbd>Shift</kbd> key is still required with a US keyboard layout.
+	/// `Plus` does not work as a value for keyboard accelerators outside menus on
+	/// keyboards where <kbd>+</kbd> requires a modifier key.
+	Plus,
 	/// <kbd>.</kbd> on a US keyboard.
 	Period,
 	/// <kbd>'</kbd> on a US keyboard.
@@ -715,6 +723,7 @@ impl FromStr for KeyCode {
 			"NUM9" | "NUMPAD9" => KeyCode::Numpad9,
 			"=" => KeyCode::Equal,
 			"-" => KeyCode::Minus,
+			"PLUS" => KeyCode::Plus,
 			"." | "PERIOD" => KeyCode::Period,
 			"'" | "QUOTE" => KeyCode::Quote,
 			"\\" => KeyCode::IntlBackslash,
@@ -762,10 +771,10 @@ impl FromStr for KeyCode {
 			"PAGEDOWN" => KeyCode::PageDown,
 			"PAGEUP" => KeyCode::PageUp,
 
-			"DOWN" => KeyCode::ArrowDown,
-			"UP" => KeyCode::ArrowUp,
-			"LEFT" => KeyCode::ArrowLeft,
-			"RIGHT" => KeyCode::ArrowRight,
+			"DOWN" | "ARROWDOWN" => KeyCode::ArrowDown,
+			"UP" | "ARROWUP" => KeyCode::ArrowUp,
+			"LEFT" | "ARROWLEFT" => KeyCode::ArrowLeft,
+			"RIGHT" | "ARROWRIGHT" => KeyCode::ArrowRight,
 
 			"NUMLOCK" => KeyCode::NumLock,
 			"NUMADD" | "NUMPADADD" => KeyCode::NumpadAdd,

@@ -17,7 +17,7 @@
 use std::sync::Once;
 
 use cocoa::{
-	appkit::{NSButton, NSEventMask, NSEventModifierFlags, NSEventType, NSImage, NSSquareStatusItemLength, NSStatusBar, NSStatusItem, NSWindow},
+	appkit::{NSButton, NSEventMask, NSEventModifierFlags, NSEventType, NSImage, NSStatusBar, NSStatusItem, NSVariableStatusItemLength, NSWindow},
 	base::{id, nil, NO, YES},
 	foundation::{NSData, NSPoint, NSSize, NSString}
 };
@@ -50,7 +50,7 @@ impl SystemTrayBuilder {
 	#[inline]
 	pub fn new(icon: Icon, tray_menu: Option<Menu>) -> Self {
 		unsafe {
-			let ns_status_bar = NSStatusBar::systemStatusBar(nil).statusItemWithLength_(NSSquareStatusItemLength);
+			let ns_status_bar = NSStatusBar::systemStatusBar(nil).statusItemWithLength_(NSVariableStatusItemLength);
 			let _: () = msg_send![ns_status_bar, retain];
 
 			Self {
@@ -59,7 +59,8 @@ impl SystemTrayBuilder {
 					icon,
 					menu_on_left_click: true,
 					tray_menu,
-					ns_status_bar
+					ns_status_bar,
+					title: None
 				}
 			}
 		}
@@ -100,6 +101,10 @@ impl SystemTrayBuilder {
 			if let Some(tooltip) = tooltip {
 				self.system_tray.set_tooltip(&tooltip);
 			}
+
+			if let Some(title) = &self.system_tray.title {
+				self.system_tray.set_title(title);
+			}
 		}
 
 		Ok(RootSystemTray(self.system_tray))
@@ -114,7 +119,8 @@ pub struct SystemTray {
 	pub(crate) icon_is_template: bool,
 	pub(crate) menu_on_left_click: bool,
 	pub(crate) tray_menu: Option<Menu>,
-	pub(crate) ns_status_bar: id
+	pub(crate) ns_status_bar: id,
+	pub(crate) title: Option<String>
 }
 
 impl Drop for SystemTray {
@@ -150,11 +156,22 @@ impl SystemTray {
 		}
 	}
 
+	pub fn set_title(&self, title: &str) {
+		unsafe {
+			NSButton::setTitle_(self.ns_status_bar.button(), NSString::alloc(nil).init_str(title));
+		}
+	}
+
 	fn create_button_with_icon(&self) {
-		const ICON_WIDTH: f64 = 18.0;
-		const ICON_HEIGHT: f64 = 18.0;
+		// image is to the right of the title: https://developer.apple.com/documentation/appkit/nscellimageposition/nsimageleft
+		const NSIMAGE_LEFT: i32 = 2;
 
 		let icon = self.icon.inner.to_png();
+
+		let (width, height) = self.icon.inner.get_size();
+
+		let icon_height: f64 = 18.0;
+		let icon_width: f64 = (width as f64) / (height as f64 / icon_height);
 
 		unsafe {
 			let status_item = self.ns_status_bar;
@@ -164,10 +181,11 @@ impl SystemTray {
 			let nsdata = NSData::dataWithBytes_length_(nil, icon.as_ptr() as *const std::os::raw::c_void, icon.len() as u64);
 
 			let nsimage = NSImage::initWithData_(NSImage::alloc(nil), nsdata);
-			let new_size = NSSize::new(ICON_WIDTH, ICON_HEIGHT);
+			let new_size = NSSize::new(icon_width, icon_height);
 
 			button.setImage_(nsimage);
 			let _: () = msg_send![nsimage, setSize: new_size];
+			let _: () = msg_send![button, setImagePosition: NSIMAGE_LEFT];
 			let is_template = match self.icon_is_template {
 				true => YES,
 				false => NO

@@ -525,6 +525,10 @@ impl Window {
 
 	pub fn set_title(&self, _title: &str) {}
 
+	pub fn title(&self) -> String {
+		String::new()
+	}
+
 	pub fn set_menu(&self, _menu: Option<Menu>) {}
 
 	pub fn set_visible(&self, _visibility: bool) {}
@@ -539,6 +543,9 @@ impl Window {
 	}
 
 	pub fn set_resizable(&self, _resizeable: bool) {}
+	pub fn set_minimizable(&self, _minimizable: bool) {}
+	pub fn set_maximizable(&self, _maximizable: bool) {}
+	pub fn set_closable(&self, _closable: bool) {}
 
 	pub fn set_minimized(&self, _minimized: bool) {}
 
@@ -559,6 +566,18 @@ impl Window {
 
 	pub fn is_resizable(&self) -> bool {
 		warn!("`Window::is_resizable` is ignored on android");
+		false
+	}
+
+	pub fn is_minimizable(&self) -> bool {
+		false
+	}
+
+	pub fn is_maximizable(&self) -> bool {
+		false
+	}
+
+	pub fn is_closable(&self) -> bool {
 		false
 	}
 
@@ -612,11 +631,15 @@ impl Window {
 		Err(error::ExternalError::NotSupported(error::NotSupportedError::new()))
 	}
 
+	pub fn set_ignore_cursor_events(&self, _ignore: bool) -> Result<(), error::ExternalError> {
+		Err(error::ExternalError::NotSupported(error::NotSupportedError::new()))
+	}
+
 	pub fn raw_window_handle(&self) -> RawWindowHandle {
 		// TODO: use main activity instead?
 		let mut handle = AndroidNdkWindowHandle::empty();
 		if let Some(w) = ndk_glue::window_manager() {
-			handle.a_native_window = w.as_obj().into_inner() as *mut _;
+			handle.a_native_window = w.as_obj().into_raw() as *mut _;
 		} else {
 			panic!(
 				"Cannot get the native window, it's null and will always be null before Event::Resumed and after Event::Suspended. Make sure you only call this function between those events."

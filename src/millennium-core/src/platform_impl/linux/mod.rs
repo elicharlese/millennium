@@ -17,6 +17,7 @@
 #![cfg(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))]
 
 mod clipboard;
+mod device;
 mod event_loop;
 mod global_shortcut;
 mod icon;
@@ -67,7 +68,10 @@ impl Default for Parent {
 pub struct PlatformSpecificWindowBuilderAttributes {
 	pub parent: Parent,
 	pub skip_taskbar: bool,
-	pub auto_transparent: bool
+	pub auto_transparent: bool,
+	pub double_buffered: bool,
+	pub app_paintable: bool,
+	pub rgba_visual: bool
 }
 
 impl Default for PlatformSpecificWindowBuilderAttributes {
@@ -75,7 +79,10 @@ impl Default for PlatformSpecificWindowBuilderAttributes {
 		Self {
 			parent: Default::default(),
 			skip_taskbar: false,
-			auto_transparent: true
+			auto_transparent: true,
+			double_buffered: true,
+			app_paintable: false,
+			rgba_visual: false
 		}
 	}
 }

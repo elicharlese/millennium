@@ -23,8 +23,8 @@ use std::{
 	thread
 };
 
-pub use jni;
 pub use jni::{
+	self,
 	objects::{GlobalRef, JClass, JMap, JObject, JString},
 	sys::jobject,
 	JNIEnv
@@ -199,7 +199,7 @@ pub unsafe fn create(env: JNIEnv, _jclass: JClass, jobject: JObject, setup: unsa
 	let activity = env.new_global_ref(jobject).unwrap();
 	let vm = env.get_java_vm().unwrap();
 	let env = vm.attach_current_thread_as_daemon().unwrap();
-	ndk_context::initialize_android_context(vm.get_java_vm_pointer() as *mut _, activity.as_obj().into_inner() as *mut _);
+	ndk_context::initialize_android_context(vm.get_java_vm_pointer() as *mut _, activity.as_obj().into_raw() as *mut _);
 
 	let looper = ThreadLooper::for_thread().unwrap().into_foreign();
 	setup(env, &looper, activity);
