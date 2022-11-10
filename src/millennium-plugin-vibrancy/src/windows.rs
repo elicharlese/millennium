@@ -22,156 +22,29 @@
 
 use std::ffi::c_void;
 
+use once_cell::sync::Lazy;
 pub use windows_sys::Win32::{
-	Foundation::*,
-	Graphics::{Dwm::*, Gdi::*},
-	System::{LibraryLoader::*, SystemInformation::*}
+	Foundation::{BOOL, FARPROC, HWND},
+	Graphics::{
+		Dwm::{
+			DwmEnableBlurBehindWindow, DwmExtendFrameIntoClientArea, DwmSetWindowAttribute, DWMWA_USE_IMMERSIVE_DARK_MODE, DWMWINDOWATTRIBUTE, DWM_BB_ENABLE,
+			DWM_BLURBEHIND
+		},
+		Gdi::HRGN
+	},
+	System::{
+		LibraryLoader::{GetProcAddress, LoadLibraryA},
+		SystemInformation::OSVERSIONINFOW
+	},
+	UI::Controls::MARGINS
 };
 
-use crate::{Color, Error};
+use crate::{VibrancyEffect, VibrancyError, VibrancyTint, LAST_EFFECT};
 
-pub fn apply_blur(hwnd: HWND, color: Option<Color>) -> Result<(), Error> {
-	if is_win7() {
-		let bb = DWM_BLURBEHIND {
-			dwFlags: DWM_BB_ENABLE,
-			fEnable: true.into(),
-			hRgnBlur: HRGN::default(),
-			fTransitionOnMaximized: 0
-		};
-		unsafe {
-			let _ = DwmEnableBlurBehindWindow(hwnd, &bb);
-		}
-	} else if is_win10_swca() || is_win11() {
-		unsafe {
-			SetWindowCompositionAttribute(hwnd, ACCENT_STATE::ACCENT_ENABLE_BLURBEHIND, color);
-		}
-	} else {
-		return Err(Error::UnsupportedPlatformVersion("\"apply_blur()\" is only available on Windows 7, Windows 10 v1809+, or Windows 11"));
-	}
-	Ok(())
-}
+type WINDOWCOMPOSITIONATTRIB = u32;
 
-pub fn clear_blur(hwnd: HWND) -> Result<(), Error> {
-	if is_win7() {
-		let bb = DWM_BLURBEHIND {
-			dwFlags: DWM_BB_ENABLE,
-			fEnable: false.into(),
-			hRgnBlur: HRGN::default(),
-			fTransitionOnMaximized: 0
-		};
-		unsafe {
-			let _ = DwmEnableBlurBehindWindow(hwnd, &bb);
-		}
-	} else if is_win10_swca() || is_win11() {
-		unsafe {
-			SetWindowCompositionAttribute(hwnd, ACCENT_STATE::ACCENT_DISABLED, None);
-		}
-	} else {
-		return Err(Error::UnsupportedPlatformVersion("\"clear_blur()\" is only available on Windows 7, Windows 10 v1809+, or Windows 11"));
-	}
-	Ok(())
-}
-
-pub fn apply_acrylic(hwnd: HWND, color: Option<Color>) -> Result<(), Error> {
-	if is_win11_dwmsbt() {
-		unsafe {
-			DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &DWM_SYSTEMBACKDROP_TYPE::DWMSBT_TRANSIENTWINDOW as *const _ as _, 4);
-		}
-	} else if is_win10_swca() || is_win11() {
-		unsafe {
-			SetWindowCompositionAttribute(hwnd, ACCENT_STATE::ACCENT_ENABLE_ACRYLICBLURBEHIND, color);
-		}
-	} else {
-		return Err(Error::UnsupportedPlatformVersion("\"apply_acrylic()\" is only available on Windows 10 v1809+ or Windows 11"));
-	}
-	Ok(())
-}
-
-pub fn clear_acrylic(hwnd: HWND) -> Result<(), Error> {
-	if is_win11_dwmsbt() {
-		unsafe {
-			DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &DWM_SYSTEMBACKDROP_TYPE::DWMSBT_DISABLE as *const _ as _, 4);
-		}
-	} else if is_win10_swca() || is_win11() {
-		unsafe {
-			SetWindowCompositionAttribute(hwnd, ACCENT_STATE::ACCENT_DISABLED, None);
-		}
-	} else {
-		return Err(Error::UnsupportedPlatformVersion("\"clear_acrylic()\" is only available on Windows 10 v1809+ or Windows 11"));
-	}
-	Ok(())
-}
-
-pub fn apply_mica(hwnd: HWND) -> Result<(), Error> {
-	if is_win11_dwmsbt() {
-		unsafe {
-			DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &DWM_SYSTEMBACKDROP_TYPE::DWMSBT_MAINWINDOW as *const _ as _, 4);
-		}
-	} else if is_win11() {
-		unsafe {
-			DwmSetWindowAttribute(hwnd, DWMWA_MICA_EFFECT, &1 as *const _ as _, 4);
-		}
-	} else {
-		return Err(Error::UnsupportedPlatformVersion("\"apply_mica()\" is only available on Windows 11"));
-	}
-	Ok(())
-}
-
-pub fn clear_mica(hwnd: HWND) -> Result<(), Error> {
-	if is_win11_dwmsbt() {
-		unsafe {
-			DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &DWM_SYSTEMBACKDROP_TYPE::DWMSBT_DISABLE as *const _ as _, 4);
-		}
-	} else if is_win11() {
-		unsafe {
-			DwmSetWindowAttribute(hwnd, DWMWA_MICA_EFFECT, &0 as *const _ as _, 4);
-		}
-	} else {
-		return Err(Error::UnsupportedPlatformVersion("\"clear_mica()\" is only available on Windows 11"));
-	}
-	Ok(())
-}
-
-fn get_function_impl(library: &str, function: &str) -> Option<FARPROC> {
-	assert_eq!(library.chars().last(), Some('\0'));
-	assert_eq!(function.chars().last(), Some('\0'));
-
-	let module = unsafe { LoadLibraryA(library.as_ptr()) };
-	if module == 0 {
-		return None;
-	}
-	Some(unsafe { GetProcAddress(module, function.as_ptr()) })
-}
-
-macro_rules! get_function {
-	($lib:expr, $func:ident) => {
-		get_function_impl(concat!($lib, '\0'), concat!(stringify!($func), '\0'))
-			.map(|f| unsafe { std::mem::transmute::<::windows_sys::Win32::Foundation::FARPROC, $func>(f) })
-	};
-}
-
-/// Returns a tuple of (major, minor, buildnumber)
-fn get_windows_ver() -> Option<(u32, u32, u32)> {
-	type RtlGetVersion = unsafe extern "system" fn(*mut OSVERSIONINFOW) -> i32;
-	let handle = get_function!("ntdll.dll", RtlGetVersion);
-	if let Some(rtl_get_version) = handle {
-		unsafe {
-			let mut vi = OSVERSIONINFOW {
-				dwOSVersionInfoSize: 0,
-				dwMajorVersion: 0,
-				dwMinorVersion: 0,
-				dwBuildNumber: 0,
-				dwPlatformId: 0,
-				szCSDVersion: [0; 128]
-			};
-
-			let status = (rtl_get_version)(&mut vi as _);
-			if status >= 0 { Some((vi.dwMajorVersion, vi.dwMinorVersion, vi.dwBuildNumber)) } else { None }
-		}
-	} else {
-		None
-	}
-}
+const DWMWA_MICA_EFFECT: DWMWINDOWATTRIBUTE = 1029i32;
+const DWMWA_SYSTEMBACKDROP_TYPE: DWMWINDOWATTRIBUTE = 38i32;
 
 #[repr(C)]
 struct ACCENT_POLICY {
@@ -180,8 +53,6 @@ struct ACCENT_POLICY {
 	GradientColor: u32,
 	AnimationId: u32
 }
-
-type WINDOWCOMPOSITIONATTRIB = u32;
 
 #[repr(C)]
 struct WINDOWCOMPOSITIONATTRIBDATA {
@@ -198,9 +69,67 @@ enum ACCENT_STATE {
 	ACCENT_ENABLE_ACRYLICBLURBEHIND = 4
 }
 
-unsafe fn SetWindowCompositionAttribute(hwnd: HWND, accent_state: ACCENT_STATE, color: Option<Color>) {
-	type SetWindowCompositionAttribute = unsafe extern "system" fn(HWND, *mut WINDOWCOMPOSITIONATTRIBDATA) -> BOOL;
-	if let Some(set_window_composition_attribute) = get_function!("user32.dll", SetWindowCompositionAttribute) {
+#[allow(unused)]
+#[repr(C)]
+enum DWM_SYSTEMBACKDROP_TYPE {
+	DWMSBT_DISABLE = 1,
+	DWMSBT_MAINWINDOW = 2,      // Mica
+	DWMSBT_TRANSIENTWINDOW = 3, // Acrylic
+	DWMSBT_TABBEDWINDOW = 4     // Tabbed Mica
+}
+
+fn get_function_impl(library: &str, function: &str) -> Option<FARPROC> {
+	assert_eq!(library.chars().last(), Some('\0'));
+	assert_eq!(function.chars().last(), Some('\0'));
+
+	let module = unsafe { LoadLibraryA(library.as_ptr()) };
+	if module == 0 {
+		return None;
+	}
+	Some(unsafe { GetProcAddress(module, function.as_ptr()) })
+}
+
+macro_rules! get_function {
+	($lib:expr, $func:ident, $type:ty) => {
+		get_function_impl(concat!($lib, '\0'), concat!(stringify!($func), '\0')).map(|f| unsafe { std::mem::transmute::<FARPROC, $type>(f) })
+	};
+}
+
+static WVER: Lazy<(u32, u32, u32)> = Lazy::new(|| {
+	let RtlGetVersion = get_function!("ntdll.dll", RtlGetVersion, unsafe extern "system" fn(*mut OSVERSIONINFOW) -> i32).unwrap();
+	let mut vi = OSVERSIONINFOW {
+		dwOSVersionInfoSize: std::mem::size_of::<OSVERSIONINFOW>() as u32,
+		dwMajorVersion: 0,
+		dwMinorVersion: 0,
+		dwBuildNumber: 0,
+		dwPlatformId: 0,
+		szCSDVersion: [0; 128]
+	};
+	unsafe { (RtlGetVersion)(&mut vi as _) };
+	(vi.dwMajorVersion, vi.dwMinorVersion, vi.dwBuildNumber)
+});
+
+#[inline(always)]
+pub fn is_win7() -> bool {
+	WVER.0 > 6 || (WVER.0 == 6 && WVER.1 == 1)
+}
+#[inline(always)]
+pub fn is_swca_supported() -> bool {
+	WVER.2 >= 17763
+}
+#[inline(always)]
+pub fn is_mica_attr_supported() -> bool {
+	WVER.2 >= 22000
+}
+#[inline(always)]
+pub fn is_dwmsbt_supported() -> bool {
+	WVER.2 >= 22523
+}
+
+unsafe fn set_accent_policy(hwnd: HWND, accent_state: ACCENT_STATE, color: Option<VibrancyTint>) {
+	if let Some(SetWindowCompositionAttribute) =
+		get_function!("user32.dll", SetWindowCompositionAttribute, unsafe extern "system" fn(HWND, *mut WINDOWCOMPOSITIONATTRIBDATA) -> BOOL)
+	{
 		let mut color = color.unwrap_or_default();
 
 		let is_acrylic = accent_state == ACCENT_STATE::ACCENT_ENABLE_ACRYLICBLURBEHIND;
@@ -220,41 +149,92 @@ unsafe fn SetWindowCompositionAttribute(hwnd: HWND, accent_state: ACCENT_STATE, 
 			pvData: &mut policy as *mut _ as _,
 			cbData: std::mem::size_of_val(&policy)
 		};
-		set_window_composition_attribute(hwnd, &mut data as *mut _ as _);
+		SetWindowCompositionAttribute(hwnd, &mut data as *mut _ as _);
 	}
 }
 
-const DWMWA_MICA_EFFECT: DWMWINDOWATTRIBUTE = 1029i32;
-const DWMWA_SYSTEMBACKDROP_TYPE: DWMWINDOWATTRIBUTE = 38i32;
+pub(crate) fn apply_effect(hwnd: HWND, effect: VibrancyEffect) -> Result<(), VibrancyError> {
+	let mut last_effect = LAST_EFFECT.lock().unwrap();
+	if *last_effect != effect && *last_effect != VibrancyEffect::None {
+		remove_effect(hwnd, &last_effect);
+	}
 
-#[allow(unused)]
-#[repr(C)]
-enum DWM_SYSTEMBACKDROP_TYPE {
-	DWMSBT_DISABLE = 1,
-	DWMSBT_MAINWINDOW = 2,      // Mica
-	DWMSBT_TRANSIENTWINDOW = 3, // Acrylic
-	DWMSBT_TABBEDWINDOW = 4     // Tabbed Mica
+	match effect {
+		VibrancyEffect::None => remove_effect(hwnd, &last_effect),
+		VibrancyEffect::Mica if is_dwmsbt_supported() || is_mica_attr_supported() => {
+			unsafe {
+				if is_dwmsbt_supported() {
+					DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &DWM_SYSTEMBACKDROP_TYPE::DWMSBT_MAINWINDOW as *const _ as _, 4);
+				} else if is_mica_attr_supported() {
+					DwmSetWindowAttribute(hwnd, DWMWA_MICA_EFFECT, &1 as *const _ as _, 4);
+				}
+			};
+		}
+		VibrancyEffect::FluentAcrylic if is_dwmsbt_supported() => {
+			unsafe { DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &DWM_SYSTEMBACKDROP_TYPE::DWMSBT_TRANSIENTWINDOW as *const _ as _, 4) };
+		}
+		VibrancyEffect::UnifiedAcrylic(tint) if is_swca_supported() => {
+			unsafe { set_accent_policy(hwnd, ACCENT_STATE::ACCENT_ENABLE_ACRYLICBLURBEHIND, tint) };
+		}
+		VibrancyEffect::Blurbehind(tint) if is_swca_supported() || is_win7() => {
+			if is_swca_supported() {
+				unsafe {
+					set_accent_policy(hwnd, ACCENT_STATE::ACCENT_ENABLE_BLURBEHIND, tint);
+				}
+			} else if is_win7() {
+				unsafe {
+					let _ = DwmEnableBlurBehindWindow(
+						hwnd,
+						&DWM_BLURBEHIND {
+							dwFlags: DWM_BB_ENABLE,
+							fEnable: true.into(),
+							hRgnBlur: HRGN::default(),
+							fTransitionOnMaximized: 0
+						}
+					);
+				}
+			}
+		}
+		_ => return Err(VibrancyError::EffectNotSupported(effect))
+	}
+	*last_effect = effect;
+	Ok(())
 }
 
-pub fn is_win7() -> bool {
-	let v = get_windows_ver().unwrap_or_default();
-	v.0 == 6 && v.1 == 1
-}
-
-pub fn is_win10_swca() -> bool {
-	let v = get_windows_ver().unwrap_or_default();
-	v.2 >= 17763 && v.2 < 22000
-}
-
-pub fn is_win11() -> bool {
-	is_at_least_build(22000)
-}
-
-fn is_win11_dwmsbt() -> bool {
-	is_at_least_build(22523)
-}
-
-fn is_at_least_build(build: u32) -> bool {
-	let v = get_windows_ver().unwrap_or_default();
-	v.2 >= build
+fn remove_effect(hwnd: HWND, effect: &VibrancyEffect) {
+	match effect {
+		VibrancyEffect::Mica => unsafe {
+			if is_dwmsbt_supported() {
+				DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &DWM_SYSTEMBACKDROP_TYPE::DWMSBT_DISABLE as *const _ as _, 4);
+			} else if is_mica_attr_supported() {
+				DwmSetWindowAttribute(hwnd, DWMWA_MICA_EFFECT, &1 as *const _ as _, 4);
+			}
+		},
+		VibrancyEffect::FluentAcrylic if is_dwmsbt_supported() => {
+			unsafe { DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &DWM_SYSTEMBACKDROP_TYPE::DWMSBT_DISABLE as *const _ as _, 4) };
+		}
+		VibrancyEffect::UnifiedAcrylic(_) if is_swca_supported() => {
+			unsafe { set_accent_policy(hwnd, ACCENT_STATE::ACCENT_DISABLED, None) };
+		}
+		VibrancyEffect::Blurbehind(_) => {
+			if is_swca_supported() {
+				unsafe {
+					set_accent_policy(hwnd, ACCENT_STATE::ACCENT_DISABLED, None);
+				}
+			} else if is_win7() {
+				unsafe {
+					let _ = DwmEnableBlurBehindWindow(
+						hwnd,
+						&DWM_BLURBEHIND {
+							dwFlags: DWM_BB_ENABLE,
+							fEnable: false.into(),
+							hRgnBlur: HRGN::default(),
+							fTransitionOnMaximized: 0
+						}
+					);
+				}
+			}
+		}
+		_ => ()
+	};
 }

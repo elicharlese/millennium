@@ -38,105 +38,128 @@
 //! apply_vibrancy(&window, NSVisualEffectMaterial::AppearanceBased).unwrap();
 //! ```
 
+use std::sync::Mutex;
+
+use once_cell::sync::Lazy;
 use thiserror::Error;
 
+#[cfg(target_os = "macos")]
 mod macos;
+#[cfg(target_os = "windows")]
 mod windows;
 
+#[cfg(target_os = "macos")]
 pub use macos::NSVisualEffectMaterial;
-#[cfg(windows)]
-pub use windows::{is_win10_swca as is_win10, is_win11, is_win7};
+#[cfg(target_os = "windows")]
+pub use windows::{
+	is_dwmsbt_supported as is_fluent_acrylic_supported, is_mica_attr_supported as is_mica_supported, is_swca_supported as is_acrylic_supported,
+	is_win7 as is_blur_supported
+};
 
 /// a tuple of RGBA colors. Each value has a range of 0 to 255.
-pub type Color = (u8, u8, u8, u8);
+pub type VibrancyTint = (u8, u8, u8, u8);
 
-/// Applies blur effect to the window. Works only on Windows 7, Windows 10 v1809
-/// or newer, and Windows 11.
-///
-/// - *`color`* is ignored on Windows 7 and has no effect.
-/// - This may be laggy when the window is resized or moved on some Windows 11 installs. For recent Windows versions,
-///   use `apply_acrylic` or `apply_mica` instead.
-pub fn apply_blur(window: impl raw_window_handle::HasRawWindowHandle, #[allow(unused)] color: Option<Color>) -> Result<(), Error> {
-	match window.raw_window_handle() {
-		#[cfg(target_os = "windows")]
-		raw_window_handle::RawWindowHandle::Win32(handle) => windows::apply_blur(handle.hwnd as _, color),
-		_ => Err(Error::UnsupportedPlatform("\"apply_blur()\" is only supported on Windows."))
-	}
+/// <https://developer.apple.com/documentation/appkit/nsvisualeffectview/material>
+#[repr(u64)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NSVisualEffectMaterial {
+	/// A default material for the view's effectiveAppearance.
+	#[deprecated = "Use a semantic material instead."]
+	AppearanceBased = 0,
+	#[deprecated = "Use a semantic material instead."]
+	Light = 1,
+	#[deprecated = "Use a semantic material instead."]
+	Dark = 2,
+	#[deprecated = "Use a semantic material instead."]
+	MediumLight = 8,
+	#[deprecated = "Use a semantic material instead."]
+	UltraDark = 9,
+
+	// macOS 10.10+
+	Titlebar = 3,
+	Selection = 4,
+
+	// macOS 10.11+
+	Menu = 5,
+	Popover = 6,
+	Sidebar = 7,
+
+	// macOS 10.14+
+	HeaderView = 10,
+	Sheet = 11,
+	WindowBackground = 12,
+	HudWindow = 13,
+	FullScreenUI = 15,
+	Tooltip = 17,
+	ContentBackground = 18,
+	UnderWindowBackground = 21,
+	UnderPageBackground = 22
 }
 
-/// Clears blur effect applied to the window. Works only on Windows 7, Windows
-/// 10 v1809 or newer, and Windows 11.
-pub fn clear_blur(window: impl raw_window_handle::HasRawWindowHandle) -> Result<(), Error> {
-	match window.raw_window_handle() {
-		#[cfg(target_os = "windows")]
-		raw_window_handle::RawWindowHandle::Win32(handle) => windows::clear_blur(handle.hwnd as _),
-		_ => Err(Error::UnsupportedPlatform("\"clear_blur()\" is only supported on Windows."))
-	}
-}
-
-/// Applies Acrylic effect to the window. Works only on Windows 10 v1809 or
-/// newer and Windows 11.
-///
-/// - *`color`* is ignored on Windows 11 build 22523 and newer and has no effect. Instead, you should set the background
-///   color of the webview to some transparent color if you want to tint the window.
-/// - This may also be laggy on Windows 10 v1903+ and Windows 11 builds prior to build 22523, the window may lag when
-///   resizing or dragging.
-pub fn apply_acrylic(window: impl raw_window_handle::HasRawWindowHandle, #[allow(unused)] color: Option<Color>) -> Result<(), Error> {
-	match window.raw_window_handle() {
-		#[cfg(target_os = "windows")]
-		raw_window_handle::RawWindowHandle::Win32(handle) => windows::apply_acrylic(handle.hwnd as _, color),
-		_ => Err(Error::UnsupportedPlatform("\"apply_acrylic()\" is only supported on Windows."))
-	}
-}
-
-/// Clears Acrylic effect applied to the window. Works only on Windows 10 v1809
-/// or newer and Windows 11.
-pub fn clear_acrylic(window: impl raw_window_handle::HasRawWindowHandle) -> Result<(), Error> {
-	match window.raw_window_handle() {
-		#[cfg(target_os = "windows")]
-		raw_window_handle::RawWindowHandle::Win32(handle) => windows::clear_acrylic(handle.hwnd as _),
-		_ => Err(Error::UnsupportedPlatform("\"clear_acrylic()\" is only supported on Windows."))
-	}
-}
-
-/// Applies Mica effect to the window. Works only on Windows 11.
-///
-/// - *`color`* is not supported, though you shouldn't have to worry about tinting; the window will be quite dark if a
-///   dark system theme is enabled and very light if a light theme is enabled.
-pub fn apply_mica(window: impl raw_window_handle::HasRawWindowHandle) -> Result<(), Error> {
-	match window.raw_window_handle() {
-		#[cfg(target_os = "windows")]
-		raw_window_handle::RawWindowHandle::Win32(handle) => windows::apply_mica(handle.hwnd as _),
-		_ => Err(Error::UnsupportedPlatform("\"apply_mica()\" is only supported on Windows."))
-	}
-}
-
-/// Clears Mica effect applied to the window. Works only on Windows 10 v1903
-/// or newer and Windows 11.
-pub fn clear_mica(window: impl raw_window_handle::HasRawWindowHandle) -> Result<(), Error> {
-	match window.raw_window_handle() {
-		#[cfg(target_os = "windows")]
-		raw_window_handle::RawWindowHandle::Win32(handle) => windows::clear_mica(handle.hwnd as _),
-		_ => Err(Error::UnsupportedPlatform("\"clear_mica()\" is only supported on Windows."))
-	}
-}
-
-/// Applies macOS Vibrancy effect to the window. Works only on macOS 10.10 or
-/// newer.
-pub fn apply_vibrancy(window: impl raw_window_handle::HasRawWindowHandle, #[allow(unused)] effect: NSVisualEffectMaterial) -> Result<(), Error> {
-	match window.raw_window_handle() {
-		#[cfg(target_os = "macos")]
-		raw_window_handle::RawWindowHandle::AppKit(handle) => macos::apply_vibrancy(handle.ns_window as _, effect),
-		_ => Err(Error::UnsupportedPlatform("\"apply_vibrancy()\" is only supported on macOS."))
-	}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum VibrancyEffect {
+	/// Clear vibrancy effects.
+	None,
+	/// Windows 11 [Mica][mica] effect.
+	///
+	/// Supported in Windows 11 since build 22000 (21H2).
+	///
+	/// [mica]: https://learn.microsoft.com/en-us/windows/apps/design/style/mica
+	Mica,
+	/// Windows 11 [Fluent Acrylic][acrylic] effect.
+	///
+	/// Supported in Windows 11 since build 22523 (just before 22H2).
+	///
+	/// [acrylic]: https://learn.microsoft.com/en-us/windows/apps/design/style/acrylic
+	FluentAcrylic,
+	/// Windows 10 "acrylic" DWM blurbehind.
+	///
+	/// Supported in Windows 11 and 10 since build 17763 (October 2018 update or version 1809).
+	/// Supports an optional 'tint' color to modify the color and transparency of the effect.
+	///
+	/// Performance may suffer when dragging the window on Windows 11 and potentially later versions of Windows 10.
+	/// Please use [`VibrancyEffect::FluentAcrylic`] instead if the platform supports it.
+	UnifiedAcrylic(Option<VibrancyTint>),
+	/// Windows 7+ DWM blurbehind.
+	///
+	/// Supported since Windows 7.
+	/// On Windows 10/11 builds later than 17763 (October 2018 update or version 1809), an optional 'tint' color is
+	/// supported to modify the color and transparency of the effect. The tint option is not supported on Windows 7 and
+	/// will do nothing.
+	///
+	/// Performance may suffer when dragging the window on Windows 11 and potentially later versions of Windows 10.
+	/// Please use [`VibrancyEffect::FluentAcrylic`] instead if the platform supports it.
+	Blurbehind(Option<VibrancyTint>),
+	/// macOS visual effect materials.
+	///
+	/// Supported since macOS 10.10.
+	///
+	/// See Apple's [docs](https://developer.apple.com/documentation/appkit/nsvisualeffectview/material) and
+	/// [`NSVisualEffectMaterial`] for more info.
+	Vibrancy(NSVisualEffectMaterial)
 }
 
 #[derive(Debug, Error)]
-pub enum Error {
-	#[error("Unsupported platform: {0}")]
-	UnsupportedPlatform(&'static str),
-	#[error("Unsupported platform version: {0}")]
-	UnsupportedPlatformVersion(&'static str),
-	#[error("{0}")]
+pub enum VibrancyError {
+	#[error("{0:?} is unsupported on this platform.")]
+	EffectNotSupported(VibrancyEffect),
+	#[error("\"apply_effect\" must be called on the main thread.")]
 	NotMainThread(&'static str)
+}
+
+pub(crate) static LAST_EFFECT: Lazy<Mutex<VibrancyEffect>> = Lazy::new(|| Mutex::new(VibrancyEffect::None));
+
+/// Sets the window's vibrancy effect.
+///
+/// Will return Err([`VibrancyError::EffectNotSupported`]) if the effect is not supported on this platform, except for
+/// [`VibrancyEffect::None`], which is guaranteed to never error.
+pub fn apply_effect(window: impl raw_window_handle::HasRawWindowHandle, effect: VibrancyEffect) -> Result<(), VibrancyError> {
+	match window.raw_window_handle() {
+		#[cfg(target_os = "windows")]
+		raw_window_handle::RawWindowHandle::Win32(handle) => self::windows::apply_effect(handle.hwnd as _, effect),
+		#[cfg(target_os = "macos")]
+		raw_window_handle::RawWindowHandle::AppKit(handle) => self::macos::apply_effect(handle.ns_window as _, effect),
+		_ if effect != VibrancyEffect::None => Err(VibrancyError::EffectNotSupported(effect)),
+		_ => Ok(())
+	}
 }
