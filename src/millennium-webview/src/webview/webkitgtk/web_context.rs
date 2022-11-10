@@ -222,59 +222,59 @@ impl WebContextExt for super::WebContext {
 			});
 		}
 	}
-}
 
-fn register_download_handler(
-	&mut self,
-	download_started_handler: Option<Box<dyn FnMut(String, &mut PathBuf) -> bool>>,
-	download_completed_handler: Option<Rc<dyn Fn(String, Option<PathBuf>, bool) + 'static>>
-) {
-	use webkit2gtk::traits::*;
-	let context = &self.os.context;
+	fn register_download_handler(
+		&mut self,
+		download_started_handler: Option<Box<dyn FnMut(String, &mut PathBuf) -> bool>>,
+		download_completed_handler: Option<Rc<dyn Fn(String, Option<PathBuf>, bool) + 'static>>
+	) {
+		use webkit2gtk::traits::*;
+		let context = &self.os.context;
 
-	let download_started_handler = RefCell::new(download_started_handler);
-	let failed = Rc::new(RefCell::new(false));
+		let download_started_handler = RefCell::new(download_started_handler);
+		let failed = Rc::new(RefCell::new(false));
 
-	context.connect_download_started(move |_context, download| {
-		if let Some(uri) = download.request().and_then(|req| req.uri()) {
-			let uri = uri.to_string();
-			let mut download_location = download.destination().and_then(|p| PathBuf::from_str(&p).ok()).unwrap_or_default();
+		context.connect_download_started(move |_context, download| {
+			if let Some(uri) = download.request().and_then(|req| req.uri()) {
+				let uri = uri.to_string();
+				let mut download_location = download.destination().and_then(|p| PathBuf::from_str(&p).ok()).unwrap_or_default();
 
-			if let Some(download_started_handler) = download_started_handler.borrow_mut().as_mut() {
-				if download_started_handler(uri, &mut download_location) {
-					download.connect_response_notify(move |download| {
-						download.set_destination(&download_location.to_string_lossy());
-					});
-				} else {
-					download.cancel();
-				}
-			}
-		}
-		download.connect_failed({
-			let failed = failed.clone();
-			move |_, _error| {
-				*failed.borrow_mut() = true;
-			}
-		});
-		if let Some(download_completed_handler) = download_completed_handler.clone() {
-			download.connect_finished({
-				let failed = failed.clone();
-				move |download| {
-					if let Some(uri) = download.request().and_then(|req| req.uri()) {
-						let failed = failed.borrow();
-						let uri = uri.to_string();
-						download_completed_handler(
-							uri,
-							(!*failed)
-								.then(|| download.destination().map_or_else(|| None, |p| Some(PathBuf::from(p.as_str()))))
-								.flatten(),
-							!*failed
-						)
+				if let Some(download_started_handler) = download_started_handler.borrow_mut().as_mut() {
+					if download_started_handler(uri, &mut download_location) {
+						download.connect_response_notify(move |download| {
+							download.set_destination(&download_location.to_string_lossy());
+						});
+					} else {
+						download.cancel();
 					}
 				}
+			}
+			download.connect_failed({
+				let failed = failed.clone();
+				move |_, _error| {
+					*failed.borrow_mut() = true;
+				}
 			});
-		}
-	});
+			if let Some(download_completed_handler) = download_completed_handler.clone() {
+				download.connect_finished({
+					let failed = failed.clone();
+					move |download| {
+						if let Some(uri) = download.request().and_then(|req| req.uri()) {
+							let failed = failed.borrow();
+							let uri = uri.to_string();
+							download_completed_handler(
+								uri,
+								(!*failed)
+									.then(|| download.destination().map_or_else(|| None, |p| Some(PathBuf::from(p.as_str()))))
+									.flatten(),
+								!*failed
+							)
+						}
+					}
+				});
+			}
+		});
+	}
 }
 
 fn actually_register_uri_scheme<F>(context: &mut super::WebContext, name: &str, handler: F) -> crate::Result<()>
