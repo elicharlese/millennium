@@ -15,6 +15,10 @@
 				margin: 0;
 			}
 
+			html {
+				background: #ffffff;
+			}
+
 			main {
 				width: 100vw;
 				height: 100vh;
@@ -27,23 +31,27 @@
 
 			main > div {
 				padding: 10px;
+				max-width: 85vw;
 
 				display: flex;
 				align-items: center;
 				justify-content: center;
 				flex-direction: row;
+				flex-wrap: wrap;
 			}
 
 			button {
 				font-size: 14px;
 				color: black;
 				background-color: #fbfbfb;
-				padding: 10px 11px;
+				padding: 10px 16px;
 				border: 1px solid #e7e7e7;
 				border-radius: 6px;
 				border-bottom-width: 0;
 				box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-				margin: 0 7px;
+				margin: 3px 4px;
+				min-width: 65px;
+				white-space: nowrap;
 				transition: background-color 0.25s var(--easing);
 			}
 
@@ -56,6 +64,7 @@
 			}
 
 			button.primary {
+				border: 1px solid #3f9fcf;
 				color: black;
 				background-color: #4cc2ff;
 			}
@@ -69,9 +78,19 @@
 				background-color: #42a1d2;
 			}
 
+			button#clear {
+				font-size: 12px;
+				margin-top: 16px;
+				padding: 7px 16px;
+			}
+
 			@media (prefers-color-scheme: dark) {
 				body {
 					color: white;
+				}
+
+				html {
+					background: #212121;
 				}
 
 				button {
@@ -94,30 +113,56 @@
 	<body>
 		<main>
 			<h1 style='margin-top:0'>Millennium Vibrancy</h1>
-			<p>Press the buttons to enable/disable different effects.</p>
+			<p>Press the buttons to switch between different effects.</p>
 			<div>
-				<button id='mica' class='primary'>Toggle Mica</button>
-				<button id='acrylic'>Toggle Acrylic</button>
+				<button id='mica'>Mica</button>
+				<button id='fluent-acrylic'>Fluent Acrylic</button>
+				<button id='unified-acrylic'>Unified Acrylic</button>
+				<button id='blurbehind'>Blurbehind</button>
 			</div>
+			<button id='clear'>Clear effects</button>
 		</main>
 
 		<script>
-			const micaButton = document.getElementById('mica');
-			const acrylicButton = document.getElementById('acrylic');
+			const buttons = [
+				'mica',
+				'fluent-acrylic',
+				'unified-acrylic',
+				'blurbehind'
+			];
 
-			micaButton.addEventListener('click', async () => {
-				if (acrylicButton.classList.contains('primary'))
-					acrylicButton.classList.remove('primary');
+			let originalBackground = document.documentElement.style.background;
+			window
+				.matchMedia('(prefers-color-scheme: dark)')
+				.addEventListener('change', () => {
+					originalBackground = document.documentElement.style.background;
+				});
 
-				micaButton.classList.toggle('primary');
-				await Millennium.invoke('toggle_mica');
-			});
-			acrylicButton.addEventListener('click', async () => {
-				if (micaButton.classList.contains('primary'))
-					micaButton.classList.remove('primary');
+			for (const id of buttons) {
+				const el = document.getElementById(id);
+				el.addEventListener('click', async () => {
+					for (const otherId of buttons)
+						if (otherId !== id) {
+							const otherEl = document.getElementById(otherId);
+							if (otherEl.classList.contains('primary'))
+								otherEl.classList.remove('primary');
+						}
 
-				acrylicButton.classList.toggle('primary');
-				await Millennium.invoke('toggle_acrylic');
+					el.classList.add('primary');
+					document.documentElement.style.background = 'transparent';
+					await Millennium.invoke('apply', { effect: id });
+				});
+			}
+
+			document.getElementById('clear').addEventListener('click', async () => {
+				for (const otherId of buttons) {
+					const otherEl = document.getElementById(otherId);
+					if (otherEl.classList.contains('primary'))
+						otherEl.classList.remove('primary');
+				}
+
+				document.documentElement.style.background = originalBackground;
+				await Millennium.invoke('clear');
 			});
 		</script>
 	</body>
