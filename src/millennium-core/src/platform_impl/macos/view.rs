@@ -309,10 +309,9 @@ extern "C" fn reset_cursor_rects(this: &Object, _sel: Sel) {
 		let bounds: NSRect = msg_send![this, bounds];
 		let cursor_state = state.cursor_state.lock().unwrap();
 		let cursor = if cursor_state.visible { cursor_state.cursor.load() } else { util::invisible_cursor() };
-		let _: () = msg_send![this,
-			addCursorRect:bounds
-			cursor:cursor
-		];
+		if !cursor.is_null() {
+			let _: () = msg_send![this, addCursorRect:bounds cursor:cursor];
+		}
 	}
 }
 
