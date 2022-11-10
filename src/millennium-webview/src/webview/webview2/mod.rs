@@ -16,11 +16,11 @@
 
 mod file_drop;
 
-use std::{collections::HashSet, fmt::Write, iter::once, mem::MaybeUninit, os::windows::prelude::OsStrExt, rc::Rc, sync::mpsc};
+use std::{collections::HashSet, fmt::Write, iter::once, mem::MaybeUninit, os::windows::prelude::OsStrExt, path::PathBuf, rc::Rc, sync::mpsc};
 
-use file_drop::FileDropController;
 use http::Request;
 use once_cell::unsync::OnceCell;
+use url::Url;
 use webview2_com::{Microsoft::Web::WebView2::Win32::*, *};
 use windows::{
 	core::{Interface, PCSTR, PCWSTR, PWSTR},
@@ -40,6 +40,7 @@ use windows::{
 	}
 };
 
+use self::file_drop::FileDropController;
 use crate::{
 	application::{platform::windows::WindowExtWindows, window::Window},
 	webview::{Rgba, WebContext, WebViewAttributes},
@@ -329,6 +330,70 @@ impl InnerWebView {
 			}
 		}
 
+		if attributes.download_started_handler.is_some() || attributes.download_completed_handler.is_some() {
+			unsafe {
+				let webview4: ICoreWebView2_4 = webview.cast().map_err(webview2_com::Error::WindowsError)?;
+
+				let mut download_started_handler = attributes.download_started_handler.take();
+				let download_completed_handler = attributes.download_completed_handler.take();
+
+				webview4
+					.add_DownloadStarting(
+						&DownloadStartingEventHandler::create(Box::new(move |_, args| {
+							if let Some(args) = args {
+								let mut uri = PWSTR::null();
+								args.DownloadOperation()?.Uri(&mut uri)?;
+								let uri = take_pwstr(uri);
+
+								if let Some(download_completed_handler) = download_completed_handler.clone() {
+									args.DownloadOperation()?.add_StateChanged(
+										&StateChangedEventHandler::create(Box::new(move |download_operation, _| {
+											if let Some(download_operation) = download_operation {
+												let mut state: COREWEBVIEW2_DOWNLOAD_STATE = COREWEBVIEW2_DOWNLOAD_STATE::default();
+												download_operation.State(&mut state)?;
+												if state != COREWEBVIEW2_DOWNLOAD_STATE_IN_PROGRESS {
+													let mut path = PWSTR::null();
+													download_operation.ResultFilePath(&mut path)?;
+													let path = take_pwstr(path);
+													let mut uri = PWSTR::null();
+													download_operation.Uri(&mut uri)?;
+													let uri = take_pwstr(uri);
+
+													let success = state == COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED;
+													download_completed_handler(uri, success.then(|| PathBuf::from(path)), success);
+												}
+											}
+
+											Ok(())
+										})),
+										&mut token
+									)?;
+								}
+								if let Some(download_started_handler) = download_started_handler.as_mut() {
+									let mut path = PWSTR::null();
+									args.ResultFilePath(&mut path)?;
+									let path = take_pwstr(path);
+									let mut path = PathBuf::from(&path);
+
+									if download_started_handler(uri, &mut path) {
+										let simplified = dunce::simplified(&path);
+										let result_file_path = PCWSTR::from_raw(encode_wide(simplified.as_os_str()).as_ptr());
+										args.SetResultFilePath(result_file_path)?;
+										args.SetHandled(true)?;
+									} else {
+										args.SetCancel(true)?;
+									}
+								}
+							}
+
+							Ok(())
+						})),
+						&mut token
+					)
+					.map_err(webview2_com::Error::WindowsError)?;
+			}
+		}
+
 		if let Some(new_window_req_handler) = attributes.new_window_handler {
 			unsafe {
 				webview
@@ -425,12 +490,15 @@ impl InnerWebView {
 								if let Some(custom_protocol) = custom_protocols.iter().find(|(name, _)| uri.starts_with(&format!("https://{}.", name))) {
 									// Undo the protocol workaround when giving path to resolver
 									let path = uri.replace(&format!("https://{}.", custom_protocol.0), &format!("{}://", custom_protocol.0));
-									let final_request = request.uri(&path).method(request_method.as_str()).body(body_sent).unwrap();
+									let final_request = match request.uri(&path).method(request_method.as_str()).body(body_sent) {
+										Ok(req) => req,
+										Err(_) => return Err(E_FAIL.into())
+									};
 
 									return match (custom_protocol.1)(&final_request) {
 										Ok(sent_response) => {
 											let content = sent_response.body();
-											let status_code = sent_response.status().as_u16() as i32;
+											let status_code = sent_response.status();
 
 											let mut headers_map = String::new();
 
@@ -459,8 +527,8 @@ impl InnerWebView {
 
 											let response = env.CreateWebResourceResponse(
 												body_sent.as_ref(),
-												status_code,
-												PCWSTR::from_raw(encode_wide("OK").as_ptr()),
+												status_code.as_u16() as i32,
+												PCWSTR::from_raw(encode_wide(status_code.canonical_reason().unwrap_or("OK")).as_ptr()),
 												PCWSTR::from_raw(encode_wide(headers_map).as_ptr())
 											)?;
 
@@ -560,7 +628,7 @@ impl InnerWebView {
 						let _ = (*controller).SetIsVisible(false);
 					}
 
-					if wparam == WPARAM(win32wm::SIZE_RESTORED as _) {
+					if wparam == WPARAM(win32wm::SIZE_RESTORED as _) || wparam == WPARAM(win32wm::SIZE_MAXIMIZED as _) {
 						let _ = (*controller).SetIsVisible(true);
 					}
 				}
@@ -615,6 +683,14 @@ impl InnerWebView {
 
 	pub fn print(&self) {
 		let _ = self.eval("window.print()");
+	}
+
+	pub fn url(&self) -> Url {
+		let mut pwstr = PWSTR::null();
+		unsafe { self.webview.Source(&mut pwstr).unwrap() };
+
+		let uri = take_pwstr(pwstr);
+		Url::parse(&uri).unwrap()
 	}
 
 	pub fn eval(&self, js: &str) -> Result<()> {

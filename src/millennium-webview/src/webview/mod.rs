@@ -18,7 +18,7 @@
 
 mod web_context;
 
-pub use web_context::WebContext;
+pub use self::web_context::WebContext;
 
 #[cfg(target_os = "android")]
 pub(crate) mod android;
@@ -27,17 +27,17 @@ pub mod prelude {
 	pub use super::android::{binding::*, setup};
 }
 #[cfg(target_os = "android")]
-pub use android::JniHandle;
+pub use self::android::JniHandle;
 #[cfg(target_os = "android")]
-use android::*;
+use self::android::*;
 #[cfg(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))]
 pub(crate) mod webkitgtk;
 #[cfg(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))]
-use webkitgtk::*;
+use self::webkitgtk::*;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub(crate) mod wkwebview;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-use wkwebview::*;
+use self::wkwebview::*;
 #[cfg(target_os = "windows")]
 pub(crate) mod webview2;
 use std::{path::PathBuf, rc::Rc};
@@ -116,9 +116,7 @@ pub struct WebViewAttributes {
 	/// Register custom file loading protocols with pairs of scheme uri string
 	/// and a handling closure.
 	///
-	/// The closure takes a url string slice, and returns a two item tuple of a
-	/// vector of bytes which is the content and a mimetype string of the
-	/// content.
+	/// The closure takes a [Response] and returns a [Request].
 	///
 	/// # Warning
 	/// Pages loaded from custom protocol will have different Origin on
@@ -169,6 +167,29 @@ pub struct WebViewAttributes {
 	/// The closure takes the URL as a `String` parameter and returns a `bool` to determine whether to allow navigation.
 	pub navigation_handler: Option<Box<dyn Fn(String) -> bool>>,
 
+	/// Set a download started handler to manage incoming downloads.
+	///
+	/// The closure takes two parameters - the first is a `String` representing the url being downloaded from and and
+	/// the second is a mutable `PathBuf` reference that (possibly) represents where the file will be downloaded to. The
+	/// latter parameter can be used to override the download location by assigning a new path to it - the assigned path
+	/// _must_ be absolute. The closure returns a `bool` to allow or deny the download.
+	pub download_started_handler: Option<Box<dyn FnMut(String, &mut PathBuf) -> bool>>,
+
+	/// Sets a download completion handler to manage downloads that have finished.
+	///
+	/// The closure is fired when the download completes, whether it was successful or not.
+	/// The closure takes a `String` representing the URL of the original download request, an `Option<PathBuf>`
+	/// potentially representing the filesystem path the file was downloaded to, and a `bool` indicating if the download
+	/// succeeded. A value of `None` being passed instead of a `PathBuf` does not necessarily indicate that the download
+	/// did not succeed, and may instead indicate some other failure - always check the third parameter if you need to
+	/// know if the download succeeded.
+	///
+	/// ## Platform-specific:
+	///
+	/// - **macOS**: The second parameter indicating the path the file was saved to is always `None` due to API
+	/// limitations.
+	pub download_completed_handler: Option<Rc<dyn Fn(String, Option<PathBuf>, bool) + 'static>>,
+
 	/// Set a new window handler to decide if an incoming URL is allowed to open in a new window.
 	///
 	/// The closure takes the URL as a `String` parameter and returns a `bool` to determine whether to allow navigation.
@@ -195,7 +216,13 @@ pub struct WebViewAttributes {
 	/// - **Android**: Open `chrome://inspect/#devices` in Chrome to get the devtools window. The `WebView` devtools
 	///   APIs aren't supported on Android.
 	/// - **iOS**: Open Safari > Develop > [Device Name] > [Your WebView] to get the devtools window.
-	pub devtools: bool
+	pub devtools: bool,
+	/// Whether clicking an inactive window should also click through to the webview. Default is `false`.
+	///
+	/// ## Platform-specific
+	///
+	/// Only supported on macOS.
+	pub accept_first_mouse: bool
 }
 
 impl Default for WebViewAttributes {
@@ -212,10 +239,16 @@ impl Default for WebViewAttributes {
 			ipc_handler: None,
 			file_drop_handler: None,
 			navigation_handler: None,
+			download_started_handler: None,
+			download_completed_handler: None,
 			new_window_handler: None,
 			clipboard: false,
+			#[cfg(debug_assertions)]
+			devtools: true,
+			#[cfg(not(debug_assertions))]
 			devtools: false,
-			zoom_hotkeys_enabled: false
+			zoom_hotkeys_enabled: false,
+			accept_first_mouse: false
 		}
 	}
 }
@@ -318,9 +351,7 @@ impl<'a> WebViewBuilder<'a> {
 	/// Register custom file loading protocols with pairs of scheme uri string
 	/// and a handling closure.
 	///
-	/// The closure takes a url string slice, and returns a two item tuple of a
-	/// vector of bytes which is the content and a mimetype string of the
-	/// content.
+	/// The closure takes a [Response] and returns a [Request].
 	///
 	/// # Warning
 	/// Pages loaded from custom protocol will have different Origin on
@@ -424,6 +455,11 @@ impl<'a> WebViewBuilder<'a> {
 	/// - Windows: `null`
 	/// - Android: not supported
 	/// - iOS: not supported
+	///
+	/// ## PLatform-specific:
+	///
+	/// - **Windows**: The HTML contents must not be larger than 2 MB (2 * 1024 * 1024 bytes) in total size; use a
+	///   custom protocol if you need to load a larger file.
 	pub fn with_html(mut self, html: impl Into<String>) -> Result<Self> {
 		self.webview.html = Some(html.into());
 		Ok(self)
@@ -441,7 +477,7 @@ impl<'a> WebViewBuilder<'a> {
 		self
 	}
 
-	/// Enable the web inspector/devtools.
+	/// Enable/disable the web inspector/devtools.
 	///
 	/// Note this only enables devtools on the webview. To open it, you can call
 	/// [`WebView::open_devtools`], or right click the page and open it from the
@@ -460,6 +496,35 @@ impl<'a> WebViewBuilder<'a> {
 		self
 	}
 
+	/// Set a download started handler to manage incoming downloads.
+	///
+	/// The closure takes two parameters - the first is a `String` representing the url being downloaded from and and
+	/// the second is a mutable `PathBuf` reference that (possibly) represents where the file will be downloaded to. The
+	/// latter parameter can be used to override the download location by assigning a new path to it - the assigned path
+	/// _must_ be absolute. The closure returns a `bool` to allow or deny the download.
+	pub fn with_download_started_handler(mut self, started_handler: impl FnMut(String, &mut PathBuf) -> bool + 'static) -> Self {
+		self.webview.download_started_handler = Some(Box::new(started_handler));
+		self
+	}
+
+	/// Sets a download completion handler to manage downloads that have finished.
+	///
+	/// The closure is fired when the download completes, whether it was successful or not.
+	/// The closure takes a `String` representing the URL of the original download request, an `Option<PathBuf>`
+	/// potentially representing the filesystem path the file was downloaded to, and a `bool` indicating if the download
+	/// succeeded. A value of `None` being passed instead of a `PathBuf` does not necessarily indicate that the download
+	/// did not succeed, and may instead indicate some other failure - always check the third parameter if you need to
+	/// know if the download succeeded.
+	///
+	/// ## Platform-specific:
+	///
+	/// - **macOS**: The second parameter indicating the path the file was saved to is always `None` due to API
+	/// limitations.
+	pub fn with_download_completed_handler(mut self, download_completed_handler: impl Fn(String, Option<PathBuf>, bool) + 'static) -> Self {
+		self.webview.download_completed_handler = Some(Rc::new(download_completed_handler));
+		self
+	}
+
 	/// Enables clipboard access for the page on **Linux** and **Windows**.
 	///
 	/// macOS doesn't provide such method and is always enabled by default. However, you still need to add menu
@@ -474,6 +539,16 @@ impl<'a> WebViewBuilder<'a> {
 	/// The closure takes the URL as a `String` parameter and returns a `bool` to determine whether to allow navigation.
 	pub fn with_new_window_handler(mut self, callback: impl Fn(String) -> bool + 'static) -> Self {
 		self.webview.new_window_handler = Some(Box::new(callback));
+		self
+	}
+
+	/// Sets whether clicking an inactive window should also click through to the webview. Default is `false`.
+	///
+	/// ## Platform-specific
+	///
+	/// Only supported on macOS.
+	pub fn with_accept_first_mouse(mut self, accept_first_mouse: bool) -> Self {
+		self.webview.accept_first_mouse = accept_first_mouse;
 		self
 	}
 
@@ -565,6 +640,11 @@ impl WebView {
 	/// perform window related actions.
 	pub fn window(&self) -> &Window {
 		&self.window
+	}
+
+	/// Retrieve the current URL of the webview.
+	pub fn url(&self) -> Url {
+		self.webview.url()
 	}
 
 	/// Evaluate and run javascript code. Must be called on the same thread who

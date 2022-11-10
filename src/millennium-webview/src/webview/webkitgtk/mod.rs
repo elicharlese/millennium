@@ -29,21 +29,22 @@ use gdk::{Cursor, EventMask, WindowEdge};
 use gio::Cancellable;
 use glib::signal::Inhibit;
 use gtk::prelude::*;
-use web_context::WebContextExt;
-pub use web_context::WebContextImpl;
+use url::Url;
 use webkit2gtk::{
 	traits::*, NavigationPolicyDecision, PolicyDecisionType, UserContentInjectedFrames, UserScript, UserScriptInjectionTime, WebView, WebViewBuilder
 };
 use webkit2gtk_sys::{webkit_get_major_version, webkit_get_micro_version, webkit_get_minor_version, webkit_policy_decision_ignore, webkit_policy_decision_use};
 
+mod file_drop;
+mod web_context;
+
+use self::web_context::WebContextExt;
+pub use self::web_context::WebContextImpl;
 use crate::{
 	application::{platform::unix::*, window::Window},
 	webview::{web_context::WebContext, Rgba, WebViewAttributes},
 	Error, Result
 };
-
-mod file_drop;
-mod web_context;
 
 pub(crate) struct InnerWebView {
 	pub webview: Rc<WebView>,
@@ -232,8 +233,12 @@ impl InnerWebView {
 			});
 		}
 
-		// Gtk application window can only contain one widget at a time.
-		// In Millennium Core, we add a GtkBox to pack menu bar. So we check if
+		if attributes.download_started_handler.is_some() || attributes.download_completed_handler.is_some() {
+			web_context.register_download_handler(attributes.download_started_handler, attributes.download_completed_handler)
+		}
+
+		// The GTK application window can only contain one widget at a time.
+		// In Millennium Core, we add a GtkBox to pack menu bar, so we check if
 		// there's a box widget here.
 		if let Some(widget) = window.children().pop() {
 			let vbox = widget.downcast::<gtk::Box>().unwrap();
@@ -245,7 +250,7 @@ impl InnerWebView {
 		if let Some(settings) = WebViewExt::settings(&*webview) {
 			settings.set_enable_webgl(true);
 			settings.set_enable_webaudio(true);
-			settings.set_enable_accelerated_2d_canvas(true);
+			// settings.set_enable_accelerated_2d_canvas(true);
 
 			// Enable clipboard
 			if attributes.clipboard {
@@ -338,6 +343,11 @@ impl InnerWebView {
 
 	pub fn print(&self) {
 		let _ = self.eval("window.print()");
+	}
+
+	pub fn url(&self) -> Url {
+		let uri = self.webview.uri().unwrap();
+		Url::parse(uri.as_str()).unwrap()
 	}
 
 	pub fn eval(&self, js: &str) -> Result<()> {

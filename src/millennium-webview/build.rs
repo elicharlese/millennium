@@ -15,8 +15,8 @@
 // limitations under the License.
 
 fn main() {
-	let is_macos = std::env::var("TARGET").map(|t| t.ends_with("-darwin")).unwrap_or_default();
-	if is_macos {
+	let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+	if target_os == "macos" || target_os == "ios" {
 		println!("cargo:rustc-link-lib=framework=WebKit");
 	}
 

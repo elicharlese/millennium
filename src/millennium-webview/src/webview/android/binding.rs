@@ -19,7 +19,7 @@ use http::{
 };
 use millennium_core::platform::android::ndk_glue::jni::{
 	errors::Error as JniError,
-	objects::{JClass, JMap, JObject, JString},
+	objects::{JClass, JMap, JObject, JString, JValue},
 	sys::jobject,
 	JNIEnv
 };
@@ -47,7 +47,13 @@ fn handle_request(env: JNIEnv, request: JObject) -> Result<jobject, JniError> {
 	}
 
 	if let Some(handler) = REQUEST_HANDLER.get() {
-		let response = (handler.0)(request_builder.body(Vec::new()).unwrap());
+		let final_request = match request_builder.body(Vec::new()) {
+			Ok(req) => req,
+			Err(_) => {
+				return Ok(*JObject::null());
+			}
+		};
+		let response = (handler.0)(final_request);
 		if let Some(response) = response {
 			let status_code = response.status().as_u16() as i32;
 			let reason_phrase = "OK";
@@ -77,7 +83,7 @@ fn handle_request(env: JNIEnv, request: JObject) -> Result<jobject, JniError> {
 
 			let byte_array_input_stream = env.find_class("java/io/ByteArrayInputStream")?;
 			let byte_array = env.byte_array_from_slice(&bytes)?;
-			let stream = env.new_object(byte_array_input_stream, "([B)V", &[byte_array.into()])?;
+			let stream = env.new_object(byte_array_input_stream, "([B)V", &[JValue::Object(unsafe { JObject::from_raw(byte_array) })])?;
 
 			let web_resource_response_class = env.find_class("android/webkit/WebResourceResponse")?;
 			let web_resource_response = env.new_object(

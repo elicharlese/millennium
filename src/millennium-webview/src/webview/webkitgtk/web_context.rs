@@ -17,8 +17,11 @@
 //! Unix platform extensions for [`WebContext`](super::WebContext).
 
 use std::{
+	cell::RefCell,
 	collections::{HashSet, VecDeque},
+	path::PathBuf,
 	rc::Rc,
+	str::FromStr,
 	sync::{
 		atomic::{AtomicBool, Ordering::SeqCst},
 		Mutex
@@ -26,14 +29,22 @@ use std::{
 };
 
 use glib::FileError;
-use http::{header::CONTENT_TYPE, Request, Response};
-use url::Url;
-// use webkit2gtk_sys::webkit_uri_request_get_http_headers;
-use webkit2gtk::{
-	traits::*, ApplicationInfo, CookiePersistentStorage, LoadEvent, UserContentManager, WebContext, WebContextBuilder, WebView, WebsiteDataManagerBuilder
+use http::{
+	header::{HeaderName, CONTENT_TYPE},
+	HeaderValue, Request, Response
 };
+use soup::{MessageHeaders, MessageHeadersType};
+use url::Url;
+use webkit2gtk::{
+	traits::*, ApplicationInfo, CookiePersistentStorage, LoadEvent, URISchemeResponse, UserContentManager, WebContext, WebContextBuilder, WebView,
+	WebsiteDataManagerBuilder
+};
+use webkit2gtk_sys::webkit_get_minor_version;
 
 use crate::{webview::web_context::WebContextData, Error};
+
+// header support was introduced in webkit2gtk v2.36
+const HEADER_SUPPORT_MINOR_RELEASE: u32 = 36;
 
 #[derive(Debug)]
 pub struct WebContextImpl {
@@ -42,7 +53,8 @@ pub struct WebContextImpl {
 	webview_uri_loader: Rc<WebviewUriLoader>,
 	registered_protocols: HashSet<String>,
 	automation: bool,
-	app_info: Option<ApplicationInfo>
+	app_info: Option<ApplicationInfo>,
+	webkit2gtk_minor_ver: u32
 }
 
 impl WebContextImpl {
@@ -75,13 +87,16 @@ impl WebContextImpl {
 			env!("CARGO_PKG_VERSION_PATCH").parse().expect("invalid Millennium Webview version patch")
 		);
 
+		let webkit2gtk_minor_ver = unsafe { webkit_get_minor_version() };
+
 		Self {
 			context,
 			automation,
 			manager: UserContentManager::new(),
 			registered_protocols: Default::default(),
 			webview_uri_loader: Rc::default(),
-			app_info: Some(app_info)
+			app_info: Some(app_info),
+			webkit2gtk_minor_ver
 		}
 	}
 
@@ -136,6 +151,12 @@ pub trait WebContextExt {
 	fn allows_automation(&self) -> bool;
 
 	fn register_automation(&mut self, webview: WebView);
+
+	fn register_download_handler(
+		&mut self,
+		download_started_callback: Option<Box<dyn FnMut(String, &mut PathBuf) -> bool>>,
+		download_completed_callback: Option<Rc<dyn Fn(String, Option<PathBuf>, bool) + 'static>>
+	);
 }
 
 impl WebContextExt for super::WebContext {
@@ -203,11 +224,66 @@ impl WebContextExt for super::WebContext {
 	}
 }
 
+fn register_download_handler(
+	&mut self,
+	download_started_handler: Option<Box<dyn FnMut(String, &mut PathBuf) -> bool>>,
+	download_completed_handler: Option<Rc<dyn Fn(String, Option<PathBuf>, bool) + 'static>>
+) {
+	use webkit2gtk::traits::*;
+	let context = &self.os.context;
+
+	let download_started_handler = RefCell::new(download_started_handler);
+	let failed = Rc::new(RefCell::new(false));
+
+	context.connect_download_started(move |_context, download| {
+		if let Some(uri) = download.request().and_then(|req| req.uri()) {
+			let uri = uri.to_string();
+			let mut download_location = download.destination().and_then(|p| PathBuf::from_str(&p).ok()).unwrap_or_default();
+
+			if let Some(download_started_handler) = download_started_handler.borrow_mut().as_mut() {
+				if download_started_handler(uri, &mut download_location) {
+					download.connect_response_notify(move |download| {
+						download.set_destination(&download_location.to_string_lossy());
+					});
+				} else {
+					download.cancel();
+				}
+			}
+		}
+		download.connect_failed({
+			let failed = failed.clone();
+			move |_, _error| {
+				*failed.borrow_mut() = true;
+			}
+		});
+		if let Some(download_completed_handler) = download_completed_handler.clone() {
+			download.connect_finished({
+				let failed = failed.clone();
+				move |download| {
+					if let Some(uri) = download.request().and_then(|req| req.uri()) {
+						let failed = failed.borrow();
+						let uri = uri.to_string();
+						download_completed_handler(
+							uri,
+							(!*failed)
+								.then(|| download.destination().map_or_else(|| None, |p| Some(PathBuf::from(p.as_str()))))
+								.flatten(),
+							!*failed
+						)
+					}
+				}
+			});
+		}
+	});
+}
+
 fn actually_register_uri_scheme<F>(context: &mut super::WebContext, name: &str, handler: F) -> crate::Result<()>
 where
 	F: Fn(&Request<Vec<u8>>) -> crate::Result<Response<Vec<u8>>> + 'static
 {
 	use webkit2gtk::traits::*;
+	let webkit2gtk_minor_ver = context.os.webkit2gtk_minor_ver;
+
 	let context = &context.os.context;
 	// Enable secure context
 	context
@@ -219,24 +295,53 @@ where
 		if let Some(uri) = request.uri() {
 			let uri = uri.as_str();
 
-			// let headers = unsafe {
-			// 	webkit_uri_request_get_http_headers(request.clone().to_glib_none().0)
-			// };
+			let mut http_request = Request::builder().uri(uri).method("GET");
+			if webkit2gtk_minor_ver >= HEADER_SUPPORT_MINOR_RELEASE {
+				if let Some(mut headers) = request.http_headers() {
+					if let Some(map) = http_request.headers_mut() {
+						headers.foreach(move |k, v| {
+							if let Ok(name) = HeaderName::from_bytes(k.as_bytes()) {
+								if let Ok(value) = HeaderValue::from_bytes(v.as_bytes()) {
+									map.insert(name, value);
+								}
+							}
+						});
+					}
+				}
 
-			// FIXME: Read the method
-			// FIXME: Read the headers
-			// FIXME: Read the body (forms post)
-			let http_request = Request::builder().uri(uri).method("GET").body(Vec::new()).unwrap();
+				if let Some(method) = request.http_method() {
+					http_request = http_request.method(method.as_str());
+				}
+			}
+			let http_request = match http_request.body(Vec::new()) {
+				Ok(req) => req,
+				Err(_) => {
+					request.finish_error(&mut glib::Error::new(FileError::Exist, "Could not get URI."));
+					return;
+				}
+			};
 
 			match handler(&http_request) {
 				Ok(http_response) => {
 					let buffer = http_response.body();
+					let content_type = http_response.headers().get(CONTENT_TYPE).and_then(|h| h.to_str().ok());
+					if webkit2gtk_minor_ver >= HEADER_SUPPORT_MINOR_RELEASE {
+						let response = URISchemeResponse::new(&input, buffer.len() as i64);
+						response.set_status(http_response.status().as_u16() as u32, None);
+						if let Some(content_type) = content_type {
+							response.set_content_type(content_type);
+						}
 
-					// FIXME: Set status code
-					// FIXME: Set sent headers
+						let mut headers = MessageHeaders::new(MessageHeadersType::Response);
+						for (name, value) in http_response.headers().into_iter() {
+							headers.append(name.as_str(), value.to_str().unwrap_or(""));
+						}
+						response.set_http_headers(&mut headers);
 
-					let input = gio::MemoryInputStream::from_bytes(&glib::Bytes::from(buffer));
-					request.finish(&input, buffer.len() as i64, http_response.headers().get(CONTENT_TYPE).map(|h| h.to_str().unwrap_or("text/plain")))
+						request.finish_with_response(&response);
+					} else {
+						request.finish(&input, buffer.len() as i64, content_type)
+					}
 				}
 				Err(_) => request.finish_error(&mut glib::Error::new(FileError::Exist, "Could not get requested file."))
 			}

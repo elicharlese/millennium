@@ -33,6 +33,7 @@ use millennium_core::platform::android::ndk_glue::{
 };
 use once_cell::sync::OnceCell;
 use sha2::{Digest, Sha256};
+use url::Url;
 
 use super::{Rgba, WebContext, WebViewAttributes};
 use crate::{application::window::Window, Result};
@@ -210,6 +211,13 @@ impl InnerWebView {
 	}
 
 	pub fn print(&self) {}
+
+	pub fn url(&self) -> Url {
+		let (tx, rx) = bounded(1);
+		MainPipe::send(WebViewMessage::GetUrl(tx));
+		let uri = rx.recv().unwrap();
+		Url::parse(uri.as_str()).unwrap()
+	}
 
 	pub fn eval(&self, js: &str) -> Result<()> {
 		MainPipe::send(WebViewMessage::Eval(js.into()));
