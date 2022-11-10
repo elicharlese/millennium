@@ -165,7 +165,6 @@ lazy_static! {
 			sel!(firstRectForCharacterRange:actualRange:),
 			first_rect_for_character_range as extern "C" fn(&Object, Sel, NSRange, *mut c_void) -> NSRect
 		);
-		decl.add_method(sel!(doCommandBySelector:), do_command_by_selector as extern "C" fn(&Object, Sel, Sel));
 		decl.add_method(sel!(keyDown:), key_down as extern "C" fn(&mut Object, Sel, id));
 		decl.add_method(sel!(keyUp:), key_up as extern "C" fn(&Object, Sel, id));
 		decl.add_method(sel!(flagsChanged:), flags_changed as extern "C" fn(&Object, Sel, id));
@@ -448,18 +447,6 @@ extern "C" fn insert_text(this: &Object, _sel: Sel, string: id, _replacement_ran
 		}
 	}
 	trace!("Completed `insertText`");
-}
-
-extern "C" fn do_command_by_selector(_this: &Object, _sel: Sel, _command: Sel) {
-	trace!("Triggered `doCommandBySelector`");
-	// TODO: (Artur) all these inputs seem to trigger a key event with the correct
-	// text content so this is not needed anymore, it seems.
-
-	// Basically, we're sent this message whenever a keyboard event that doesn't
-	// generate a "human readable" character happens, i.e. newlines, tabs, and
-	// Ctrl+C.
-
-	trace!("Completed `doCommandBySelector`");
 }
 
 // As defined in: https://www.unicode.org/Public/MAPPINGS/VENDORS/APPLE/CORPCHAR.TXT
