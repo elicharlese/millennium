@@ -238,7 +238,6 @@ impl WebContextExt for super::WebContext {
 			if let Some(uri) = download.request().and_then(|req| req.uri()) {
 				let uri = uri.to_string();
 				let mut download_location = download.destination().and_then(|p| PathBuf::from_str(&p).ok()).unwrap_or_default();
-
 				if let Some(download_started_handler) = download_started_handler.borrow_mut().as_mut() {
 					if download_started_handler(uri, &mut download_location) {
 						download.connect_response_notify(move |download| {
@@ -324,6 +323,7 @@ where
 			match handler(&http_request) {
 				Ok(http_response) => {
 					let buffer = http_response.body();
+					let input = gio::MemoryInputStream::from_bytes(&glib::Bytes::from(buffer));
 					let content_type = http_response.headers().get(CONTENT_TYPE).and_then(|h| h.to_str().ok());
 					if webkit2gtk_minor_ver >= HEADER_SUPPORT_MINOR_RELEASE {
 						let response = URISchemeResponse::new(&input, buffer.len() as i64);

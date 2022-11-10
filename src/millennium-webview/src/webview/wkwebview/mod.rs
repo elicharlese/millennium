@@ -401,7 +401,7 @@ impl InnerWebView {
 				}
 			}
 
-			let (navigation_decide_policy_ptr, download_delegate) =
+			let (nav_decide_policy_ptr, download_delegate) =
 				if attributes.navigation_handler.is_some() || attributes.new_window_handler.is_some() || attributes.download_started_handler.is_some() {
 					let cls = match ClassDecl::new("UIViewController", class!(NSObject)) {
 						Some(mut cls) => {
