@@ -23,6 +23,7 @@ use std::{
 };
 
 use ignore::WalkBuilder;
+use millennium_utils::config::parse::ConfigFormat;
 use once_cell::sync::Lazy;
 
 const MILLENNIUM_GITIGNORE: &[u8] = include_bytes!("../../millennium.gitignore");
@@ -40,7 +41,7 @@ fn lookup<F: Fn(&PathBuf, FileType) -> bool>(dir: &Path, checker: F) -> Option<P
 	let mut builder = WalkBuilder::new(dir);
 	let _ = builder.add_ignore(default_gitignore);
 	builder
-		.add_custom_ignore_filename(".m2kignore")
+		.add_custom_ignore_filename(".m1kignore")
 		.add_custom_ignore_filename(".millenniumignore")
 		.require_git(false)
 		.ignore(false)
@@ -66,15 +67,21 @@ fn lookup<F: Fn(&PathBuf, FileType) -> bool>(dir: &Path, checker: F) -> Option<P
 fn get_millennium_dir() -> PathBuf {
 	lookup(&current_dir().expect("failed to read cwd"), |path, file_type| {
 		if file_type.is_dir() {
-			path.join(".millenniumrc").exists() || path.join(".millenniumrc.json").exists()
+			path.join(ConfigFormat::Toml.into_file_name()).exists() || path.join(ConfigFormat::Json5.into_file_name()).exists()
 		} else if let Some(file_name) = path.file_name() {
-			file_name == OsStr::new(".millenniumrc") || file_name == OsStr::new(".millenniumrc.json")
+			file_name == OsStr::new(ConfigFormat::Toml.into_file_name()) || file_name == OsStr::new(ConfigFormat::Json5.into_file_name())
 		} else {
 			false
 		}
 	})
 	.map(|p| if p.is_dir() { p } else { p.parent().unwrap().to_path_buf() })
-	.expect("Couldn't recognize the current folder as a Millennium project. It must contain a `.millenniumrc` or `.millenniumrc.json` file in any subfolder.")
+	.unwrap_or_else(|| {
+		panic!(
+			"Couldn't recognize the current folder as a Millennium project. It must contain a `{}` or `{}` file in any subfolder.",
+			ConfigFormat::Toml.into_file_name(),
+			ConfigFormat::Json5.into_file_name()
+		)
+	})
 }
 
 fn get_app_dir() -> Option<PathBuf> {

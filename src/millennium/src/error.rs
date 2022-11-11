@@ -83,8 +83,8 @@ pub enum Error {
 	/// Client with specified ID not found.
 	#[error("http client dropped or not initialized")]
 	HttpClientNotInitialized,
-	/// API not whitelisted on .millenniumrc
-	#[error("The API '{0}' is not enabled in the allowlist; check your Cargo.toml & .millenniumrc")]
+	/// API not whitelisted in config
+	#[error("The API '{0}' is not enabled in the allowlist; check your Cargo.toml & Millennium config file")]
 	ApiNotAllowlisted(String),
 	/// Invalid args when running a command.
 	#[error("invalid args `{1}` for command `{0}`: {2}")]
@@ -117,7 +117,7 @@ pub enum Error {
 	#[error("url not allowed on the configured scope: {0}")]
 	UrlNotAllowed(url::Url),
 	/// Sidecar not allowed by the configuration.
-	#[error("sidecar not configured under `.millenniumrc > millennium > bundle > externalBin`: {0}")]
+	#[error("sidecar not configured in Millennium config under `millennium > bundle > externalBin`: {0}")]
 	SidecarNotAllowed(PathBuf),
 	/// Sidecar was not found by the configuration.
 	#[cfg(shell_scope)]

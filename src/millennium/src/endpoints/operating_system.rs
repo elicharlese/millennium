@@ -90,6 +90,8 @@ fn os_type() -> &'static str {
 	return "Windows_NT";
 	#[cfg(target_os = "macos")]
 	return "Darwin";
+	#[cfg(target_os = "ios")]
+	return "iOS";
 }
 #[cfg(os_all)]
 fn os_platform() -> &'static str {

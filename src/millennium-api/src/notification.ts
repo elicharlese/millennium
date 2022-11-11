@@ -20,17 +20,10 @@
  * Send toast notifications (brief auto-expiring OS window element) to your user.
  * Can also be used via the web Notifications API.
  *
- * The APIs must be allowlisted in `.millenniumrc`:
- * ```json
- * {
- * 	"millennium": {
- * 		"allowlist": {
- * 			"notification": {
- * 				"all": true
- * 			}
- * 		}
- * 	}
- * }
+ * The APIs must be allowlisted in `Millennium.toml`:
+ * ```toml
+ * [millennium.allowlist.notification]
+ * all = true
  * ```
  *
  * @module

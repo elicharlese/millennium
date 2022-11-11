@@ -31,7 +31,7 @@ use std::path::MAIN_SEPARATOR;
 /// // first we build the application to access the Millennium configuration
 /// let app = millennium::Builder::default()
 /// 	// on an actual app, remove the string argument
-/// 	.build(millennium::generate_context!("test/fixture/.millenniumrc"))
+/// 	.build(millennium::generate_context!("test/fixture/Millennium.toml"))
 /// 	.expect("error while building Millennium application");
 ///
 /// // shows a notification with the given title and body
@@ -94,7 +94,7 @@ impl Notification {
 	/// use millennium::api::notification::Notification;
 	///
 	/// // on an actual app, remove the string argument
-	/// let context = millennium::generate_context!("test/fixture/.millenniumrc");
+	/// let context = millennium::generate_context!("test/fixture/Millennium.toml");
 	/// Notification::new(&context.config().millennium.bundle.identifier)
 	/// 	.title("Millennium App")
 	/// 	.body("Test notification")
@@ -156,7 +156,7 @@ impl Notification {
 	/// use millennium::api::notification::Notification;
 	///
 	/// // on an actual app, remove the string argument
-	/// let context = millennium::generate_context!("test/fixture/.millenniumrc");
+	/// let context = millennium::generate_context!("test/fixture/Millennium.toml");
 	/// let identifier = context.config().millennium.bundle.identifier.clone();
 	///
 	/// millennium::Builder::default()

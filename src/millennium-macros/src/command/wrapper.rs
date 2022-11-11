@@ -14,16 +14,65 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use heck::{ToLowerCamelCase, ToSnakeCase};
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{
 	ext::IdentExt,
-	parse::{Parse, ParseBuffer},
+	parse::{Parse, ParseStream},
 	parse_macro_input,
 	spanned::Spanned,
-	FnArg, Ident, ItemFn, Pat, Token, Visibility
+	FnArg, Ident, ItemFn, Lit, Meta, Pat, Token, Visibility
 };
+
+struct WrapperAttributes {
+	execution_context: ExecutionContext,
+	argument_case: ArgumentCase
+}
+
+impl Parse for WrapperAttributes {
+	fn parse(input: ParseStream) -> syn::Result<Self> {
+		let mut wrapper_attributes = WrapperAttributes {
+			execution_context: ExecutionContext::Blocking,
+			argument_case: ArgumentCase::Camel
+		};
+
+		loop {
+			match input.parse::<Meta>() {
+				Ok(Meta::List(_)) => {}
+				Ok(Meta::NameValue(v)) => {
+					if v.path.is_ident("rename_all") {
+						if let Lit::Str(s) = v.lit {
+							wrapper_attributes.argument_case = match s.value().as_str() {
+								"snake_case" => ArgumentCase::Snake,
+								"camelCase" => ArgumentCase::Camel,
+								_ => return Err(syn::Error::new(s.span(), "expected \"camelCase\" or \"snake_case\""))
+							};
+						}
+					}
+				}
+				Ok(Meta::Path(p)) => {
+					if p.is_ident("async") {
+						wrapper_attributes.execution_context = ExecutionContext::Async;
+					} else {
+						return Err(syn::Error::new(p.span(), "expected `async`"));
+					}
+				}
+				Err(_e) => {
+					break;
+				}
+			}
+
+			let lookahead = input.lookahead1();
+			if lookahead.peek(Token![,]) {
+				input.parse::<Token![,]>()?;
+			}
+		}
+
+		Ok(wrapper_attributes)
+	}
+}
 
 /// The execution context of the command.
 enum ExecutionContext {
@@ -31,17 +80,11 @@ enum ExecutionContext {
 	Blocking
 }
 
-impl Parse for ExecutionContext {
-	fn parse(input: &ParseBuffer<'_>) -> syn::Result<Self> {
-		if input.is_empty() {
-			return Ok(Self::Blocking);
-		}
-
-		input
-			.parse::<Token![async]>()
-			.map(|_| Self::Async)
-			.map_err(|_| syn::Error::new(input.span(), "only a single item `async` is currently allowed"))
-	}
+/// The case of each argument name.
+#[derive(Copy, Clone)]
+enum ArgumentCase {
+	Snake,
+	Camel
 }
 
 /// The bindings we attach to `millennium::Invoke`.
@@ -71,14 +114,16 @@ pub fn wrapper(attributes: TokenStream, item: TokenStream) -> TokenStream {
 
 	// body to the command wrapper or a `compile_error!` of an error occurred while
 	// parsing it.
-	let body = syn::parse::<ExecutionContext>(attributes)
-		.map(|context| match function.sig.asyncness {
-			Some(_) => ExecutionContext::Async,
-			None => context
+	let body = syn::parse::<WrapperAttributes>(attributes)
+		.map(|mut attrs| {
+			if function.sig.asyncness.is_some() {
+				attrs.execution_context = ExecutionContext::Async;
+			}
+			attrs
 		})
-		.and_then(|context| match context {
-			ExecutionContext::Async => body_async(&function, &invoke),
-			ExecutionContext::Blocking => body_blocking(&function, &invoke)
+		.and_then(|attrs| match attrs.execution_context {
+			ExecutionContext::Async => body_async(&function, &invoke, attrs.argument_case),
+			ExecutionContext::Blocking => body_blocking(&function, &invoke, attrs.argument_case)
 		})
 		.unwrap_or_else(syn::Error::into_compile_error);
 
@@ -115,9 +160,9 @@ pub fn wrapper(attributes: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// See the [`millennium::command`] module for all the items and traits that
 /// make this possible.
-fn body_async(function: &ItemFn, invoke: &Invoke) -> syn::Result<TokenStream2> {
+fn body_async(function: &ItemFn, invoke: &Invoke, case: ArgumentCase) -> syn::Result<TokenStream2> {
 	let Invoke { message, resolver } = invoke;
-	parse_args(function, message).map(|args| {
+	parse_args(function, message, case).map(|args| {
 		quote! {
 			#resolver.respond_async_serialized(async move {
 				let result = $path(#(#args?),*);
@@ -133,9 +178,9 @@ fn body_async(function: &ItemFn, invoke: &Invoke) -> syn::Result<TokenStream2> {
 ///
 /// See the [`millennium::command`] module for all the items and traits that
 /// make this possible.
-fn body_blocking(function: &ItemFn, invoke: &Invoke) -> syn::Result<TokenStream2> {
+fn body_blocking(function: &ItemFn, invoke: &Invoke, case: ArgumentCase) -> syn::Result<TokenStream2> {
 	let Invoke { message, resolver } = invoke;
-	let args = parse_args(function, message)?;
+	let args = parse_args(function, message, case)?;
 
 	// the body of a `match` to early return any argument that wasn't successful in
 	// parsing.
@@ -153,7 +198,7 @@ fn body_blocking(function: &ItemFn, invoke: &Invoke) -> syn::Result<TokenStream2
 
 /// Parse all arguments for the command wrapper to use from the signature of the
 /// command function.
-fn parse_args(function: &ItemFn, message: &Ident) -> syn::Result<Vec<TokenStream2>> {
+fn parse_args(function: &ItemFn, message: &Ident, case: ArgumentCase) -> syn::Result<Vec<TokenStream2>> {
 	function
 		.sig
 		.inputs
@@ -163,7 +208,7 @@ fn parse_args(function: &ItemFn, message: &Ident) -> syn::Result<Vec<TokenStream
 }
 
 /// Transform a [`FnArg`] into a command argument.
-fn parse_arg(command: &Ident, arg: &FnArg, message: &Ident) -> syn::Result<TokenStream2> {
+fn parse_arg(command: &Ident, arg: &FnArg, message: &Ident, case: ArgumentCase) -> syn::Result<TokenStream2> {
 	// we have no use for self arguments
 	let mut arg = match arg {
 		FnArg::Typed(arg) => arg.pat.as_ref().clone(),
@@ -185,9 +230,13 @@ fn parse_arg(command: &Ident, arg: &FnArg, message: &Ident) -> syn::Result<Token
 		return Err(syn::Error::new(key.span(), "unable to use self as a command function parameter"));
 	}
 
-	// snake_case -> camelCase
-	if key.as_str().contains('_') {
-		key = snake_case_to_camel_case(key.as_str());
+	match case {
+		ArgumentCase::Camel => {
+			key = key.to_lower_camel_case();
+		}
+		ArgumentCase::Snake => {
+			key = key.to_snake_case();
+		}
 	}
 
 	Ok(quote!(::millennium::command::CommandArg::from_command(
@@ -197,20 +246,4 @@ fn parse_arg(command: &Ident, arg: &FnArg, message: &Ident) -> syn::Result<Token
 			message: &#message,
 		}
 	)))
-}
-
-/// Convert a snake_case string into camelCase, no underscores will be left.
-fn snake_case_to_camel_case(key: &str) -> String {
-	let mut camel = String::with_capacity(key.len());
-	let mut to_upper = false;
-
-	for c in key.chars() {
-		match c {
-			'_' => to_upper = true,
-			c if std::mem::take(&mut to_upper) => camel.push(c.to_ascii_uppercase()),
-			c => camel.push(c)
-		}
-	}
-
-	camel
 }

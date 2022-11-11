@@ -19,34 +19,20 @@
 /**
  * Access the Rust HTTP client.
  *
- * The APIs must be allowlisted in `.millenniumrc`:
- * ```json
- * {
- * 	"millennium": {
- * 		"allowlist": {
- * 			"http": {
- * 				"all": true, // enable all HTTP APIs
- * 				"request": true // enable all request APIs
- * 			}
- * 		}
- * 	}
- * }
+ * The APIs must be allowlisted in `Millennium.toml`:
+ * ```toml
+ * [millennium.allowlist.http]
+ * all = true # enable all HTTP APIs
+ * request = true # enable all request APIs
  * ```
  *
  * ## Security
  * This API has a scope configuration that forces you to restrict the URLs and paths that can be accessed using glob patterns.
  *
  * For instance, this scope configuration only allows making HTTP requests to only paths on google.com:
- * ```json
- * {
- * 	"millennium": {
- * 		"allowlist": {
- * 			"http": {
- * 				"scope": [ "https://*.google.com/*" ]
- * 			}
- * 		}
- * 	}
- * }
+ * ```toml
+ * [millennium.allowlist.http]
+ * scope = [ "https://*.google.com/*" ]
  * ```
  *
  * @module
@@ -60,6 +46,10 @@ export interface Duration {
 }
 
 interface ClientOptions {
+	/**
+	 * Defines the maximum number of redirects the client should follow.
+	 * If set to 0, no redirects will be followed.
+	 */
 	maxRedirections?: number;
 	connectTimeout?: number | Duration;
 }

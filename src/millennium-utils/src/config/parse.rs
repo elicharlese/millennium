@@ -25,32 +25,81 @@ use thiserror::Error;
 use crate::config::Config;
 
 /// All file extensions that are supported.
-pub const EXTENSIONS_SUPPORTED: &[&str] = &["json", "json5", "jsonc"];
+pub const EXTENSIONS_SUPPORTED: &[&str] = &["json", "json5", "jsonc", "toml"];
+
+/// List of supported configuration formats.
+pub const SUPPORTED_FORMATS: &[ConfigFormat] = &[ConfigFormat::Json5, ConfigFormat::Toml];
+
+/// Millennium configuration file format.
+#[derive(Debug, Copy, Clone)]
+pub enum ConfigFormat {
+	/// Deprecated JSON5 (.millenniumrc) format
+	Json5,
+	/// TOML (Millennium.toml) format
+	Toml
+}
+
+impl ConfigFormat {
+	/// Maps the config format to its base file name.
+	pub fn into_file_name(self) -> &'static str {
+		match self {
+			Self::Json5 => ".millenniumrc",
+			Self::Toml => "Millennium.toml"
+		}
+	}
+
+	fn into_platform_file_name(self) -> &'static str {
+		match self {
+			Self::Json5 => {
+				if cfg!(target_os = "macos") {
+					".macos.millenniumrc"
+				} else if cfg!(windows) {
+					".windows.millenniumrc"
+				} else {
+					".linux.millenniumrc"
+				}
+			}
+			Self::Toml => {
+				if cfg!(target_os = "macos") {
+					"Millennium.macos.toml"
+				} else if cfg!(windows) {
+					"Millennium.windows.toml"
+				} else {
+					"Millennium.linux.toml"
+				}
+			}
+		}
+	}
+}
 
 /// Represents all the errors that can happen while reading the config.
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum ConfigError {
+	/// Failed to parse the config file in TOML format.
+	#[error("unable to parse Millennium config file at {path} because {error}")]
+	FormatToml {
+		/// The path that failed to parse into TOML.
+		path: PathBuf,
+		/// The parsing [`toml::Error`].
+		error: ::toml::de::Error
+	},
 	/// Failed to parse the config file in JSON5 format.
 	#[error("unable to parse Millennium config file at {path} because {error}")]
 	FormatJson {
 		/// The path that failed to parse into JSON5.
 		path: PathBuf,
-
 		/// The parsing [`json5::Error`].
 		error: ::json5::Error
 	},
-
 	/// Unknown file extension encountered.
 	#[error("unsupported format encountered {0}")]
 	UnsupportedFormat(String),
-
 	/// A generic IO error with context of what caused it.
 	#[error("unable to read Millennium config file at {path} because {error}")]
 	Io {
 		/// The path the IO error occured on.
 		path: PathBuf,
-
 		/// The [`std::io::Error`].
 		error: std::io::Error
 	}
@@ -67,30 +116,19 @@ pub enum ConfigError {
 ///
 /// [JSON Merge Patch (RFC 7396)]: https://datatracker.ietf.org/doc/html/rfc7396.
 pub fn read_from(root_dir: PathBuf) -> Result<Value, ConfigError> {
-	let mut config: Value = parse_value(root_dir.join(".millenniumrc"))?;
-	if let Some(platform_config) = read_platform(root_dir)? {
+	let mut config: Value = parse_value(root_dir.join("Millennium.toml"))?.0;
+	if let Some((platform_config, _)) = read_platform(root_dir)? {
 		merge(&mut config, &platform_config);
 	}
 	Ok(config)
 }
 
-/// Gets the platform configuration file name.
-pub fn get_platform_config_filename() -> &'static str {
-	if cfg!(target_os = "macos") {
-		".millenniumrc.macos"
-	} else if cfg!(windows) {
-		".millenniumrc.windows"
-	} else {
-		".millenniumrc.linux"
-	}
-}
-
 /// Reads the platform-specific configuration file in the given directory.
-pub fn read_platform(root_dir: PathBuf) -> Result<Option<Value>, ConfigError> {
-	let platform_config_path = root_dir.join(get_platform_config_filename());
-	if does_supported_extension_exist(&platform_config_path) {
-		let platform_config: Value = parse_value(platform_config_path)?;
-		Ok(Some(platform_config))
+pub fn read_platform(root_dir: PathBuf) -> Result<Option<(Value, PathBuf)>, ConfigError> {
+	let platform_config_path = root_dir.join(ConfigFormat::Toml.into_platform_file_name());
+	if does_supported_file_name_exist(&platform_config_path) {
+		let (platform_config, path): (Value, PathBuf) = parse_value(platform_config_path)?;
+		Ok(Some((platform_config, path)))
 	} else {
 		Ok(None)
 	}
@@ -100,9 +138,16 @@ pub fn read_platform(root_dir: PathBuf) -> Result<Option<Value>, ConfigError> {
 ///
 /// The passed path is expected to be the path to the "default" configuration
 /// format, in this case JSON with `.json`.
-pub fn does_supported_extension_exist(path: impl Into<PathBuf>) -> bool {
+pub fn does_supported_file_name_exist(path: impl Into<PathBuf>) -> bool {
 	let path = path.into();
-	path.exists() || EXTENSIONS_SUPPORTED.iter().any(|ext| path.with_extension(ext).exists())
+	let source_file_name = path.file_name().unwrap().to_str().unwrap();
+	let lookup_platform_config = SUPPORTED_FORMATS
+		.iter()
+		.any(|format| source_file_name == format.into_platform_file_name());
+	SUPPORTED_FORMATS.iter().any(|format| {
+		path.with_file_name(if lookup_platform_config { format.into_platform_file_name() } else { format.into_file_name() })
+			.exists()
+	})
 }
 
 /// Parse the config from path, including alternative formats.
@@ -116,25 +161,38 @@ pub fn does_supported_extension_exist(path: impl Into<PathBuf>) -> bool {
 ///   a. Parse it with `json5`
 ///   b. Return error if all above steps failed
 /// 3. Return error if all above steps failed
-pub fn parse(path: impl Into<PathBuf>) -> Result<Config, ConfigError> {
+pub fn parse(path: impl Into<PathBuf>) -> Result<(Config, PathBuf), ConfigError> {
 	do_parse(path.into())
 }
 
 /// See [`parse`] for specifics, returns a JSON [`Value`] instead of [`Config`].
-pub fn parse_value(path: impl Into<PathBuf>) -> Result<Value, ConfigError> {
+pub fn parse_value(path: impl Into<PathBuf>) -> Result<(Value, PathBuf), ConfigError> {
 	do_parse(path.into())
 }
 
-fn do_parse<D: DeserializeOwned>(path: PathBuf) -> Result<D, ConfigError> {
-	let json5 = path.with_extension("json5");
+fn do_parse<D: DeserializeOwned>(path: PathBuf) -> Result<(D, PathBuf), ConfigError> {
+	let file_name = path.file_name().map(OsStr::to_string_lossy).unwrap_or_default();
+	let lookup_platform_config = SUPPORTED_FORMATS.iter().any(|format| file_name == format.into_platform_file_name());
+
+	let toml = path.with_file_name(if lookup_platform_config {
+		ConfigFormat::Toml.into_platform_file_name()
+	} else {
+		ConfigFormat::Toml.into_file_name()
+	});
+	let json5 = path.with_file_name(if lookup_platform_config {
+		ConfigFormat::Json5.into_platform_file_name()
+	} else {
+		ConfigFormat::Json5.into_file_name()
+	});
+
 	let path_ext = path.extension().map(OsStr::to_string_lossy).unwrap_or_default();
 
 	if path.exists() {
-		let raw = read_to_string(&path)?;
-		do_parse_json(&raw, &path)
+		let raw = read_to_string(&toml)?;
+		do_parse_toml(&raw, &path).map(|config| (config, toml))
 	} else if json5.exists() {
 		let raw = read_to_string(&json5)?;
-		do_parse_json(&raw, &path)
+		do_parse_json(&raw, &path).map(|config| (config, json5))
 	} else if !EXTENSIONS_SUPPORTED.contains(&path_ext.as_ref()) {
 		Err(ConfigError::UnsupportedFormat(path_ext.to_string()))
 	} else {
@@ -154,6 +212,10 @@ pub fn parse_json(raw: &str, path: &Path) -> Result<Config, ConfigError> {
 
 fn do_parse_json<D: DeserializeOwned>(raw: &str, path: &Path) -> Result<D, ConfigError> {
 	::json5::from_str(raw).map_err(|error| ConfigError::FormatJson { path: path.into(), error })
+}
+
+fn do_parse_toml<D: DeserializeOwned>(raw: &str, path: &Path) -> Result<D, ConfigError> {
+	::toml::from_str(raw).map_err(|error| ConfigError::FormatToml { path: path.into(), error })
 }
 
 /// Helper function to wrap IO errors from [`std::fs::read_to_string`] into a

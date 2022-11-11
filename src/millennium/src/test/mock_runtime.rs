@@ -32,10 +32,10 @@ use millennium_runtime::{
 	},
 	Dispatch, EventLoopProxy, Icon, Result, RunEvent, Runtime, RuntimeHandle, UserAttentionType, UserEvent
 };
-#[cfg(feature = "system-tray")]
+#[cfg(all(desktop, feature = "system-tray"))]
 use millennium_runtime::{
 	menu::{SystemTrayMenu, TrayHandle},
-	SystemTray, SystemTrayEvent
+	SystemTray, SystemTrayEvent, TrayId
 };
 use millennium_utils::{config::WindowConfig, Theme};
 use uuid::Uuid;
@@ -83,10 +83,10 @@ impl<T: UserEvent> RuntimeHandle<T> for MockRuntimeHandle {
 		unimplemented!()
 	}
 
-	#[cfg(all(windows, feature = "system-tray"))]
-	#[cfg_attr(doc_cfg, doc(cfg(all(windows, feature = "system-tray"))))]
-	fn remove_system_tray(&self) -> Result<()> {
-		Ok(())
+	#[cfg(all(desktop, feature = "system-tray"))]
+	#[cfg_attr(doc_cfg, doc(cfg(all(desktop, feature = "system-tray"))))]
+	fn system_tray(&self, system_tray: SystemTray) -> Result<<Self::Runtime as Runtime<T>>::TrayHandler> {
+		unimplemented!()
 	}
 
 	fn raw_display_handle(&self) -> raw_window_handle::RawDisplayHandle {
@@ -99,13 +99,13 @@ pub struct MockDispatcher {
 	context: RuntimeContext
 }
 
-#[cfg(feature = "global-shortcut")]
+#[cfg(all(desktop, feature = "global-shortcut"))]
 #[derive(Debug, Clone)]
 pub struct MockGlobalShortcutManager {
 	context: RuntimeContext
 }
 
-#[cfg(feature = "global-shortcut")]
+#[cfg(all(desktop, feature = "global-shortcut"))]
 impl millennium_runtime::GlobalShortcutManager for MockGlobalShortcutManager {
 	fn is_registered(&self, accelerator: &str) -> Result<bool> {
 		Ok(self.context.shortcuts.lock().unwrap().contains_key(accelerator))
@@ -489,13 +489,13 @@ impl<T: UserEvent> Dispatch<T> for MockDispatcher {
 	}
 }
 
-#[cfg(feature = "system-tray")]
+#[cfg(all(desktop, feature = "system-tray"))]
 #[derive(Debug, Clone)]
 pub struct MockTrayHandler {
 	context: RuntimeContext
 }
 
-#[cfg(feature = "system-tray")]
+#[cfg(all(desktop, feature = "system-tray"))]
 impl TrayHandle for MockTrayHandler {
 	fn set_icon(&self, icon: Icon) -> Result<()> {
 		Ok(())
@@ -508,6 +508,10 @@ impl TrayHandle for MockTrayHandler {
 	}
 	#[cfg(target_os = "macos")]
 	fn set_icon_as_template(&self, is_template: bool) -> Result<()> {
+		Ok(())
+	}
+
+	fn destroy(&self) -> Result<()> {
 		Ok(())
 	}
 }
@@ -524,11 +528,11 @@ impl<T: UserEvent> EventLoopProxy<T> for EventProxy {
 #[derive(Debug)]
 pub struct MockRuntime {
 	pub context: RuntimeContext,
-	#[cfg(feature = "global-shortcut")]
+	#[cfg(all(desktop, feature = "global-shortcut"))]
 	global_shortcut_manager: MockGlobalShortcutManager,
 	#[cfg(feature = "clipboard")]
 	clipboard_manager: MockClipboardManager,
-	#[cfg(feature = "system-tray")]
+	#[cfg(all(desktop, feature = "system-tray"))]
 	tray_handler: MockTrayHandler
 }
 
@@ -539,11 +543,11 @@ impl MockRuntime {
 			clipboard: Default::default()
 		};
 		Self {
-			#[cfg(feature = "global-shortcut")]
+			#[cfg(all(desktop, feature = "global-shortcut"))]
 			global_shortcut_manager: MockGlobalShortcutManager { context: context.clone() },
 			#[cfg(feature = "clipboard")]
 			clipboard_manager: MockClipboardManager { context: context.clone() },
-			#[cfg(feature = "system-tray")]
+			#[cfg(all(desktop, feature = "system-tray"))]
 			tray_handler: MockTrayHandler { context: context.clone() },
 			context
 		}
@@ -553,11 +557,11 @@ impl MockRuntime {
 impl<T: UserEvent> Runtime<T> for MockRuntime {
 	type Dispatcher = MockDispatcher;
 	type Handle = MockRuntimeHandle;
-	#[cfg(feature = "global-shortcut")]
+	#[cfg(all(desktop, feature = "global-shortcut"))]
 	type GlobalShortcutManager = MockGlobalShortcutManager;
 	#[cfg(feature = "clipboard")]
 	type ClipboardManager = MockClipboardManager;
-	#[cfg(feature = "system-tray")]
+	#[cfg(all(desktop, feature = "system-tray"))]
 	type TrayHandler = MockTrayHandler;
 	type EventLoopProxy = EventProxy;
 
@@ -578,7 +582,7 @@ impl<T: UserEvent> Runtime<T> for MockRuntime {
 		MockRuntimeHandle { context: self.context.clone() }
 	}
 
-	#[cfg(feature = "global-shortcut")]
+	#[cfg(all(desktop, feature = "global-shortcut"))]
 	fn global_shortcut_manager(&self) -> Self::GlobalShortcutManager {
 		self.global_shortcut_manager.clone()
 	}
@@ -597,22 +601,29 @@ impl<T: UserEvent> Runtime<T> for MockRuntime {
 		})
 	}
 
-	#[cfg(feature = "system-tray")]
+	#[cfg(all(desktop, feature = "system-tray"))]
 	#[cfg_attr(doc_cfg, doc(cfg(feature = "system-tray")))]
 	fn system_tray(&self, system_tray: SystemTray) -> Result<Self::TrayHandler> {
 		Ok(self.tray_handler.clone())
 	}
 
-	#[cfg(feature = "system-tray")]
+	#[cfg(all(desktop, feature = "system-tray"))]
 	#[cfg_attr(doc_cfg, doc(cfg(feature = "system-tray")))]
-	fn on_system_tray_event<F: Fn(&SystemTrayEvent) + Send + 'static>(&mut self, f: F) -> Uuid {
-		Uuid::new_v4()
-	}
+	fn on_system_tray_event<F: Fn(TrayId, &SystemTrayEvent) + Send + 'static>(&mut self, f: F) {}
 
 	#[cfg(target_os = "macos")]
 	#[cfg_attr(doc_cfg, doc(cfg(target_os = "macos")))]
 	fn set_activation_policy(&mut self, activation_policy: millennium_runtime::ActivationPolicy) {}
 
+	#[cfg(any(
+		target_os = "macos",
+		windows,
+		target_os = "linux",
+		target_os = "dragonfly",
+		target_os = "freebsd",
+		target_os = "netbsd",
+		target_os = "openbsd"
+	))]
 	fn run_iteration<F: Fn(RunEvent<T>) + 'static>(&mut self, callback: F) -> millennium_runtime::RunIteration {
 		Default::default()
 	}

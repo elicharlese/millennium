@@ -20,23 +20,18 @@
  * Access the system shell.
  * Allows you to spawn child processes and manage files and URLs using their default application.
  *
- * This package is also accessible with `window.Millennium.shell` when `.millenniumrc > build > withGlobalMillennium` is set to true.
+ * This package is also accessible with `window.Millennium.shell` when `build > withGlobalMillennium` is set to true
+ * in the Millennium config.
  *
- * The APIs must be allowlisted on `.millenniumrc`:
- * ```json
- * {
- * 	"millennium": {
- * 		"allowlist": {
- * 			"shell": {
- * 				"all": true, // enable all shell APIs
- * 				"execute": true, // enable process spawn APIs
- * 				"sidecar": true, // enable spawning sidecars
- * 				"open": true // enable opening files/URLs using the default program
- * 			}
- * 		}
- * 	}
- * }
+ * The APIs must be allowlisted in `Millennium.toml`:
+ * ```toml
+ * [millennium.allowlist.shell]
+ * all = true # enable all shell APIs
+ * execute = true # enable process spawn APIs
+ * sidecar = true # enable spawning sidecars
+ * open = true # enable opening files/URLs using the default program
  * ```
+ *
  * It is recommended to allowlist only the APIs you use for optimal bundle size and security.
  *
  * ## Security
@@ -55,7 +50,8 @@
  * Each CLI is a configuration object `{ name: string, cmd: string, sidecar?: bool, args?: boolean | Arg[] }`.
  *
  * - `name`: the unique identifier of the command, passed to the [[Command.constructor | Command constructor]].
- * If it's a sidecar, this must be the value defined on `.millenniumrc > millennium > bundle > externalBin`.
+ * If it's a sidecar, this must be the value defined under `millennium > bundle > externalBin` in the Millennium
+ * config.
  * - `cmd`: the program that is executed on this configuration. If it's a sidecar, this value is ignored.
  * - `sidecar`: whether the object configures a sidecar or a system program.
  * - `args`: the arguments that can be passed to the program. By default no arguments are allowed.
@@ -266,7 +262,8 @@ export class Command extends EventEmitter<'close' | 'error'> {
 	/**
 	 * Creates a new `Command` instance.
 	 *
-	 * @param program The program name to execute. It must be configured in `.millenniumrc > millennium > allowlist > shell > scope`.
+	 * @param program The program name to execute. It must be configured under `millennium > allowlist > shell > scope`
+	 * in the Millennium config.
 	 */
 	public constructor(private readonly program: string, args: string | string[] = [], options: SpawnOptions = {}) {
 		super();
@@ -283,7 +280,8 @@ export class Command extends EventEmitter<'close' | 'error'> {
 	 * const output = await command.execute();
 	 * ```
 	 *
-	 * @param program The sidecar program name to execute. It must be configured in `.millenniumrc > millennium > allowlist > shell > scope`.
+	 * @param program The sidecar program name to execute. It must be configured under `millennium > allowlist > shell > scope`
+	 * in the Millennium config.
 	 */
 	public static sidecar(program: string, args: string | string[] = [], options?: SpawnOptions): Command {
 		const instance = new Command(program, args, options);
@@ -378,8 +376,8 @@ type CommandEvent =
  * await open('/path/to/file.txt');
  * ```
  *
- * @param path The path or URL to open. This value is matched against the string regex defined in
- * `.millenniumrc > millennium > allowlist > shell > open`, which defaults to `^https?://`.
+ * @param path The path or URL to open. This value is matched against the string regex defined under
+ * `millennium > allowlist > shell > open` in the Millennium config, which defaults to `^https?://`.
  * @param openWith The app to open the file or URL with. Defaults to the system default application for the specified path type.
  */
 export async function open(

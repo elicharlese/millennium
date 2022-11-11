@@ -17,7 +17,7 @@
 use std::{env::VarError, path::PathBuf};
 
 use millennium_codegen::{context_codegen, get_config, ContextData};
-use millennium_utils::config::parse::does_supported_extension_exist;
+use millennium_utils::config::parse::does_supported_file_name_exist;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, ToTokens};
 use syn::{
@@ -49,7 +49,7 @@ impl Parse for ContextItems {
 			VarError::NotUnicode(_) => "CARGO_MANIFEST_DIR env var contained invalid utf8".into()
 		})
 		.and_then(|path| {
-			if does_supported_extension_exist(&path) {
+			if does_supported_file_name_exist(&path) {
 				Ok(path)
 			} else {
 				Err(format!("no file at path {} exists, expected Millennium config file", path.display()))

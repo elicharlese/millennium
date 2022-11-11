@@ -15,7 +15,6 @@
 // limitations under the License.
 
 // custom Millennium Webview types
-mod mime_type;
 mod request;
 mod response;
 
@@ -23,9 +22,9 @@ mod response;
 pub use http::{header, method, status, uri::InvalidUri, version, Uri};
 // re-export httprange helper as it can be useful and we need it locally
 pub use http_range::HttpRange;
+pub use millennium_utils::mime_type::MimeType;
 
 pub use self::{
-	mime_type::MimeType,
 	request::{Request, RequestParts},
 	response::{Builder as ResponseBuilder, Response, ResponseParts}
 };

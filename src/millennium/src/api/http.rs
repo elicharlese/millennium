@@ -93,7 +93,11 @@ impl ClientBuilder {
 		let mut client_builder = reqwest::Client::builder();
 
 		if let Some(max_redirections) = self.max_redirections {
-			client_builder = client_builder.redirect(reqwest::redirect::Policy::limited(max_redirections))
+			client_builder = client_builder.redirect(if max_redirections == 0 {
+				reqwest::redirect::Policy::none()
+			} else {
+				reqwest::redirect::Policy::limited(max_redirections)
+			});
 		}
 
 		if let Some(connect_timeout) = self.connect_timeout {
@@ -152,13 +156,16 @@ impl Client {
 			}
 		}
 
+		if let Some(max_redirections) = self.0.max_redirections {
+			if max_redirections == 0 {
+				request_builder = request_builder.follow_redirects(false);
+			} else {
+				request_builder = request_builder.max_redirections(max_redirections as u32);
+			}
+		}
+
 		if let Some(timeout) = request.timeout {
 			request_builder = request_builder.timeout(timeout);
-			#[cfg(windows)]
-			{
-				// on Windows the global timeout is not respected, see https://github.com/sbstp/attohttpc/issues/118
-				request_builder = request_builder.read_timeout(timeout);
-			}
 		}
 
 		let response = if let Some(body) = request.body {
@@ -577,7 +584,7 @@ impl Response {
 	/// Convert the response body into a stream of [`bytes::Bytes`].
 	///
 	/// ```no_run
-	/// use futures::StreamExt;
+	/// use futures_util::StreamExt;
 	///
 	/// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
 	/// let client = millennium::api::http::ClientBuilder::new().build()?;
@@ -592,7 +599,7 @@ impl Response {
 	/// # Ok(())
 	/// # }
 	/// ```
-	pub fn bytes_stream(self) -> impl futures::Stream<Item = crate::api::Result<bytes::Bytes>> {
+	pub fn bytes_stream(self) -> impl futures_util::Stream<Item = crate::api::Result<bytes::Bytes>> {
 		#[cfg(not(feature = "reqwest-client"))]
 		{
 			let (_, _, reader) = self.1.split();
@@ -600,7 +607,7 @@ impl Response {
 		}
 		#[cfg(feature = "reqwest-client")]
 		{
-			use futures::StreamExt;
+			use futures_util::StreamExt;
 			self.1.bytes_stream().map(|res| res.map_err(Into::into))
 		}
 	}

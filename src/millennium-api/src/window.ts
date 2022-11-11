@@ -19,47 +19,41 @@
 /**
  * Provides APIs to create windows, communicate with other windows and manipulate the current window.
  *
- * This package is also accessible with `window.Millennium.window` when `.millenniumrc > build > withGlobalMillennium` is set to true.
+ * This package is also accessible with `window.Millennium.window` when `build > withGlobalMillennium` is set to true in
+ * the Millennium config.
  *
- * The APIs must be allowlisted on `.millenniumrc`:
- * ```json
- * {
- * 	"millennium": {
- * 		"allowlist": {
- * 			"window": {
- * 				"all": true, // enable all window APIs
- * 				"create": true, // enable window creation
- * 				"center": true,
- * 				"requestUserAttention": true,
- * 				"setResizable": true,
- * 				"setTitle": true,
- * 				"maximize": true,
- * 				"unmaximize": true,
- * 				"minimize": true,
- * 				"unminimize": true,
- * 				"show": true,
- * 				"hide": true,
- * 				"close": true,
- * 				"setDecorations": true,
- * 				"setAlwaysOnTop": true,
- * 				"setSize": true,
- * 				"setMinSize": true,
- * 				"setMaxSize": true,
- * 				"setPosition": true,
- * 				"setFullscreen": true,
- * 				"setFocus": true,
- * 				"setIcon": true,
- * 				"setSkipTaskbar": true,
- * 				"setCursorGrab": true,
- * 				"setCursorVisible": true,
- * 				"setCursorIcon": true,
- * 				"setCursorPosition": true,
- * 				"startDragging": true,
- * 				"print": true
- * 			}
- * 		}
- * 	}
- * }
+ * The APIs must be allowlisted in `Millennium.toml`:
+ * ```toml
+ * [millennium.allowlist.window]
+ * all = true # enable all window APIs
+ * create = true # enable window creation
+ * center = true
+ * request-user-attention = true
+ * set-resizable = true
+ * set-title = true
+ * maximize = true
+ * unmaximize = true
+ * minimize = true
+ * unminimize = true
+ * show = true
+ * hide = true
+ * close = true
+ * set-decorations = true
+ * set-always-on-top = true
+ * set-size = true
+ * set-min-size = true
+ * set-max-size = true
+ * set-position = true
+ * set-fullscreen = true
+ * set-focus = true
+ * set-icon = true
+ * set-skip-taskbar = true
+ * set-cursor-grab = true
+ * set-cursor-visible = true
+ * set-cursor-icon = true
+ * set-cursor-position = true
+ * start-dragging = true
+ * print = true
  * ```
  * It is recommended to allowlist only the APIs you use for optimal bundle size and security.
  *
@@ -124,7 +118,7 @@
  */
 
 import { invokeMillenniumCommand } from './_internal';
-import { emit, listen, once, EventName, EventCallback, Unlistener } from './event';
+import { emit, listen, once, EventName, EventCallback, Unlistener, MillenniumEvent } from './event';
 
 export type Theme = 'light' | 'dark';
 
@@ -259,7 +253,7 @@ export function getAllWindows(): WebviewWindow[] {
 	return window.__MILLENNIUM_METADATA__.__windows.map(({ label }) => new WebviewWindow(label, { skip: true }));
 }
 
-const localMillenniumEvents = [ 'millennium://created', 'millennium://error' ];
+const localMillenniumEvents = [ MillenniumEvent.WINDOW_CREATED as EventName, MillenniumEvent.ERROR as EventName ];
 export type WindowLabel = string;
 
 /**
@@ -299,7 +293,7 @@ class WebviewWindowHandle {
 	/**
 	 * Emits an event to the backend, tied to the webview window.
 	 */
-	public async emit(event: string, payload?: unknown): Promise<void> {
+	public async emit(event: EventName, payload?: unknown): Promise<void> {
 		if (localMillenniumEvents.includes(event)) {
 			for (const handler of this.listeners.get(event) ?? [])
 				handler({ event, id: -1, windowLabel: this.label, payload });
@@ -310,7 +304,7 @@ class WebviewWindowHandle {
 		return await emit(event, this.label, payload);
 	}
 
-	private handleMillenniumEvent<T>(event: string, handler: EventCallback<T>): boolean {
+	private handleMillenniumEvent<T>(event: EventName, handler: EventCallback<T>): boolean {
 		if (localMillenniumEvents.includes(event)) {
 			if (!this.listeners.has(event))
 				this.listeners.set(event, [ handler ]);
@@ -680,8 +674,8 @@ export class WebviewWindow extends WindowManager {
 					}
 				}
 			})
-				.then(async () => this.emit('millennium://created'))
-				.catch(async (e: string) => this.emit('millennium://error', e));
+				.then(async () => this.emit(MillenniumEvent.WINDOW_CREATED))
+				.catch(async (e: string) => this.emit(MillenniumEvent.ERROR, e));
 		}
 	}
 
@@ -746,8 +740,9 @@ export interface WindowOptions {
 	focus?: boolean;
 	/**
 	 * Whether the window is transparent or not.
-	 * Note that on macOS, this requires the `macos-private-api` feature flag, enabled under `.millenniumrc > millennium > macOSPrivateApi`.
-	 * **Using private APIs on macOS will make your application ineligible for the App Store.**
+	 * Note that on macOS, this requires the `macos-private-api` feature flag, enabled in the Millennium config under
+	 * `millennium > macOSPrivateApi`. **Using private APIs on macOS will make your application ineligible for the
+	 * Store.**
 	 */
 	transparent?: boolean;
 	titlebarHidden?: boolean;

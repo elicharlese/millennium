@@ -18,6 +18,7 @@ pub mod app_paths;
 pub mod config;
 pub mod template;
 pub mod updater_signature;
+pub mod web_dev_server;
 
 use std::{
 	collections::HashMap,

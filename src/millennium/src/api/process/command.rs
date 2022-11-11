@@ -83,26 +83,6 @@ pub enum CommandEvent {
 	Terminated(TerminatedPayload)
 }
 
-macro_rules! get_std_command {
-	($self: ident) => {{
-		let mut command = StdCommand::new($self.program);
-		command.args(&$self.args);
-		command.stdout(Stdio::piped());
-		command.stdin(Stdio::piped());
-		command.stderr(Stdio::piped());
-		if $self.env_clear {
-			command.env_clear();
-		}
-		command.envs($self.env);
-		if let Some(current_dir) = $self.current_dir {
-			command.current_dir(current_dir);
-		}
-		#[cfg(windows)]
-		command.creation_flags(CREATE_NO_WINDOW);
-		command
-	}};
-}
-
 /// The type to spawn commands.
 #[derive(Debug)]
 pub struct Command {
@@ -177,6 +157,26 @@ fn relative_command_path(command: String) -> crate::Result<String> {
 		#[cfg(not(windows))]
 		Some(exe_dir) => Ok(format!("{}/{}", exe_dir.display(), command)),
 		None => Err(crate::api::Error::Command("Could not evaluate executable dir".to_string()).into())
+	}
+}
+
+impl From<Command> for StdCommand {
+	fn from(cmd: Command) -> StdCommand {
+		let mut command = StdCommand::new(cmd.program);
+		command.args(cmd.args);
+		command.stdout(Stdio::piped());
+		command.stdin(Stdio::piped());
+		command.stderr(Stdio::piped());
+		if cmd.env_clear {
+			command.env_clear();
+		}
+		command.envs(cmd.env);
+		if let Some(current_dir) = cmd.current_dir {
+			command.current_dir(current_dir);
+		}
+		#[cfg(windows)]
+		command.creation_flags(CREATE_NO_WINDOW);
+		command
 	}
 }
 
@@ -267,7 +267,8 @@ impl Command {
 	/// });
 	/// ```
 	pub fn spawn(self) -> crate::api::Result<(Receiver<CommandEvent>, CommandChild)> {
-		let mut command = get_std_command!(self);
+		let encoding = self.encoding;
+		let mut command: StdCommand = self.into();
 		let (stdout_reader, stdout_writer) = pipe()?;
 		let (stderr_reader, stderr_writer) = pipe()?;
 		let (stdin_reader, stdin_writer) = pipe()?;
@@ -284,8 +285,8 @@ impl Command {
 
 		let (tx, rx) = channel(1);
 
-		spawn_pipe_reader(tx.clone(), guard.clone(), stdout_reader, CommandEvent::Stdout, self.encoding);
-		spawn_pipe_reader(tx.clone(), guard.clone(), stderr_reader, CommandEvent::Stderr, self.encoding);
+		spawn_pipe_reader(tx.clone(), guard.clone(), stdout_reader, CommandEvent::Stdout, encoding);
+		spawn_pipe_reader(tx.clone(), guard.clone(), stderr_reader, CommandEvent::Stderr, encoding);
 
 		spawn(move || {
 			let _ = match child_.wait() {

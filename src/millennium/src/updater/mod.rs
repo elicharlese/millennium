@@ -40,19 +40,16 @@
 //! Once you have your Millennium project ready, you need to configure the
 //! updater.
 //!
-//! Add this in `.millenniumrc`:
-//! ```json
-//! "updater": {
-//! 	"active": true,
-//! 	"endpoints": [
-//! 		"https://releases.myapp.com/{target}}/{current_version}}"
-//! 	],
-//! 	"dialog": true,
-//! 	"pubkey": ""
-//! }
+//! Add this to your Millennium config file:
+//! ```toml
+//! [updater]
+//! active = true
+//! endpoints = [ "https://releases.myapp.com/{target}}/{current_version}}" ]
+//! dialog = true
+//! pubkey = "PUBLIC_KEY_HERE"
 //! ```
 //!
-//! The required keys are "active" and "endpoints", others are optional.
+//! The required keys are "active", "endpoints", and "pubkey"; others are optional.
 //!
 //! "active" must be a boolean. By default, it's set to false.
 //!
@@ -67,7 +64,7 @@
 //! everything. If you need the custom events, you MUST turn off the built-in
 //! dialog.
 //!
-//! "pubkey" if present must be a valid public-key generated with Millennium
+//! "pubkey" must be a valid public-key generated with Millennium
 //! cli. See [Signing updates](#signing-updates).
 //!
 //! ## Update Requests
@@ -173,7 +170,7 @@
 //! ```no_run
 //! let app = millennium::Builder::default()
 //! 	// on an actual app, remove the string argument
-//! 	.build(millennium::generate_context!("test/fixture/.millenniumrc"))
+//! 	.build(millennium::generate_context!("test/fixture/Millennium.toml"))
 //! 	.expect("error while building Millennium application");
 //! app.run(|_app_handle, event| match event {
 //! 	millennium::RunEvent::Updater(updater_event) => match updater_event {
@@ -235,7 +232,7 @@
 //! ```no_run
 //! let app = millennium::Builder::default()
 //! 	// on an actual app, remove the string argument
-//! 	.build(millennium::generate_context!("test/fixture/.millenniumrc"))
+//! 	.build(millennium::generate_context!("test/fixture/Millennium.toml"))
 //! 	.expect("error while building Millennium application");
 //! app.run(|_app_handle, event| match event {
 //! 	millennium::RunEvent::Updater(updater_event) => match updater_event {
@@ -278,7 +275,7 @@
 //! ```no_run
 //! let app = millennium::Builder::default()
 //! 	// on an actual app, remove the string argument
-//! 	.build(millennium::generate_context!("test/fixture/.millenniumrc"))
+//! 	.build(millennium::generate_context!("test/fixture/Millennium.toml"))
 //! 	.expect("error while building Millennium application");
 //! app.run(|_app_handle, event| match event {
 //! 	millennium::RunEvent::Updater(updater_event) => match updater_event {
@@ -346,7 +343,7 @@
 //! }
 //! ```
 //!
-//! The only required keys are "url" and "version", the others are optional.
+//! The required keys are "url", "version", and "signature"; the others are optional.
 //!
 //! "pub_date" if present must be formatted according to ISO 8601.
 //!
@@ -395,7 +392,7 @@
 //! # Bundler (Artifacts)
 //!
 //! The Millennium bundler will automatically generate update artifacts if the
-//! updater is enabled in `.millenniumrc`
+//! updater is enabled in your Millennium config file.
 //!
 //! If the bundler can locate your private and pubkey, your update artifacts
 //! will be automatically signed.
@@ -445,13 +442,13 @@
 //!
 //! To sign your updates, you need two things.
 //!
-//! The *Public-key* (pubkey) should be added inside your `.millenniumrc` to
+//! The *Public-key* (pubkey) should be added inside your Millennium config file to
 //! validate the update archive before installing.
 //!
 //! The *Private key* (privkey) is used to sign your update and should NEVER be
 //! shared with anyone. Also, if you lost this key, you'll NOT be able to
 //! publish a new update to the current user base (if pubkey is set in
-//! `.millenniumrc`). It's important to save it at a safe place and you can
+//! the Millennium config file). It's important to save it at a safe place and you can
 //! always access it.
 //!
 //! To generate your keys you need to use the Millennium cli.
@@ -485,7 +482,7 @@
 //! ***
 //!
 //! Environment variables used to sign with `millennium-bundler`:
-//! If they are set, and `.millenniumrc` expose the public key, the bundler will
+//! If they are set, and the Millennium config file exposes the public key, the bundler will
 //! automatically generate and sign the updater artifacts.
 //!
 //! `MILLENNIUM_PRIVATE_KEY`: Path or String of your private key
@@ -504,7 +501,14 @@ use time::OffsetDateTime;
 pub use self::{core::RemoteRelease, error::Error};
 /// Alias for [`std::result::Result`] using our own [`Error`].
 pub type Result<T> = std::result::Result<T, Error>;
-use crate::{api::dialog::blocking::ask, runtime::EventLoopProxy, AppHandle, EventLoopMessage, Manager, Runtime, UpdaterEvent};
+#[cfg(desktop)]
+use crate::api::dialog::blocking::ask;
+use crate::{runtime::EventLoopProxy, AppHandle, EventLoopMessage, Manager, Runtime, UpdaterEvent};
+
+#[cfg(mobile)]
+fn ask<R: Runtime>(_parent_window: Option<&crate::Window<R>>, _title: impl AsRef<str>, _message: impl AsRef<str>) -> bool {
+	true
+}
 
 /// Check for new updates
 pub const EVENT_CHECK_UPDATE: &str = "millennium://update";

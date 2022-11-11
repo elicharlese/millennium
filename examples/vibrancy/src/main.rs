@@ -1,6 +1,5 @@
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
-use millennium::Manager;
 use millennium_plugin_vibrancy::{apply_effect, VibrancyEffect};
 
 #[millennium::command]

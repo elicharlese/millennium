@@ -8,7 +8,7 @@ repository = "https://github.com/pykeio/millennium"
 homepage = "https://millennium.pyke.io/"
 authors = [ "pyke.io", "Tauri Programme within The Commons Conservancy" ]
 categories = [ "gui", "web-programming" ]
-rust-version = "1.57"
+rust-version = "1.59"
 edition = "2021"
 exclude = [
 	".license_template",
@@ -34,8 +34,8 @@ millennium-utils = { version = "1.0.0-beta.3", path = "../millennium-utils" }
 uuid = { version = "1", features = [ "v4" ] }
 http = "0.2.4"
 http-range = "0.1.4"
-infer = "0.7"
 raw-window-handle = "0.5"
+rand = "0.8"
 
 [target."cfg(windows)".dependencies]
 webview2-com = "0.19.1"

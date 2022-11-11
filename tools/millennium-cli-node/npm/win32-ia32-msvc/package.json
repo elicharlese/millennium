@@ -7,7 +7,7 @@
   "os": [
     "win32"
   ],
-  "arch": [
+  "cpu": [
     "ia32"
   ],
   "main": "millennium-cli.win32-ia32-msvc.node",

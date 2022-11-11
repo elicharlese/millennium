@@ -51,7 +51,7 @@
 /// #[cfg(target_os = "windows")]
 /// pub const MILLENNIUMRC_PATH: &str = "../.millenniumrc.windows";
 /// ```
-pub const MILLENNIUMRC_PATH: &str = "../.millenniumrc";
+pub const MILLENNIUM_CONFIG_PATH: &str = "../Millennium.toml";
 /// The path(s) to your C/C++ source code relative to the `build.rs` file.
 /// This will be scanned by millennium-bindings-cxx to generate bindings.
 /// In Rust, commands (among other things) are generated at compile time using Rust macros. Because we have to build the
@@ -85,11 +85,11 @@ fn main() {
 				.parent() // target/
 				.unwrap()
 		),
-		MILLENNIUMRC_PATH
+		MILLENNIUM_CONFIG_PATH
 	)
 	.expect("failed to build cxx bindings");
 
-	env::set_var("MILLENNIUM_CONFIG", fs::read_to_string(MILLENNIUMRC_PATH).unwrap());
+	env::set_var("MILLENNIUM_CONFIG", fs::read_to_string(MILLENNIUM_CONFIG_PATH).unwrap());
 	if let Err(error) = try_build(Attributes::new()) {
 		panic!("error during millennium-build: {:#?}", error);
 	}

@@ -1,0 +1,29 @@
+[build]
+dist-dir = [ "./index.html" ]
+dev-path = [ "./index.html" ]
+with-global-millennium = true
+
+[millennium.bundle]
+active = true
+targets = "all"
+identifier = "io.pyke.cxx"
+icon = [
+	"../../.icons/32x32.png",
+	"../../.icons/128x128.png",
+	"../../.icons/256x256.png",
+	"../../.icons/icon.ico"
+]
+
+[millennium.allowlist]
+all = false
+
+[[millennium.windows]]
+title = "Millennium C++ Example"
+width = 600
+height = 600
+resizable = true
+fullscreen = false
+center = true
+
+[millennium.security.csp]
+default-src = "millennium: millennium.localhost 'unsafe-inline' 'self'"

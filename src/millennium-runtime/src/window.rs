@@ -77,8 +77,6 @@ pub enum WindowEvent {
 	///
 	/// Applications might wish to react to this to change the theme of the content of the window when the system
 	/// changes the theme.
-	///
-	/// Currently only implemented on Windows.
 	ThemeChanged(Theme)
 }
 

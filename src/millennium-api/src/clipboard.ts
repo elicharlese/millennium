@@ -16,6 +16,23 @@
  * limitations under the License.
  */
 
+/**
+ * Read and write to and from the system clipboard.
+ *
+ * This package is also accessible with `window.Millennium.clipboard` when `build > withGlobalMillennium` is set to true
+ * in the Millennium config.
+ *
+ * The APIs must be allowlisted in `Millennium.toml`:
+ * ```toml
+ * [millennium.allowlist.clipboard]
+ * all = true # enable all clipboard APIs
+ * write-text = true
+ * read-text = true
+ * ```
+ *
+ * @module
+ */
+
 import { invokeMillenniumCommand } from './_internal';
 
 /**

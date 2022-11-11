@@ -9,7 +9,7 @@ homepage = "https://millennium.pyke.io/"
 authors = [ "pyke.io", "Tauri Programme within The Commons Conservancy" ]
 categories = [ "gui" ]
 keywords = [ "vibrancy", "acrylic", "mica", "blur", "windowing" ]
-rust-version = "1.57"
+rust-version = "1.59"
 edition = "2021"
 
 [package.metadata.docs.rs]

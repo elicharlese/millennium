@@ -213,11 +213,16 @@ pub use windows_platform::{is_windows_7, windows_version};
 
 #[cfg(windows)]
 mod windows_platform {
-	use windows::Win32::{
-		Foundation::FARPROC,
-		System::{
-			LibraryLoader::{GetProcAddress, LoadLibraryA},
-			SystemInformation::OSVERSIONINFOW
+	use std::{iter::once, os::windows::prelude::OsStrExt};
+
+	use windows::{
+		core::{PCSTR, PCWSTR},
+		Win32::{
+			Foundation::FARPROC,
+			System::{
+				LibraryLoader::{GetProcAddress, LoadLibraryW},
+				SystemInformation::OSVERSIONINFOW
+			}
 		}
 	};
 
@@ -232,11 +237,17 @@ mod windows_platform {
 		false
 	}
 
-	fn get_function_impl(library: &str, function: &str) -> Option<FARPROC> {
-		assert_eq!(library.chars().last(), Some('\0'));
-		assert_eq!(function.chars().last(), Some('\0'));
+	fn encode_wide(string: impl AsRef<std::ffi::OsStr>) -> Vec<u16> {
+		string.as_ref().encode_wide().chain(once(0)).collect()
+	}
 
-		let module = unsafe { LoadLibraryA(library) }.unwrap_or_default();
+	// Helper function to dynamically load function pointer.
+	// `library` and `function` must be zero-terminated.
+	fn get_function_impl(library: &str, function: &str) -> Option<FARPROC> {
+		let library = encode_wide(library);
+		let function = PCSTR::from_raw(function.as_ptr());
+
+		let module = unsafe { LoadLibraryW(PCWSTR::from_raw(library.as_ptr())) }.unwrap_or_default();
 		if module.is_invalid() { None } else { Some(unsafe { GetProcAddress(module, function) }) }
 	}
 

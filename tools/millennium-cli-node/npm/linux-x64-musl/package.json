@@ -7,8 +7,11 @@
   "os": [
     "linux"
   ],
-  "arch": [
+  "cpu": [
     "x64"
+  ],
+  "libc": [
+	"musl"
   ],
   "main": "millennium-cli.linux-x64-musl.node",
   "files": [

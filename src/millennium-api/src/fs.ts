@@ -19,27 +19,22 @@
 /**
  * Access the file system.
  *
- * This package is also accessible with `window.Millennium.fs` when `.millenniumrc > build > withGlobalMillennium` is set to true.
+ * This package is also accessible with `window.Millennium.fs` when `build > withGlobalMillennium` is set to true in the
+ * Millennium config file.
  *
- * The APIs must be allowlisted on `.millenniumrc`:
- * ```json
- * {
- * 	"millennium": {
- * 		"allowlist": {
- * 			"fs": {
- * 				"all": true, // enable all FS APIs
- * 				"readFile": true,
- * 				"writeFile": true,
- * 				"readDir": true,
- * 				"copyFile": true,
- * 				"createDir": true,
- * 				"removeDir": true,
- * 				"removeFile": true,
- * 				"renameFile": true
- * 			}
- * 		}
- * 	}
- * }
+ * The APIs must be allowlisted in `Millennium.toml`:
+ * ```toml
+ * [millennium.allowlist.fs]
+ * all = true # enable all FS APIs
+ * read-file = true
+ * write-file = true
+ * read-dir = true
+ * copy-file = true
+ * create-dir = true
+ * remove-dir = true
+ * remove-file = true
+ * rename = true
+ * exists = true
  * ```
  * It is recommended to allowlist only the APIs you use for optimal bundle size and security.
  *

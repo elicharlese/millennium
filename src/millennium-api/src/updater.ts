@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-import { once, listen, emit, Unlistener } from './event';
+import { once, listen, emit, Unlistener, MillenniumEvent } from './event';
 
 export type UpdateStatus = 'PENDING' | 'ERROR' | 'DONE' | 'UPTODATE';
 
@@ -34,6 +34,29 @@ export interface UpdateManifest {
 export interface UpdateResult {
 	manifest?: UpdateManifest;
 	shouldUpdate: boolean;
+}
+
+/**
+ * Listen to an updater event.
+ * @example
+ * ```typescript
+ * import { onUpdaterEvent } from '@pyke/millennium-api/updater';
+ * const unlisten = await onUpdaterEvent(({ error, status }) => {
+ * 	console.log('Updater event', error, status);
+ * });
+ *
+ * // you need to call unlisten if your handler goes out of scope, e.g. if a component is unmounted
+ * unlisten();
+ * ```
+ *
+ * @param handler
+ * @returns A promise resolving to a function to unlisten to the event.
+ * Note that removing the listener is required if your listener goes out of scope e.g. the component is unmounted.
+ */
+export async function onUpdaterEvent(handler: (status: UpdateStatusResult) => void): Promise<Unlistener> {
+	return listen(MillenniumEvent.UPDATE_STATUS, null, (data: { payload: any }) => {
+		handler(data?.payload as UpdateStatusResult);
+	});
 }
 
 export function installUpdate(): Promise<void> {
@@ -57,16 +80,16 @@ export function installUpdate(): Promise<void> {
 			}
 		}
 
-		listen('millennium://update-status', null, (data: { payload: any }) => {
-			onStatusChange(data?.payload as UpdateStatusResult);
-		})
-			.then(fn => unlistenerFn = fn)
+		onUpdaterEvent(onStatusChange)
+			.then(fn => {
+				unlistenerFn = fn;
+			})
 			.catch(e => {
 				cleanListener();
 				throw e;
 			});
 
-		emit('millennium://update-install').catch(e => {
+		emit(MillenniumEvent.UPDATE_INSTALL).catch(e => {
 			cleanListener();
 			throw e;
 		});
@@ -104,14 +127,23 @@ export function checkForUpdates(): Promise<UpdateResult> {
 			}
 		}
 
-		once('millennium://update-available', null, (data: { payload: any }) => {
+		once(MillenniumEvent.UPDATE_AVAILABLE, null, (data: { payload: any }) => {
 			onUpdateAvailable(data?.payload as UpdateManifest);
 		}).catch(e => {
 			cleanListener();
 			throw e;
 		});
 
-		emit('millennium://update').catch(e => {
+		onUpdaterEvent(onStatusChange)
+			.then(fn => {
+				unlistenerFn = fn;
+			})
+			.catch(e => {
+				cleanListener();
+				throw e;
+			});
+
+		emit(MillenniumEvent.UPDATE_CHECK).catch(e => {
 			cleanListener();
 			throw e;
 		});

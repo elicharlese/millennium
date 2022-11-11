@@ -156,7 +156,7 @@ impl<'de, R: Runtime> Deserializer<'de> for CommandItem<'de, R> {
 pub mod private {
 	use std::future::Future;
 
-	use futures::{FutureExt, TryFutureExt};
+	use futures_util::{FutureExt, TryFutureExt};
 	use serde::Serialize;
 	use serde_json::Value;
 

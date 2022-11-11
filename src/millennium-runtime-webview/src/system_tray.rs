@@ -16,29 +16,56 @@
 
 use std::{
 	collections::HashMap,
+	fmt,
 	sync::{Arc, Mutex}
 };
 
-use millennium_runtime::{menu::MenuHash, UserEvent};
 pub use millennium_runtime::{
-	menu::{Menu, MenuEntry, MenuItem, MenuUpdate, Submenu, SystemTrayMenu, SystemTrayMenuEntry, SystemTrayMenuItem, TrayHandle},
-	Icon, SystemTrayEvent
+	menu::{Menu, MenuEntry, MenuHash, MenuItem, MenuUpdate, Submenu, SystemTrayMenu, SystemTrayMenuEntry, SystemTrayMenuItem, TrayHandle},
+	Icon, SystemTray, SystemTrayEvent, UserEvent
 };
 #[cfg(target_os = "macos")]
-pub use millennium_webview::application::platform::macos::CustomMenuItemExtMacOS;
+pub use millennium_webview::application::platform::macos::{CustomMenuItemExtMacOS, SystemTrayBuilderExtMacOS, SystemTrayExtMacOS};
 pub use millennium_webview::application::{
 	event::TrayEvent,
-	event_loop::EventLoopProxy,
+	event_loop::{EventLoopProxy, EventLoopWindowTarget},
 	menu::{ContextMenu as MillenniumContextMenu, CustomMenuItem as MillenniumCustomMenuItem, MenuItem as MillenniumMenuItem},
-	system_tray::Icon as MillenniumTrayIcon
+	system_tray::{Icon as MillenniumTrayIcon, SystemTray as MillenniumSystemTray, SystemTrayBuilder},
+	TrayId as MillenniumTrayId
 };
-use uuid::Uuid;
 
-use crate::{Error, Message, Result, TrayMessage};
+use crate::{Error, Message, Result, TrayId, TrayMessage};
 
+pub type GlobalSystemTrayEventHandler = Box<dyn Fn(TrayId, &SystemTrayEvent) + Send>;
+pub type GlobalSystemTrayEventListeners = Arc<Mutex<Vec<Arc<GlobalSystemTrayEventHandler>>>>;
 pub type SystemTrayEventHandler = Box<dyn Fn(&SystemTrayEvent) + Send>;
-pub type SystemTrayEventListeners = Arc<Mutex<HashMap<Uuid, Arc<SystemTrayEventHandler>>>>;
+pub type SystemTrayEventListeners = Arc<Mutex<Vec<Arc<SystemTrayEventHandler>>>>;
 pub type SystemTrayItems = Arc<Mutex<HashMap<u16, MillenniumCustomMenuItem>>>;
+
+#[derive(Clone, Default)]
+pub struct TrayContext {
+	pub tray: Arc<Mutex<Option<MillenniumSystemTray>>>,
+	pub listeners: SystemTrayEventListeners,
+	pub items: SystemTrayItems
+}
+
+impl fmt::Debug for TrayContext {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.debug_struct("TrayContext").field("items", &self.items).finish()
+	}
+}
+
+#[derive(Clone, Default)]
+pub struct SystemTrayManager {
+	pub trays: Arc<Mutex<HashMap<TrayId, TrayContext>>>,
+	pub global_listeners: GlobalSystemTrayEventListeners
+}
+
+impl fmt::Debug for SystemTrayManager {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.debug_struct("SystemTrayManager").field("trays", &self.trays).finish()
+	}
+}
 
 /// Wrapper around a [`millennium_webview::application::system_tray::Icon`] that can be created from a [`WindowIcon`].
 pub struct TrayIcon(pub(crate) MillenniumTrayIcon);
@@ -53,31 +80,60 @@ impl TryFrom<Icon> for TrayIcon {
 	}
 }
 
+pub fn create_tray<T>(
+	id: MillenniumTrayId,
+	system_tray: SystemTray,
+	event_loop: &EventLoopWindowTarget<T>
+) -> crate::Result<(MillenniumSystemTray, HashMap<u16, MillenniumCustomMenuItem>)> {
+	let icon = TrayIcon::try_from(system_tray.icon.expect("tray icon not set"))?;
+
+	let mut items = HashMap::new();
+
+	#[allow(unused_mut)]
+	let mut builder = SystemTrayBuilder::new(icon.0, system_tray.menu.map(|menu| to_millennium_context_menu(&mut items, menu))).with_id(id);
+
+	#[cfg(target_os = "macos")]
+	{
+		builder = builder.with_icon_as_template(system_tray.icon_as_template)
+	}
+
+	let tray = builder.build(event_loop).map_err(|e| Error::SystemTray(Box::new(e)))?;
+
+	Ok((tray, items))
+}
+
 #[derive(Debug, Clone)]
 pub struct SystemTrayHandle<T: UserEvent> {
+	pub(crate) id: TrayId,
 	pub(crate) proxy: EventLoopProxy<super::Message<T>>
 }
 
 impl<T: UserEvent> TrayHandle for SystemTrayHandle<T> {
 	fn set_icon(&self, icon: Icon) -> Result<()> {
 		self.proxy
-			.send_event(Message::Tray(TrayMessage::UpdateIcon(icon)))
+			.send_event(Message::Tray(self.id, TrayMessage::UpdateIcon(icon)))
 			.map_err(|_| Error::FailedToSendMessage)
 	}
 	fn set_menu(&self, menu: SystemTrayMenu) -> Result<()> {
 		self.proxy
-			.send_event(Message::Tray(TrayMessage::UpdateMenu(menu)))
+			.send_event(Message::Tray(self.id, TrayMessage::UpdateMenu(menu)))
 			.map_err(|_| Error::FailedToSendMessage)
 	}
 	fn update_item(&self, id: u16, update: MenuUpdate) -> Result<()> {
 		self.proxy
-			.send_event(Message::Tray(TrayMessage::UpdateItem(id, update)))
+			.send_event(Message::Tray(self.id, TrayMessage::UpdateItem(id, update)))
 			.map_err(|_| Error::FailedToSendMessage)
 	}
 	#[cfg(target_os = "macos")]
 	fn set_icon_as_template(&self, is_template: bool) -> millennium_runtime::Result<()> {
 		self.proxy
-			.send_event(Message::Tray(TrayMessage::UpdateIconAsTemplate(is_template)))
+			.send_event(Message::Tray(self.id, TrayMessage::UpdateIconAsTemplate(is_template)))
+			.map_err(|_| Error::FailedToSendMessage)
+	}
+
+	fn destroy(&self) -> Result<()> {
+		self.proxy
+			.send_event(Message::Tray(self.id, TrayMessage::Destroy))
 			.map_err(|_| Error::FailedToSendMessage)
 	}
 }

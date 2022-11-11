@@ -383,7 +383,7 @@ pub mod blocking {
 	///
 	/// ```rust,no_run
 	/// use millennium::api::dialog::blocking::ask;
-	/// # let app = millennium::Builder::default().build(millennium::generate_context!("test/fixture/.millenniumrc")).unwrap();
+	/// # let app = millennium::Builder::default().build(millennium::generate_context!("test/fixture/Millennium.toml")).unwrap();
 	/// # let window = millennium::Manager::get_window(&app, "main").unwrap();
 	/// let answer = ask(Some(&window), "Millennium", "Is Millennium awesome?");
 	/// // do something with `answer`
@@ -403,7 +403,7 @@ pub mod blocking {
 	///
 	/// ```rust,no_run
 	/// use millennium::api::dialog::blocking::confirm;
-	/// # let app = millennium::Builder::default().build(millennium::generate_context!("test/fixture/.millenniumrc")).unwrap();
+	/// # let app = millennium::Builder::default().build(millennium::generate_context!("test/fixture/Millennium.toml")).unwrap();
 	/// # let window = millennium::Manager::get_window(&app, "main").unwrap();
 	/// let answer = confirm(Some(&window), "Millennium", "Are you sure?");
 	/// // do something with `answer`
@@ -422,7 +422,7 @@ pub mod blocking {
 	///
 	/// ```rust,no_run
 	/// use millennium::api::dialog::blocking::message;
-	/// # let app = millennium::Builder::default().build(millennium::generate_context!("test/fixture/.millenniumrc")).unwrap();
+	/// # let app = millennium::Builder::default().build(millennium::generate_context!("test/fixture/Millennium.toml")).unwrap();
 	/// # let window = millennium::Manager::get_window(&app, "main").unwrap();
 	/// message(Some(&window), "Millennium", "Millennium is awesome!");
 	/// ```
@@ -469,7 +469,7 @@ mod nonblocking {
 		/// ```rust,no_run
 		/// use millennium::api::dialog::FileDialogBuilder;
 		/// millennium::Builder::default()
-		/// 	.build(millennium::generate_context!("test/fixture/.millenniumrc"))
+		/// 	.build(millennium::generate_context!("test/fixture/Millennium.toml"))
 		/// 	.expect("failed to build Millennium app")
 		/// 	.run(|_app, _event| {
 		/// 		FileDialogBuilder::new().pick_file(|file_path| {
@@ -494,7 +494,7 @@ mod nonblocking {
 		/// ```rust,no_run
 		/// use millennium::api::dialog::FileDialogBuilder;
 		/// millennium::Builder::default()
-		/// 	.build(millennium::generate_context!("test/fixture/.millenniumrc"))
+		/// 	.build(millennium::generate_context!("test/fixture/Millennium.toml"))
 		/// 	.expect("failed to build Millennium app")
 		/// 	.run(|_app, _event| {
 		/// 		FileDialogBuilder::new().pick_files(|file_paths| {
@@ -519,7 +519,7 @@ mod nonblocking {
 		/// ```rust,no_run
 		/// use millennium::api::dialog::FileDialogBuilder;
 		/// millennium::Builder::default()
-		/// 	.build(millennium::generate_context!("test/fixture/.millenniumrc"))
+		/// 	.build(millennium::generate_context!("test/fixture/Millennium.toml"))
 		/// 	.expect("failed to build Millennium app")
 		/// 	.run(|_app, _event| {
 		/// 		FileDialogBuilder::new().pick_folder(|folder_path| {
@@ -543,7 +543,7 @@ mod nonblocking {
 		/// ```rust,no_run
 		/// use millennium::api::dialog::FileDialogBuilder;
 		/// millennium::Builder::default()
-		/// 	.build(millennium::generate_context!("test/fixture/.millenniumrc"))
+		/// 	.build(millennium::generate_context!("test/fixture/Millennium.toml"))
 		/// 	.expect("failed to build millennium app")
 		/// 	.run(|_app, _event| {
 		/// 		FileDialogBuilder::new().pick_folders(|file_paths| {
@@ -569,7 +569,7 @@ mod nonblocking {
 		/// ```rust,no_run
 		/// use millennium::api::dialog::FileDialogBuilder;
 		/// millennium::Builder::default()
-		/// 	.build(millennium::generate_context!("test/fixture/.millenniumrc"))
+		/// 	.build(millennium::generate_context!("test/fixture/Millennium.toml"))
 		/// 	.expect("failed to build Millennium app")
 		/// 	.run(|_app, _event| {
 		/// 		FileDialogBuilder::new().save_file(|file_path| {
@@ -607,7 +607,7 @@ mod nonblocking {
 	///
 	/// ```rust,no_run
 	/// use millennium::api::dialog::ask;
-	/// # let app = millennium::Builder::default().build(millennium::generate_context!("test/fixture/.millenniumrc")).unwrap();
+	/// # let app = millennium::Builder::default().build(millennium::generate_context!("test/fixture/Millennium.toml")).unwrap();
 	/// # let window = millennium::Manager::get_window(&app, "main").unwrap();
 	/// ask(Some(&window), "Millennium", "Is Millennium awesome?", |answer| {
 	/// 	// do something with `answer`
@@ -629,7 +629,7 @@ mod nonblocking {
 	///
 	/// ```rust,no_run
 	/// use millennium::api::dialog::confirm;
-	/// # let app = millennium::Builder::default().build(millennium::generate_context!("test/fixture/.millenniumrc")).unwrap();
+	/// # let app = millennium::Builder::default().build(millennium::generate_context!("test/fixture/Millennium.toml")).unwrap();
 	/// # let window = millennium::Manager::get_window(&app, "main").unwrap();
 	/// confirm(Some(&window), "Millennium", "Are you sure?", |answer| {
 	/// 	// do something with `answer`
@@ -650,7 +650,7 @@ mod nonblocking {
 	///
 	/// ```rust,no_run
 	/// use millennium::api::dialog::message;
-	/// # let app = millennium::Builder::default().build(millennium::generate_context!("test/fixture/.millenniumrc")).unwrap();
+	/// # let app = millennium::Builder::default().build(millennium::generate_context!("test/fixture/Millennium.toml")).unwrap();
 	/// # let window = millennium::Manager::get_window(&app, "main").unwrap();
 	/// message(Some(&window), "Millennium", "Millennium is awesome!");
 	/// ```

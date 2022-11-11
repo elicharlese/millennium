@@ -195,7 +195,7 @@ pub fn parse<P: AsRef<Path>>(config: &Config, package_info: &PackageInfo, env: &
 /// 	Env
 /// };
 /// // on an actual app, remove the string argument
-/// let context = millennium::generate_context!("test/fixture/.millenniumrc");
+/// let context = millennium::generate_context!("test/fixture/Millennium.toml");
 /// let path = resolve_path(
 /// 	context.config(),
 /// 	context.package_info(),

@@ -46,16 +46,25 @@ fn copy_file(from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<()> {
 	Ok(())
 }
 
-fn copy_binaries<'a>(binaries: ResourcePaths<'a>, target_triple: &str, path: &Path) -> Result<()> {
+fn copy_binaries<'a>(binaries: ResourcePaths<'a>, target_triple: &str, path: &Path, package_name: Option<&String>) -> Result<()> {
 	for src in binaries {
 		let src = src?;
 		println!("cargo:rerun-if-changed={}", src.display());
-		let dest = path.join(
-			src.file_name()
-				.expect("failed to extract external binary filename")
-				.to_string_lossy()
-				.replace(&format!("-{}", target_triple), "")
-		);
+		let file_name = src
+			.file_name()
+			.expect("failed to extract external binary filename")
+			.to_string_lossy()
+			.replace(&format!("-{}", target_triple), "");
+
+		if package_name.map_or(false, |n| n == &file_name) {
+			return Err(anyhow::anyhow!(
+				"Cannot define a sidecar with the same name as the Cargo package name `{}`. Please change the sidecar name in the filesystem and the Millennium configuration.",
+				file_name
+			));
+		}
+
+		let dest = path.join(file_name);
+
 		if dest.exists() {
 			std::fs::remove_file(&dest).unwrap();
 		}
@@ -200,13 +209,19 @@ pub fn try_build(attributes: Attributes) -> Result<()> {
 	use cargo_toml::{Dependency, Manifest};
 	use millennium_utils::config::{Config, MillenniumConfig};
 
-	// Skip this if we're building from C++ bindings, because .millenniumrc may not be in the root directory.
+	// Skip this if we're building from C++ bindings, because the config file may not be in the root directory.
 	#[cfg(not(feature = "cxx"))]
 	{
 		println!("cargo:rerun-if-env-changed=MILLENNIUM_CONFIG");
+		println!("cargo:rerun-if-changed=Millennium.toml");
 		println!("cargo:rerun-if-changed=.millenniumrc");
 		println!("cargo:rerun-if-changed=.millenniumrc.json");
 	}
+
+	let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+	let mobile = target_os == "ios" || target_os == "android";
+	cfg_alias("desktop", !mobile);
+	cfg_alias("mobile", mobile);
 
 	let mut config = serde_json::from_value(millennium_utils::config::parse::read_from(std::env::current_dir().unwrap())?)?;
 	if let Ok(env) = std::env::var("MILLENNIUM_CONFIG") {
@@ -227,7 +242,8 @@ pub fn try_build(attributes: Attributes) -> Result<()> {
 	if let Some(millennium) = manifest.dependencies.remove("millennium") {
 		let features = match millennium {
 			Dependency::Simple(_) => Vec::new(),
-			Dependency::Detailed(dep) => dep.features
+			Dependency::Detailed(dep) => dep.features,
+			Dependency::Inherited(dep) => dep.features
 		};
 
 		let all_cli_managed_features = MillenniumConfig::all_features();
@@ -256,7 +272,7 @@ pub fn try_build(attributes: Attributes) -> Result<()> {
 
 		if !error_message.is_empty() {
 			return Err(anyhow!(
-				"The `millennium` features in the `Cargo.toml` file does not match the features allowlist defined in `.millenniumrc`. Please run `millennium dev` or `millennium build` or {}.",
+				"The `millennium` features in the `Cargo.toml` file does not match the features allowlist defined in the Millennium config file. Please run `millennium dev` or `millennium build` or {}.",
 				error_message
 			));
 		}
@@ -268,7 +284,12 @@ pub fn try_build(attributes: Attributes) -> Result<()> {
 	let target_dir = out_dir.parent().unwrap().parent().unwrap().parent().unwrap();
 
 	if let Some(paths) = &config.millennium.bundle.external_bin {
-		copy_binaries(ResourcePaths::new(external_binaries(paths, &target_triple).as_slice(), true), &target_triple, target_dir)?;
+		copy_binaries(
+			ResourcePaths::new(external_binaries(paths, &target_triple).as_slice(), true),
+			&target_triple,
+			target_dir,
+			manifest.package.as_ref().map(|p| &p.name)
+		)?;
 	}
 
 	#[allow(unused_mut, clippy::redundant_clone)]
@@ -313,6 +334,24 @@ pub fn try_build(attributes: Attributes) -> Result<()> {
 
 		if window_icon_path.exists() {
 			let mut res = WindowsResource::new();
+			res.set_manifest(
+				r#"
+					<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+						<dependency>
+							<dependentAssembly>
+								<assemblyIdentity
+									type="win32"
+									name="Microsoft.Windows.Common-Controls"
+									version="6.0.0.0"
+									processorArchitecture="*"
+									publicKeyToken="6595b64144ccf1df"
+									language="*"
+								/>
+							</dependentAssembly>
+						</dependency>
+					</assembly>
+				"#
+			);
 			if let Some(sdk_dir) = &attributes.windows_attributes.sdk_dir {
 				if let Some(sdk_dir_str) = sdk_dir.to_str() {
 					res.set_toolkit_path(sdk_dir_str);

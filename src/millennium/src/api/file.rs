@@ -86,7 +86,7 @@ mod test {
 	use quickcheck::{Arbitrary, Gen};
 
 	use super::*;
-	#[allow(unused_imports)]
+	#[cfg(not(windows))]
 	use crate::api::Error;
 
 	impl Arbitrary for super::SafePathBuf {

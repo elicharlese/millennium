@@ -23,6 +23,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use millennium_codegen::{context_codegen, ContextData};
+use millennium_utils::config::{AppUrl, WindowUrl};
 
 // TODO docs
 /// A builder for generating a Millennium application context during compile
@@ -39,7 +40,7 @@ impl Default for CodegenContext {
 	fn default() -> Self {
 		Self {
 			dev: false,
-			config_path: PathBuf::from(".millenniumrc"),
+			config_path: PathBuf::from("Millennium.toml"),
 			out_file: PathBuf::from("millennium-build-context.rs")
 		}
 	}
@@ -52,10 +53,10 @@ impl CodegenContext {
 		Self::default()
 	}
 
-	/// Set the path to the `.millenniumrc` (relative to the package's
+	/// Set the path to the Millennium config file (relative to the package's
 	/// directory).
 	///
-	/// This defaults to a file called `.millenniumrc` inside of the
+	/// This defaults to a file called `Millennium.toml` inside of the
 	/// current working directory of the package compiling; does not need to be
 	/// set manually if that config file is in the same directory as your
 	/// `Cargo.toml`.
@@ -69,7 +70,7 @@ impl CodegenContext {
 	///
 	/// **Note:** This path should be relative to the `OUT_DIR`.
 	///
-	/// Don't set this if you are using [`millennium::include_codegen_context!`]
+	/// Don't set this if you are using [`millennium::millennium_build_context!`]
 	/// as that helper macro expects the default value. This option can be
 	/// useful if you are not using the helper and instead using
 	/// [`std::include!`] on the generated code yourself.
@@ -111,13 +112,37 @@ impl CodegenContext {
 	/// Non-panicking [`Self::build`]
 	pub fn try_build(self) -> Result<PathBuf> {
 		let (config, config_parent) = millennium_codegen::get_config(&self.config_path)?;
+
+		// rerun if changed
+		let app_url = if self.dev { &config.build.dev_path } else { &config.build.dist_dir };
+		match app_url {
+			AppUrl::Url(WindowUrl::App(p)) => {
+				println!("cargo:rerun-if-changed={}", config_parent.join(p).display());
+			}
+			AppUrl::Files(files) => {
+				for path in files {
+					println!("cargo:rerun-if-changed={}", config_parent.join(path).display());
+				}
+			}
+			_ => ()
+		}
+		for icon in &config.millennium.bundle.icon {
+			println!("cargo:rerun-if-changed={}", config_parent.join(icon).display());
+		}
+		if let Some(tray_icon) = config.millennium.system_tray.as_ref().map(|t| &t.icon_path) {
+			println!("cargo:rerun-if-changed={}", config_parent.join(tray_icon).display());
+		}
+
+		#[cfg(target_os = "macos")]
+		println!("cargo:rerun-if-changed={}", config_parent.join("Info.plist").display());
+
 		let code = context_codegen(ContextData {
 			dev: self.dev,
 			config,
 			config_parent,
 			// it's very hard to have a build script for unit tests, so assume this is always called from
 			// outside the Millennium crate, making the ::millennium root valid.
-			root: quote::quote!(::millennium::Context)
+			root: quote::quote!(::millennium)
 		})?;
 
 		// get the full output file path

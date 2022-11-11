@@ -14,12 +14,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(any(target_os = "linux", windows))]
 use std::ffi::OsStr;
+#[cfg(desktop)]
+use std::io::Seek;
 use std::{
 	collections::HashMap,
 	env, fmt,
-	io::{Cursor, Read, Seek},
+	io::{Cursor, Read},
 	path::{Path, PathBuf},
 	str::{from_utf8, FromStr},
 	time::Duration
@@ -31,7 +33,7 @@ use std::{
 };
 
 use base64::decode;
-use futures::StreamExt;
+use futures_util::StreamExt;
 use http::{
 	header::{HeaderName, HeaderValue},
 	HeaderMap, StatusCode
@@ -44,8 +46,9 @@ use time::OffsetDateTime;
 use url::Url;
 
 use super::error::{Error, Result};
-#[cfg(all(feature = "updater", not(target_os = "windows")))]
+#[cfg(all(desktop, not(target_os = "windows")))]
 use crate::api::file::Compression;
+#[cfg(desktop)]
 use crate::api::file::{ArchiveFormat, Extract, Move};
 use crate::{
 	api::http::{ClientBuilder, HttpRequestBuilder},
@@ -549,18 +552,21 @@ impl<R: Runtime> Update<R> {
 		// the publickey
 		verify_signature(&mut archive_buffer, &self.signature, &pub_key)?;
 
-		// we copy the files depending of the operating system
-		// we run the setup, appimage re-install or overwrite the
-		// macos .app
-		#[cfg(target_os = "windows")]
-		copy_files_and_run(
-			archive_buffer,
-			&self.extract_path,
-			self.with_elevated_task,
-			self.app.config().millennium.updater.windows.install_mode.clone().msiexec_args()
-		)?;
-		#[cfg(not(target_os = "windows"))]
-		copy_files_and_run(archive_buffer, &self.extract_path)?;
+		#[cfg(desktop)]
+		{
+			// we copy the files depending of the operating system
+			// we run the setup, appimage re-install or overwrite the
+			// macos .app
+			#[cfg(target_os = "windows")]
+			copy_files_and_run(
+				archive_buffer,
+				&self.extract_path,
+				self.with_elevated_task,
+				self.app.config().millennium.updater.windows.install_mode.clone().msiexec_args()
+			)?;
+			#[cfg(not(target_os = "windows"))]
+			copy_files_and_run(archive_buffer, &self.extract_path)?;
+		}
 
 		// We are done!
 		Ok(())
@@ -722,9 +728,13 @@ fn copy_files_and_run<R: Read + Seek>(archive_buffer: R, _extract_path: &Path, w
 			msi_path_arg.push("\"\"\"");
 
 			// run the installer and relaunch the application
-			let powershell_install_res = Command::new("powershell.exe")
+			let system_root = std::env::var("SYSTEMROOT");
+			let powershell_path = system_root
+				.as_ref()
+				.map_or_else(|_| "powershell.exe".to_string(), |p| format!("{p}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"));
+			let powershell_install_res = Command::new(powershell_path)
 				.args(["-NoProfile", "-windowstyle", "hidden"])
-				.args(["Start-Process", "-Wait", "-FilePath", "msiexec.exe", "-ArgumentList"])
+				.args(["Start-Process", "-Wait", "-FilePath", "$env:SYSTEMROOT\\System32\\msiexec.exe", "-ArgumentList"])
 				.arg("/i,")
 				.arg(msi_path_arg)
 				.arg(format!(", {}, /promptrestart;", msiexec_args.join(", ")))
@@ -733,7 +743,10 @@ fn copy_files_and_run<R: Read + Seek>(archive_buffer: R, _extract_path: &Path, w
 				.spawn();
 			if powershell_install_res.is_err() {
 				// fallback to running msiexec directly for older machines
-				let _ = Command::new("msiexec.exe")
+				let msiexec_path = system_root
+					.as_ref()
+					.map_or_else(|_| "msiexec.exe".to_string(), |p| format!("{p}\\System32\\msiexec.exe"));
+				let _ = Command::new(msiexec_path)
 					.arg("/i")
 					.arg(found_path)
 					.args(msiexec_args)
@@ -794,6 +807,8 @@ fn copy_files_and_run<R: Read + Seek>(archive_buffer: R, extract_path: &Path) ->
 
 		Ok(false)
 	})?;
+
+	let _ = std::process::Command::new("touch").arg(&extract_path).status();
 
 	Ok(())
 }

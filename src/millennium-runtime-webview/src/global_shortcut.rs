@@ -26,10 +26,10 @@ use std::{
 };
 
 use millennium_runtime::{Error, GlobalShortcutManager, Result, UserEvent};
-pub use millennium_webview::application::global_shortcut::ShortcutManager as MillenniumShortcutManager;
-use millennium_webview::application::{
+#[cfg(desktop)]
+pub use millennium_webview::application::{
 	accelerator::{Accelerator, AcceleratorId},
-	global_shortcut::GlobalShortcut
+	global_shortcut::{GlobalShortcut, ShortcutManager as MillenniumShortcutManager}
 };
 
 use crate::{getter, Context, Message};
@@ -51,7 +51,7 @@ pub struct GlobalShortcutWrapper(GlobalShortcut);
 #[allow(clippy::non_send_fields_in_send_ty)]
 unsafe impl Send for GlobalShortcutWrapper {}
 
-/// Wrapper around [`WryShortcutManager`].
+/// Wrapper around [`MillenniumShortcutManager`].
 #[derive(Clone)]
 pub struct GlobalShortcutManagerHandle<T: UserEvent> {
 	pub context: Context<T>,
@@ -79,10 +79,10 @@ impl<T: UserEvent> GlobalShortcutManager for GlobalShortcutManagerHandle<T> {
 	}
 
 	fn register<F: Fn() + Send + 'static>(&mut self, accelerator: &str, handler: F) -> Result<()> {
-		let wry_accelerator: Accelerator = accelerator.parse().expect("invalid accelerator");
-		let id = wry_accelerator.clone().id();
+		let mwv_accelerator: Accelerator = accelerator.parse().expect("invalid accelerator");
+		let id = mwv_accelerator.clone().id();
 		let (tx, rx) = channel();
-		let shortcut = getter!(self, rx, Message::GlobalShortcut(GlobalShortcutMessage::Register(wry_accelerator, tx)))??;
+		let shortcut = getter!(self, rx, Message::GlobalShortcut(GlobalShortcutMessage::Register(mwv_accelerator, tx)))??;
 
 		self.listeners.lock().unwrap().insert(id, Box::new(handler));
 		self.shortcuts.lock().unwrap().insert(accelerator.into(), (id, shortcut));

@@ -31,24 +31,29 @@ export interface Event<T> {
 	payload: T;
 }
 
-export type EventName = LiteralUnion<
-	| 'millennium://update'
-	| 'millennium://update-available'
-	| 'millennium://update-install'
-	| 'millennium://update-status'
-	| 'millennium://resize'
-	| 'millennium://move'
-	| 'millennium://close-requested'
-	| 'millennium://focus'
-	| 'millennium://blur'
-	| 'millennium://scale-change'
-	| 'millennium://menu'
-	| 'millennium://file-drop'
-	| 'millennium://file-drop-hover'
-	| 'millennium://file-drop-cancelled'
-	| 'millennium://theme-changed',
-	string
->;
+export const enum MillenniumEvent {
+	WINDOW_RESIZED = 'millennium://resize',
+	WINDOW_MOVED = 'millennium://move',
+	WINDOW_CLOSE_REQUESTED = 'millennium://close-requested',
+	WINDOW_CREATED = 'millennium://window-created',
+	WINDOW_DESTROYED = 'millennium://window-destroyed',
+	WINDOW_FOCUS = 'millennium://focus',
+	WINDOW_BLUR = 'millennium://blur',
+	WINDOW_SCALE_FACTOR_CHANGED = 'millennium://scale-change',
+	WINDOW_THEME_CHANGED = 'millennium://theme-changed',
+	WINDOW_FILE_DROP = 'millennium://file-drop',
+	WINDOW_FILE_DROP_HOVER = 'millennium://file-drop-hover',
+	WINDOW_FILE_DROP_CANCELLED = 'millennium://file-drop-cancelled',
+	MENU = 'millennium://menu',
+	UPDATE_CHECK = 'millennium://update',
+	UPDATE_AVAILABLE = 'millennium://update-available',
+	UPDATE_INSTALL = 'millennium://update-install',
+	UPDATE_STATUS = 'millennium://update-status',
+	UPDATE_DOWNLOAD_PROGRESS = 'millennium://update-download-progress',
+	ERROR = 'millennium://error'
+}
+
+export type EventName = LiteralUnion<`${MillenniumEvent}`, string>;
 
 export type EventCallback<T> = (event: Event<T>) => void;
 

@@ -160,7 +160,7 @@ pub(crate) fn handle<R: Runtime>(module: String, invoke: Invoke<R>, config: Arc<
 				if let Some(unknown_variant_name) = s.next() {
 					if unknown_variant_name == module {
 						return resolver.reject(format!(
-							"The `{}` module is not enabled in the allowlist. Enable the features you want to use in .millenniumrc and Cargo.toml.",
+							"The `{}` module is not enabled in the allowlist. Enable the features you want to use in the Millennium config file and Cargo.toml.",
 							module
 						));
 					} else if module == "Window" {

@@ -45,13 +45,13 @@ impl Cmd {
 
 	#[cfg(not(cli))]
 	fn cli_matches<R: Runtime>(_: InvokeContext<R>) -> super::Result<InvokeResponse> {
-		Err(crate::error::into_anyhow("CLI definition not set under .millenniumrc > millennium > cli"))
+		Err(crate::error::into_anyhow("CLI definition not set in Millennium config under 'millennium > cli'"))
 	}
 }
 
 #[cfg(test)]
 mod tests {
-	#[millennium_macros::module_command_test(cli, "CLI definition not set under .millenniumrc > millennium > cli", runtime)]
+	#[millennium_macros::module_command_test(cli, "CLI definition not set in Millennium config under 'millennium > cli'", runtime)]
 	#[quickcheck_macros::quickcheck]
 	fn cli_matches() {
 		let res = super::Cmd::cli_matches(crate::test::mock_invoke_context());

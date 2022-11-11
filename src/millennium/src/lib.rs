@@ -32,11 +32,11 @@
 //! - **objc-exception**: Wrap each `msg_send!` in a @try/@catch and panics if an exception is caught, preventing
 //!   Objective-C from unwinding into Rust.
 //! - **isolation**: Enables the isolation pattern. Enabled by default if the `millennium > pattern > use` config option
-//!   is set to `isolation` in the `.millenniumrc` file.
+//!   is set to `isolation` in the Millennium config file.
 //! - **custom-protocol**: Feature managed by the Millennium CLI. When enabled, Millennium assumes a production
 //!   environment instead of a development one.
 //! - **updater**: Enables the application auto updater. Enabled by default if the `updater` config is defined in the
-//!   `.millenniumrc` file.
+//!   Millennium config file.
 //! - **devtools**: Enables the developer tools (Web inspector) and [`Window::open_devtools`]. Enabled by default on
 //!   debug builds. On macOS it uses private APIs, so you can't enable it if your app will be published to the App
 //!   Store.
@@ -45,6 +45,10 @@
 //! - **http-multipart**: Adds support for `multipart/form-data` HTTP requests.
 //! - **reqwest-client**: Uses `reqwest` as HTTP client on the `http` APIs. Improves performance, but increases the
 //!   bundle size.
+//! - **native-tls-vendored**: Compile and statically link to a vendored copy of OpenSSL (applies to the default HTTP
+//!   client).
+//! - **reqwest-native-tls-vendored**: Compile and statically link to a vendored copy of OpenSSL (applies to the
+//!   `reqwest` HTTP client).
 //! - **process-command-api**: Enables the [`api::process::Command`] APIs.
 //! - **global-shortcut**: Enables the global shortcut APIs.
 //! - **clipboard**: Enables the clipboard APIs.
@@ -54,12 +58,12 @@
 //! - **notification**: Enables the [`api::notification`] module.
 //! - **fs-extract-api**: Enables the [`api::file::Extract`] API.
 //! - **cli**: Enables usage of `clap` for CLI argument parsing. Enabled by default if the `cli` config is defined on
-//!   the `.millenniumrc` file.
+//!   the Millennium config file.
 //! - **system-tray**: Enables application system tray API. Enabled by default if the `systemTray` config is defined on
-//!   the `.millenniumrc` file.
+//!   the Millennium config file.
 //! - **macos-private-api**: Enables features only available in **macOS**'s private APIs, currently the `transparent`
 //!   window functionality and the `fullScreenEnabled` preference setting to `true`. Enabled by default if the
-//!   `millennium > macosPrivateApi` config flag is set to `true` on the `.millenniumrc` file.
+//!   `millennium > macosPrivateApi` config flag is set to `true` on the Millennium config file.
 //! - **windows7-compat**: Enables compatibility with Windows 7 for the notifications API.
 //! - **window-data-url**: Enables usage of data URLs on the webview.
 //! - **compression**: Enables asset compression. You should only disable this if you want faster compile times in
@@ -69,9 +73,9 @@
 //!
 //! ## Cargo allowlist features
 //!
-//! The following are a list of [Cargo features](https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-features-section) that enables commands for Millennium's API package.
-//! These features are automatically enabled by the Millennium CLI based on the
-//! `allowlist` configuration under `.millenniumrc`.
+//! The following are a list of [Cargo features](https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-features-section)
+//! that enables commands for Millennium's API package. These features are automatically enabled by the Millennium CLI
+//! based on the `allowlist` configuration in the Millennium config file.
 //!
 //! - **api-all**: Enables all API endpoints.
 //!
@@ -227,7 +231,7 @@ use interprocess::local_socket::*;
 /// Reads the config file at compile time and generates a [`Context`] based on
 /// its content.
 ///
-/// The default config file path is a `.millenniumrc` file inside the Cargo
+/// The default config file path is a `Millennium.toml` file inside the Cargo
 /// manifest directory of the crate being built.
 ///
 /// # Custom Config Path
@@ -249,14 +253,11 @@ pub use runtime::http;
 #[cfg_attr(doc_cfg, doc(cfg(target_os = "macos")))]
 pub use runtime::{menu::NativeImage, ActivationPolicy};
 use serde::Serialize;
-#[cfg(feature = "system-tray")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "system-tray")))]
+#[cfg(all(desktop, feature = "system-tray"))]
+#[cfg_attr(doc_cfg, doc(cfg(all(desktop, feature = "system-tray"))))]
 pub use {
-	self::app::tray::{SystemTrayEvent, SystemTrayHandle},
-	self::runtime::{
-		menu::{SystemTrayMenu, SystemTrayMenuItem, SystemTraySubmenu},
-		SystemTray
-	}
+	self::app::tray::{SystemTray, SystemTrayEvent, SystemTrayHandle},
+	self::runtime::menu::{SystemTrayMenu, SystemTrayMenuItem, SystemTraySubmenu}
 };
 pub use {
 	self::app::WindowMenuEvent,
@@ -292,8 +293,8 @@ pub use {
 #[cfg(feature = "clipboard")]
 #[cfg_attr(doc_cfg, doc(cfg(feature = "clipboard")))]
 pub use self::runtime::ClipboardManager;
-#[cfg(feature = "global-shortcut")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "global-shortcut")))]
+#[cfg(all(desktop, feature = "global-shortcut"))]
+#[cfg_attr(doc_cfg, doc(cfg(all(desktop, feature = "global-shortcut"))))]
 pub use self::runtime::GlobalShortcutManager;
 
 /// Updater events.
@@ -697,7 +698,7 @@ pub trait Manager<R: Runtime>: sealed::ManagerBase<R> {
 	/// 	.manage(DbConnection { db: Default::default() })
 	/// 	.invoke_handler(millennium::generate_handler![connect, storage_insert])
 	/// 	// on an actual app, remove the string argument
-	/// 	.run(millennium::generate_context!("test/fixture/.millenniumrc"))
+	/// 	.run(millennium::generate_context!("test/fixture/Millennium.toml"))
 	/// 	.expect("error while running millennium application");
 	/// ```
 	///
@@ -724,7 +725,7 @@ pub trait Manager<R: Runtime>: sealed::ManagerBase<R> {
 	/// 	.manage(MyString("Hello, managed state!".to_string()))
 	/// 	.invoke_handler(millennium::generate_handler![int_command, string_command])
 	/// 	// on an actual app, remove the string argument
-	/// 	.run(millennium::generate_context!("test/fixture/.millenniumrc"))
+	/// 	.run(millennium::generate_context!("test/fixture/Millennium.toml"))
 	/// 	.expect("error while running Millennium application");
 	/// ```
 	fn manage<T>(&self, state: T) -> bool

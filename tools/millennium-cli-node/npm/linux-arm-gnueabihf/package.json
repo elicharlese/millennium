@@ -7,7 +7,7 @@
   "os": [
     "linux"
   ],
-  "arch": [
+  "cpu": [
     "arm"
   ],
   "main": "millennium-cli.linux-arm-gnueabihf.node",

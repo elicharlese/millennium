@@ -15,20 +15,28 @@
 // limitations under the License.
 
 use std::{
-	collections::HashMap,
+	collections::{hash_map::DefaultHasher, HashMap},
+	fmt,
+	hash::{Hash, Hasher},
 	sync::{Arc, Mutex}
 };
 
 use millennium_macros::default_runtime;
+use millennium_runtime::TrayId;
+use millennium_utils::debug_eprintln;
+use rand::distributions::{Alphanumeric, DistString};
 
 pub use crate::{
 	runtime::{
 		menu::{MenuHash, MenuId, MenuIdRef, MenuUpdate, SystemTrayMenu, SystemTrayMenuEntry, TrayHandle},
 		window::dpi::{PhysicalPosition, PhysicalSize},
-		SystemTray
+		RuntimeHandle, SystemTrayEvent as RuntimeSystemTrayEvent
 	},
 	Icon, Runtime
 };
+use crate::{sealed::RuntimeOrDispatch, Manager};
+
+type TrayEventHandler = dyn Fn(SystemTrayEvent) + Send + Sync + 'static;
 
 pub(crate) fn get_menu_ids(map: &mut HashMap<MenuHash, MenuId>, menu: &SystemTrayMenu) {
 	for item in &menu.items {
@@ -42,6 +50,328 @@ pub(crate) fn get_menu_ids(map: &mut HashMap<MenuHash, MenuId>, menu: &SystemTra
 	}
 }
 
+/// Represents a System Tray instance.
+#[derive(Clone)]
+#[non_exhaustive]
+pub struct SystemTray {
+	/// The tray identifier. Defaults to a random string.
+	pub id: String,
+	/// The tray icon.
+	pub icon: Option<millennium_runtime::Icon>,
+	/// The tray menu.
+	pub menu: Option<SystemTrayMenu>,
+	/// Whether the icon is a macOS [template](https://developer.apple.com/documentation/appkit/nsimage/1520017-template?language=objc) icon or not.
+	#[cfg(target_os = "macos")]
+	pub icon_as_template: bool,
+	/// Whether the menu should appear when the tray is left clicked. Defaults to `true`.
+	#[cfg(target_os = "macos")]
+	pub menu_on_left_click: bool,
+	on_event: Option<Arc<TrayEventHandler>>,
+	// TODO: icon_as_template and menu_on_left_click should be an Option instead
+	#[cfg(target_os = "macos")]
+	menu_on_left_click_set: bool,
+	#[cfg(target_os = "macos")]
+	icon_as_template_set: bool
+}
+
+impl fmt::Debug for SystemTray {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let mut d = f.debug_struct("SystemTray");
+		d.field("id", &self.id).field("icon", &self.icon).field("menu", &self.menu);
+		#[cfg(target_os = "macos")]
+		{
+			d.field("icon_as_template", &self.icon_as_template)
+				.field("menu_on_left_click", &self.menu_on_left_click);
+		}
+		d.finish()
+	}
+}
+
+impl Default for SystemTray {
+	fn default() -> Self {
+		Self {
+			id: Alphanumeric.sample_string(&mut rand::thread_rng(), 16),
+			icon: None,
+			menu: None,
+			on_event: None,
+			#[cfg(target_os = "macos")]
+			icon_as_template: false,
+			#[cfg(target_os = "macos")]
+			menu_on_left_click: false,
+			#[cfg(target_os = "macos")]
+			icon_as_template_set: false,
+			#[cfg(target_os = "macos")]
+			menu_on_left_click_set: false
+		}
+	}
+}
+
+impl SystemTray {
+	/// Creates a new system tray that only renders an icon.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// use millennium::SystemTray;
+	///
+	/// millennium::Builder::default().setup(|app| {
+	/// 	let tray_handle = SystemTray::new().build(app)?;
+	/// 	Ok(())
+	/// });
+	/// ```
+	pub fn new() -> Self {
+		Default::default()
+	}
+
+	pub(crate) fn menu(&self) -> Option<&SystemTrayMenu> {
+		self.menu.as_ref()
+	}
+
+	/// Sets the tray identifier, used to retrieve its handle and to identify a tray event source.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// use millennium::SystemTray;
+	///
+	/// millennium::Builder::default().setup(|app| {
+	/// 	let tray_handle = SystemTray::new().with_id("tray-id").build(app)?;
+	/// 	Ok(())
+	/// });
+	/// ```
+	#[must_use]
+	pub fn with_id<I: Into<String>>(mut self, id: I) -> Self {
+		self.id = id.into();
+		self
+	}
+
+	/// Sets the tray [`Icon`].
+	///
+	/// # Examples
+	///
+	/// ```
+	/// use millennium::{Icon, SystemTray};
+	///
+	/// millennium::Builder::default().setup(|app| {
+	/// 	let tray_handle = SystemTray::new()
+	///       // dummy and invalid Rgba icon; see the Icon documentation for more information
+	///       .with_icon(Icon::Rgba { rgba: Vec::new(), width: 0, height: 0 })
+	///       .build(app)?;
+	/// 	Ok(())
+	/// });
+	/// ```
+	#[must_use]
+	pub fn with_icon<I: TryInto<millennium_runtime::Icon>>(mut self, icon: I) -> Self
+	where
+		I::Error: std::error::Error
+	{
+		match icon.try_into() {
+			Ok(icon) => {
+				self.icon.replace(icon);
+			}
+			Err(e) => {
+				debug_eprintln!("Failed to load tray icon: {}", e);
+			}
+		}
+		self
+	}
+
+	/// Sets the icon as a macOS [template](https://developer.apple.com/documentation/appkit/nsimage/1520017-template?language=objc).
+	///
+	/// Images you mark as template images should consist of only black and clear colors.
+	/// You can use the alpha channel in the image to adjust the opacity of black content.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// use millennium::SystemTray;
+	///
+	/// millennium::Builder::default().setup(|app| {
+	/// 	let mut tray_builder = SystemTray::new();
+	/// 	#[cfg(target_os = "macos")]
+	/// 	{
+	/// 		tray_builder = tray_builder.with_icon_as_template(true);
+	/// 	}
+	/// 	let tray_handle = tray_builder.build(app)?;
+	/// 	Ok(())
+	/// });
+	/// ```
+	#[cfg(target_os = "macos")]
+	#[must_use]
+	pub fn with_icon_as_template(mut self, is_template: bool) -> Self {
+		self.icon_as_template_set = true;
+		self.icon_as_template = is_template;
+		self
+	}
+
+	/// Sets whether the menu should appear when the tray is left clicked. Defaults to `true`.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// use millennium::SystemTray;
+	///
+	/// millennium::Builder::default().setup(|app| {
+	/// 	let mut tray_builder = SystemTray::new();
+	/// 	#[cfg(target_os = "macos")]
+	/// 	{
+	/// 		tray_builder = tray_builder.with_menu_on_left_click(false);
+	/// 	}
+	/// 	let tray_handle = tray_builder.build(app)?;
+	/// 	Ok(())
+	/// });
+	/// ```
+	#[cfg(target_os = "macos")]
+	#[must_use]
+	pub fn with_menu_on_left_click(mut self, menu_on_left_click: bool) -> Self {
+		self.menu_on_left_click_set = true;
+		self.menu_on_left_click = menu_on_left_click;
+		self
+	}
+
+	/// Sets the event listener for this system tray.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// use millennium::{Icon, Manager, SystemTray, SystemTrayEvent};
+	///
+	/// millennium::Builder::default().setup(|app| {
+	/// 	let handle = app.handle();
+	/// 	let id = "tray-id";
+	/// 	SystemTray::new()
+	/// 		.with_id(id)
+	/// 		.on_event(move |event| {
+	/// 			let tray_handle = handle.tray_handle_by_id(id).unwrap();
+	/// 			match event {
+	/// 				// show window with id "main" when the tray is left clicked
+	/// 				SystemTrayEvent::LeftClick { .. } => {
+	/// 					let window = handle.get_window("main").unwrap();
+	/// 					window.show().unwrap();
+	/// 					window.set_focus().unwrap();
+	/// 				}
+	/// 				_ => {}
+	/// 			}
+	/// 		})
+	/// 		.build(app)?;
+	/// 	Ok(())
+	/// });
+	/// ```
+	#[must_use]
+	pub fn on_event<F: Fn(SystemTrayEvent) + Send + Sync + 'static>(mut self, f: F) -> Self {
+		self.on_event.replace(Arc::new(f));
+		self
+	}
+
+	/// Sets the menu to show when the tray icon is right clicked.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// use millennium::{CustomMenuItem, SystemTray, SystemTrayMenu};
+	///
+	/// millennium::Builder::default().setup(|app| {
+	/// 	let tray_handle = SystemTray::new()
+	/// 		.with_menu(
+	/// 			SystemTrayMenu::new()
+	/// 				.add_item(CustomMenuItem::new("quit", "Quit"))
+	/// 				.add_item(CustomMenuItem::new("open", "Open"))
+	/// 		)
+	/// 		.build(app)?;
+	/// 	Ok(())
+	/// });
+	/// ```
+	#[must_use]
+	pub fn with_menu(mut self, menu: SystemTrayMenu) -> Self {
+		self.menu.replace(menu);
+		self
+	}
+	/// Builds and shows the system tray.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// use millennium::{CustomMenuItem, SystemTray, SystemTrayMenu};
+	///
+	/// millennium::Builder::default().setup(|app| {
+	/// 	let tray_handle = SystemTray::new()
+	/// 		.with_menu(
+	/// 			SystemTrayMenu::new()
+	/// 				.add_item(CustomMenuItem::new("quit", "Quit"))
+	/// 				.add_item(CustomMenuItem::new("open", "Open"))
+	/// 		)
+	/// 		.build(app)?;
+	///
+	/// 	tray_handle.get_item("quit").set_enabled(false);
+	/// 	Ok(())
+	/// });
+	/// ```
+	pub fn build<R: Runtime, M: Manager<R>>(mut self, manager: &M) -> crate::Result<SystemTrayHandle<R>> {
+		let mut ids = HashMap::new();
+		if let Some(menu) = self.menu() {
+			get_menu_ids(&mut ids, menu);
+		}
+		let ids = Arc::new(Mutex::new(ids));
+
+		if self.icon.is_none() {
+			if let Some(tray_icon) = &manager.manager().inner.tray_icon {
+				self = self.with_icon(tray_icon.clone());
+			}
+		}
+		#[cfg(target_os = "macos")]
+		{
+			if !self.icon_as_template_set {
+				self.icon_as_template = manager.config().millennium.system_tray.as_ref().map_or(false, |t| t.icon_as_template);
+			}
+			if !self.menu_on_left_click_set {
+				self.menu_on_left_click = manager.config().millennium.system_tray.as_ref().map_or(false, |t| t.menu_on_left_click);
+			}
+		}
+
+		let tray_id = self.id.clone();
+
+		let mut runtime_tray = millennium_runtime::SystemTray::new();
+		runtime_tray = runtime_tray.with_id(hash(&self.id));
+		if let Some(i) = self.icon {
+			runtime_tray = runtime_tray.with_icon(i);
+		}
+
+		if let Some(menu) = self.menu {
+			runtime_tray = runtime_tray.with_menu(menu);
+		}
+
+		if let Some(on_event) = self.on_event {
+			let ids_ = ids.clone();
+			let tray_id_ = tray_id.clone();
+			runtime_tray = runtime_tray.on_event(move |event| on_event(SystemTrayEvent::from_runtime_event(event, tray_id_.clone(), &ids_)));
+		}
+
+		#[cfg(target_os = "macos")]
+		{
+			runtime_tray = runtime_tray.with_icon_as_template(self.icon_as_template);
+			runtime_tray = runtime_tray.with_menu_on_left_click(self.menu_on_left_click);
+		}
+
+		let id = runtime_tray.id;
+		let tray_handler = match manager.runtime() {
+			RuntimeOrDispatch::Runtime(r) => r.system_tray(runtime_tray),
+			RuntimeOrDispatch::RuntimeHandle(h) => h.system_tray(runtime_tray),
+			RuntimeOrDispatch::Dispatch(_) => manager.app_handle().runtime_handle.system_tray(runtime_tray)
+		}?;
+
+		let tray_handle = SystemTrayHandle { id, ids, inner: tray_handler };
+		manager.manager().attach_tray(tray_id, tray_handle.clone());
+
+		Ok(tray_handle)
+	}
+}
+
+fn hash(id: &str) -> MenuHash {
+	let mut hasher = DefaultHasher::new();
+	id.hash(&mut hasher);
+	hasher.finish() as MenuHash
+}
+
 /// System tray event.
 #[cfg_attr(doc_cfg, doc(cfg(feature = "system-tray")))]
 #[non_exhaustive]
@@ -49,6 +379,8 @@ pub enum SystemTrayEvent {
 	/// Tray context menu item was clicked.
 	#[non_exhaustive]
 	MenuItemClick {
+		/// The tray ID.
+		tray_id: String,
 		/// The id of the menu item.
 		id: MenuId
 	},
@@ -59,6 +391,8 @@ pub enum SystemTrayEvent {
 	/// - **Linux:** Unsupported
 	#[non_exhaustive]
 	LeftClick {
+		/// The tray ID.
+		tray_id: String,
 		/// The position of the tray icon.
 		position: PhysicalPosition<f64>,
 		/// The size of the tray icon.
@@ -72,6 +406,8 @@ pub enum SystemTrayEvent {
 	/// - **macOS:** `Ctrl` + `Left click` fire this event.
 	#[non_exhaustive]
 	RightClick {
+		/// The tray ID.
+		tray_id: String,
 		/// The position of the tray icon.
 		position: PhysicalPosition<f64>,
 		/// The size of the tray icon.
@@ -84,6 +420,8 @@ pub enum SystemTrayEvent {
 	/// - **macOS / Linux:** Unsupported
 	#[non_exhaustive]
 	DoubleClick {
+		/// The tray ID.
+		tray_id: String,
 		/// The position of the tray icon.
 		position: PhysicalPosition<f64>,
 		/// The size of the tray icon.
@@ -91,10 +429,37 @@ pub enum SystemTrayEvent {
 	}
 }
 
+impl SystemTrayEvent {
+	pub(crate) fn from_runtime_event(event: &RuntimeSystemTrayEvent, tray_id: String, menu_ids: &Arc<Mutex<HashMap<u16, String>>>) -> Self {
+		match event {
+			RuntimeSystemTrayEvent::MenuItemClick(id) => Self::MenuItemClick {
+				tray_id,
+				id: menu_ids.lock().unwrap().get(id).unwrap().clone()
+			},
+			RuntimeSystemTrayEvent::LeftClick { position, size } => Self::LeftClick {
+				tray_id,
+				position: *position,
+				size: *size
+			},
+			RuntimeSystemTrayEvent::RightClick { position, size } => Self::RightClick {
+				tray_id,
+				position: *position,
+				size: *size
+			},
+			RuntimeSystemTrayEvent::DoubleClick { position, size } => Self::DoubleClick {
+				tray_id,
+				position: *position,
+				size: *size
+			}
+		}
+	}
+}
+
 /// A handle to a system tray. Allows updating the context menu items.
 #[default_runtime(crate::MillenniumWebview, millennium_webview)]
 #[derive(Debug)]
 pub struct SystemTrayHandle<R: Runtime> {
+	pub(crate) id: TrayId,
 	pub(crate) ids: Arc<Mutex<HashMap<MenuHash, MenuId>>>,
 	pub(crate) inner: R::TrayHandler
 }
@@ -102,6 +467,7 @@ pub struct SystemTrayHandle<R: Runtime> {
 impl<R: Runtime> Clone for SystemTrayHandle<R> {
 	fn clone(&self) -> Self {
 		Self {
+			id: self.id,
 			ids: self.ids.clone(),
 			inner: self.inner.clone()
 		}
@@ -159,6 +525,11 @@ impl<R: Runtime> SystemTrayHandle<R> {
 	#[cfg(target_os = "macos")]
 	pub fn set_icon_as_template(&self, is_template: bool) -> crate::Result<()> {
 		self.inner.set_icon_as_template(is_template).map_err(Into::into)
+	}
+
+	/// Destroys this system tray.
+	pub fn destroy(&self) -> crate::Result<()> {
+		self.inner.destroy().map_err(Into::into)
 	}
 }
 

@@ -16,7 +16,8 @@
 
 use std::{
 	collections::HashMap,
-	env::set_var,
+	env::{set_var, var_os},
+	ffi::OsStr,
 	process::exit,
 	sync::{Arc, Mutex}
 };
@@ -34,7 +35,7 @@ pub struct ConfigMetadata {
 	inner: Config,
 	/// A list of config extensions (i.e. platform-specific config files or an extra config file provided by the
 	/// `--config` CLI argument), mapped by extension name to its value.
-	extensions: HashMap<&'static str, JsonValue>
+	extensions: HashMap<String, JsonValue>
 }
 
 impl std::ops::Deref for ConfigMetadata {
@@ -48,7 +49,7 @@ impl std::ops::Deref for ConfigMetadata {
 
 impl ConfigMetadata {
 	/// Checks which config is overwriting the bundle identifier.
-	pub fn find_bundle_identifier_override(&self) -> Option<&'static str> {
+	pub fn find_bundle_identifier_override(&self) -> Option<String> {
 		for (ext, config) in &self.extensions {
 			if let Some(identifier) = config
 				.as_object()
@@ -60,7 +61,7 @@ impl ConfigMetadata {
 				.and_then(|id| id.as_str())
 			{
 				if identifier == self.inner.millennium.bundle.identifier {
-					return Some(ext);
+					return Some(ext.clone());
 				}
 			}
 		}
@@ -98,7 +99,8 @@ pub fn wix_settings(config: WixConfig) -> millennium_bundler::WixSettings {
 		license: config.license,
 		enable_elevated_update_task: config.enable_elevated_update_task,
 		banner_path: config.banner_path,
-		dialog_image_path: config.dialog_image_path
+		dialog_image_path: config.dialog_image_path,
+		fips_compliant: var_os("MILLENNIUM_FIPS_COMPLIANT").map_or(false, |v| v == "true")
 	}
 }
 
@@ -114,12 +116,13 @@ fn get_internal(merge_config: Option<&str>, reload: bool) -> crate::Result<Confi
 	}
 
 	let millennium_dir = super::app_paths::millennium_dir();
-	let mut config = millennium_utils::config::parse::parse_value(millennium_dir.join(".millenniumrc"))?;
+	let (mut config, config_path) = millennium_utils::config::parse::parse_value(millennium_dir.join("Millennium.toml"))?;
+	let config_file_name = config_path.file_name().unwrap().to_string_lossy();
 	let mut extensions = HashMap::new();
 
-	if let Some(platform_config) = millennium_utils::config::parse::read_platform(millennium_dir)? {
+	if let Some((platform_config, config_path)) = millennium_utils::config::parse::read_platform(millennium_dir)? {
 		merge(&mut config, &platform_config);
-		extensions.insert(millennium_utils::config::parse::get_platform_config_filename(), platform_config);
+		extensions.insert(config_path.file_name().unwrap().to_str().unwrap().into(), platform_config);
 	}
 
 	if let Some(merge_config) = merge_config {
@@ -127,23 +130,24 @@ fn get_internal(merge_config: Option<&str>, reload: bool) -> crate::Result<Confi
 
 		let merge_config: JsonValue = serde_json::from_str(merge_config).with_context(|| "failed to parse config to merge")?;
 		merge(&mut config, &merge_config);
-		extensions.insert(MERGE_CONFIG_EXTENSION_NAME, merge_config);
+		extensions.insert(MERGE_CONFIG_EXTENSION_NAME.into(), merge_config);
 	}
 
-	let schema: JsonValue = serde_json::from_str(include_str!("../../schema.json"))?;
-	let mut scope = valico::json_schema::Scope::new();
-	let schema = scope.compile_and_return(schema, false).unwrap();
-	let state = schema.validate(&config);
-	if !state.errors.is_empty() {
-		for error in state.errors {
-			let path = error.get_path().chars().skip(1).collect::<String>().replace('/', " > ");
-			if path.is_empty() {
-				eprintln!("`.millenniumrc` error: {}", error.get_detail().unwrap_or_else(|| error.get_title()));
-			} else {
-				eprintln!("`.millenniumrc` error in `{}`: {}", path, error.get_detail().unwrap_or_else(|| error.get_title()));
+	if config_path.extension() == Some(OsStr::new("millenniumrc")) {
+		let schema: JsonValue = serde_json::from_str(include_str!("../../schema.json"))?;
+		let schema = jsonschema::JSONSchema::compile(&schema).unwrap();
+		let result = schema.validate(&config);
+		if let Err(errors) = result {
+			for error in errors {
+				let path = error.instance_path.clone().into_vec().join(" > ");
+				if path.is_empty() {
+					eprintln!("`{config_file_name}` error: {}", error);
+				} else {
+					eprintln!("`{config_file_name}` error on `{}`: {}", path, error);
+				}
 			}
+			exit(1);
 		}
-		exit(1);
 	}
 
 	let config: Config = serde_json::from_value(config)?;

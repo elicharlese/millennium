@@ -22,7 +22,8 @@ import { isWindows } from './platform';
  * @module
  * Invoke custom commands.
  *
- * This package is also accessible with `window.Millennium.millennium` when `.millenniumrc > build > withGlobalMillennium` is enabled.
+ * This package is also accessible with `window.Millennium.millennium` when `build > withGlobalMillennium` is enabled in
+ * the Millennium config file.
  */
 
 declare global {
@@ -94,11 +95,13 @@ export async function invoke<T>(cmd: string, args: InvokeArgs = {}): Promise<T> 
 
 /**
  * Convert a device file path to an URL that can be loaded by the webview.
- * Note that `asset:` and `https://asset.localhost` must be allowed on the `csp` value configured on `.millenniumrc > millennium > security`.
+ * Note that `asset:` and `https://asset.localhost` must be allowed on the `csp` value configured under `millennium > security` in the
+ * Millennium config file.
+ *
  * Example CSP value: `"csp": "default-src 'self'; img-src 'self' asset: https://asset.localhost"` to use the asset protocol on image sources.
  *
- * Additionally, the `asset` must be allowlisted under `.millenniumrc > millennium > allowlist > protocol`,
- * and its access scope must be defined on the `assetScope` array on the same `protocol` object.
+ * Additionally, the `asset` must be allowlisted under `millennium > allowlist > protocol` in the Millennium config, and its access scope
+ * must be defined on the `assetScope` array on the same `protocol` object.
  *
  * @param filePath The file path.
  * @param protocol The protocol to use. Defaults to `asset`. You only need to set this when using a custom protocol.

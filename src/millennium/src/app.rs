@@ -16,7 +16,7 @@
 
 #![allow(clippy::tabs_in_doc_comments)]
 
-#[cfg(feature = "system-tray")]
+#[cfg(all(desktop, feature = "system-tray"))]
 pub(crate) mod tray;
 
 use std::{
@@ -35,8 +35,6 @@ use raw_window_handle::HasRawDisplayHandle;
 
 use crate::runtime::menu::{Menu, MenuId, MenuIdRef};
 use crate::runtime::RuntimeHandle;
-#[cfg(feature = "system-tray")]
-use crate::runtime::SystemTrayEvent as RuntimeSystemTrayEvent;
 #[cfg(shell_scope)]
 use crate::scope::ShellScope;
 #[cfg(updater)]
@@ -65,7 +63,7 @@ use crate::{
 
 pub(crate) type GlobalMenuEventListener<R> = Box<dyn Fn(WindowMenuEvent<R>) + Send + Sync>;
 pub(crate) type GlobalWindowEventListener<R> = Box<dyn Fn(GlobalWindowEvent<R>) + Send + Sync>;
-#[cfg(feature = "system-tray")]
+#[cfg(all(desktop, feature = "system-tray"))]
 type SystemTrayEventListener<R> = Box<dyn Fn(&AppHandle<R>, tray::SystemTrayEvent) + Send + Sync>;
 
 /// Api exposed on the `ExitRequested` event.
@@ -126,15 +124,15 @@ pub enum WindowEvent {
 	},
 	/// An event associated with the file drop action.
 	FileDrop(FileDropEvent),
-	/// The system theme has changed.
+	/// The system theme has changed. Only delivered if the window
+	/// [`theme`](`crate::window::WindowBuilder#method.theme`) is `None`.
 	///
 	/// Applications might wish to react to this to change the theme of the content of the window when the system
 	/// changes the theme.
 	///
 	/// ## Platform-specific
 	///
-	/// - **macOS / Linux**: Not supported.
-	/// - **Windows**: Only delivered if the window [`theme`](`crate::window::WindowBuilder#method.theme`) is `None`.
+	/// - **Linux**: Not supported.
 	ThemeChanged(Theme)
 }
 
@@ -262,7 +260,7 @@ impl PathResolver {
 	}
 
 	/// Resolves the path of the given resource.
-	/// Note that the path must be the same as provided in `.millenniumrc`.
+	/// Note that the path must be the same as provided in the Millennium config file.
 	///
 	/// This function is helpful when your resource path includes a root dir (`/`) or parent component (`..`),
 	/// because Millennium replaces them with a parent folder, so simply using [`Self::resource_dir`] and joining the
@@ -270,15 +268,10 @@ impl PathResolver {
 	///
 	/// # Examples
 	///
-	/// `.millenniumrc`:
-	/// ```json
-	/// {
-	/// 	"millennium": {
-	/// 		"bundle": {
-	/// 			"resources": [ "../assets/*" ]
-	/// 		}
-	/// 	}
-	/// }
+	/// `Millennium.toml`:
+	/// ```toml
+	/// [millennium.bundle]
+	/// resources = [ "../assets/*" ]
 	/// ```
 	///
 	/// ```no_run
@@ -328,12 +321,10 @@ impl<R: Runtime> AssetResolver<R> {
 pub struct AppHandle<R: Runtime> {
 	runtime_handle: R::Handle,
 	pub(crate) manager: WindowManager<R>,
-	#[cfg(feature = "global-shortcut")]
+	#[cfg(all(desktop, feature = "global-shortcut"))]
 	global_shortcut_manager: R::GlobalShortcutManager,
 	#[cfg(feature = "clipboard")]
 	clipboard_manager: R::ClipboardManager,
-	#[cfg(feature = "system-tray")]
-	tray_handle: Option<tray::SystemTrayHandle<R>>,
 	#[cfg(updater)]
 	pub(crate) updater_settings: UpdaterSettings
 }
@@ -375,12 +366,10 @@ impl<R: Runtime> Clone for AppHandle<R> {
 		Self {
 			runtime_handle: self.runtime_handle.clone(),
 			manager: self.manager.clone(),
-			#[cfg(feature = "global-shortcut")]
+			#[cfg(all(desktop, feature = "global-shortcut"))]
 			global_shortcut_manager: self.global_shortcut_manager.clone(),
 			#[cfg(feature = "clipboard")]
 			clipboard_manager: self.clipboard_manager.clone(),
-			#[cfg(feature = "system-tray")]
-			tray_handle: self.tray_handle.clone(),
 			#[cfg(updater)]
 			updater_settings: self.updater_settings.clone()
 		}
@@ -399,13 +388,6 @@ impl<R: Runtime> AppHandle<R> {
 	/// Runs the given closure on the main thread.
 	pub fn run_on_main_thread<F: FnOnce() + Send + 'static>(&self, f: F) -> crate::Result<()> {
 		self.runtime_handle.run_on_main_thread(f).map_err(Into::into)
-	}
-
-	/// Removes the system tray.
-	#[cfg(all(windows, feature = "system-tray"))]
-	#[cfg_attr(doc_cfg, doc(cfg(all(windows, feature = "system-tray"))))]
-	fn remove_system_tray(&self) -> crate::Result<()> {
-		self.runtime_handle.remove_system_tray().map_err(Into::into)
 	}
 
 	/// Adds a plugin to the runtime.
@@ -496,7 +478,9 @@ impl<R: Runtime> AppHandle<R> {
 		}
 		#[cfg(all(windows, feature = "system-tray"))]
 		{
-			let _ = self.remove_system_tray();
+			for tray in self.manager().trays().values() {
+				let _ = tray.destroy();
+			}
 		}
 	}
 }
@@ -525,12 +509,10 @@ impl<R: Runtime> ManagerBase<R> for AppHandle<R> {
 pub struct App<R: Runtime> {
 	runtime: Option<R>,
 	manager: WindowManager<R>,
-	#[cfg(feature = "global-shortcut")]
+	#[cfg(all(desktop, feature = "global-shortcut"))]
 	global_shortcut_manager: R::GlobalShortcutManager,
 	#[cfg(feature = "clipboard")]
 	clipboard_manager: R::ClipboardManager,
-	#[cfg(feature = "system-tray")]
-	tray_handle: Option<tray::SystemTrayHandle<R>>,
 	handle: AppHandle<R>
 }
 
@@ -585,13 +567,66 @@ macro_rules! shared_app_impl {
 				updater::builder(self.app_handle())
 			}
 
-			#[cfg(feature = "system-tray")]
+			/// Gets a handle to the first system tray.
+			///
+			/// Prefer [`Self::tray_handle_by_id`] when multiple system trays are created.
+			///
+			/// # Examples
+			/// ```
+			/// use millennium::{CustomMenuItem, SystemTray, SystemTrayMenu};
+			///
+			/// millennium::Builder::default().setup(|app| {
+			/// 	let app_handle = app.handle();
+			/// 	SystemTray::new()
+			/// 		.with_menu(
+			/// 			SystemTrayMenu::new()
+			/// 				.add_item(CustomMenuItem::new("quit", "Quit"))
+			/// 				.add_item(CustomMenuItem::new("open", "Open"))
+			/// 		)
+			/// 		.on_event(move |event| {
+			/// 			let tray_handle = app_handle.tray_handle();
+			/// 		})
+			/// 		.build(app)?;
+			/// 	Ok(())
+			/// });
+			/// ```
+			#[cfg(all(desktop, feature = "system-tray"))]
 			#[cfg_attr(doc_cfg, doc(cfg(feature = "system-tray")))]
-			/// Gets a handle handle to the system tray.
 			pub fn tray_handle(&self) -> tray::SystemTrayHandle<R> {
-				self.tray_handle
-					.clone()
-					.expect("tray not configured; use the `Builder#system_tray` API first.")
+				self.manager()
+					.trays()
+					.values()
+					.next()
+					.cloned()
+					.expect("tray not configured; use the `Builder#system_tray`, `App#system_tray` or `AppHandle#system_tray` APIs first.")
+			}
+
+			/// Gets a handle to a system tray by its id.
+			///
+			/// ```
+			/// use millennium::{CustomMenuItem, SystemTray, SystemTrayMenu};
+			///
+			/// millennium::Builder::default().setup(|app| {
+			/// 	let app_handle = app.handle();
+			/// 	let tray_id = "my-tray";
+			/// 	SystemTray::new()
+			/// 		.with_id(tray_id)
+			/// 		.with_menu(
+			/// 			SystemTrayMenu::new()
+			/// 				.add_item(CustomMenuItem::new("quit", "Quit"))
+			/// 				.add_item(CustomMenuItem::new("open", "Open"))
+			/// 		)
+			/// 		.on_event(move |event| {
+			/// 			let tray_handle = app_handle.tray_handle_by_id(tray_id).unwrap();
+			/// 		})
+			/// 		.build(app)?;
+			/// 	Ok(())
+			/// });
+			/// ```
+			#[cfg(all(desktop, feature = "system-tray"))]
+			#[cfg_attr(doc_cfg, doc(cfg(feature = "system-tray")))]
+			pub fn tray_handle_by_id(&self, id: &str) -> Option<tray::SystemTrayHandle<R>> {
+				self.manager().get_tray(id)
 			}
 
 			/// The path resolver for the application.
@@ -604,7 +639,7 @@ macro_rules! shared_app_impl {
 			}
 
 			/// Gets a copy of the global shortcut manager instance.
-			#[cfg(feature = "global-shortcut")]
+			#[cfg(all(desktop, feature = "global-shortcut"))]
 			#[cfg_attr(doc_cfg, doc(cfg(feature = "global-shortcut")))]
 			pub fn global_shortcut_manager(&self) -> R::GlobalShortcutManager {
 				self.global_shortcut_manager.clone()
@@ -616,7 +651,7 @@ macro_rules! shared_app_impl {
 				self.clipboard_manager.clone()
 			}
 
-			/// Gets the app's configuration, defined on the `.millenniumrc` file.
+			/// Gets the app's configuration, defined in the config file (Millennium.toml/.millenniumrc).
 			pub fn config(&self) -> Arc<Config> {
 				self.manager.config()
 			}
@@ -647,10 +682,10 @@ impl<R: Runtime> App<R> {
 	/// `NSApplicationActivationPolicyRegular` by default.
 	///
 	/// # Examples
-	/// ```rust,no_run
+	/// ```no_run
 	/// let mut app = millennium::Builder::default()
 	/// 	// on an actual app, remove the string argument
-	/// 	.build(millennium::generate_context!("test/fixture/.millenniumrc"))
+	/// 	.build(millennium::generate_context!("test/fixture/Millennium.toml"))
 	/// 	.expect("error while building Millennium application");
 	/// #[cfg(target_os = "macos")]
 	/// app.set_activation_policy(millennium::ActivationPolicy::Accessory);
@@ -662,11 +697,11 @@ impl<R: Runtime> App<R> {
 		self.runtime.as_mut().unwrap().set_activation_policy(activation_policy);
 	}
 
-	/// Gets the argument matches of the CLI definition configured in `.millenniumrc`.
+	/// Gets the argument matches of the CLI definition configured in the Millennium config file.
 	///
 	/// # Examples
 	///
-	/// ```rust,no_run
+	/// ```no_run
 	/// millennium::Builder::default().setup(|app| {
 	/// 	let matches = app.get_cli_matches()?;
 	/// 	Ok(())
@@ -684,10 +719,10 @@ impl<R: Runtime> App<R> {
 	/// Runs the application.
 	///
 	/// # Examples
-	/// ```rust,no_run
+	/// ```no_run
 	/// let app = millennium::Builder::default()
 	/// 	// on an actual app, remove the string argument
-	/// 	.build(millennium::generate_context!("test/fixture/.millenniumrc"))
+	/// 	.build(millennium::generate_context!("test/fixture/Millennium.toml"))
 	/// 	.expect("error while building Millennium application");
 	/// app.run(|_app_handle, event| match event {
 	/// 	millennium::RunEvent::ExitRequested { api, .. } => {
@@ -720,10 +755,10 @@ impl<R: Runtime> App<R> {
 	/// (Windows only).
 	///
 	/// # Examples
-	/// ```rust,no_run
+	/// ```no_run
 	/// let mut app = millennium::Builder::default()
 	/// 	// on an actual app, remove the string argument
-	/// 	.build(millennium::generate_context!("test/fixture/.millenniumrc"))
+	/// 	.build(millennium::generate_context!("test/fixture/Millennium.toml"))
 	/// 	.expect("error while building Millennium application");
 	/// loop {
 	/// 	let iteration = app.run_iteration();
@@ -732,6 +767,7 @@ impl<R: Runtime> App<R> {
 	/// 	}
 	/// }
 	/// ```
+	#[cfg(desktop)]
 	pub fn run_iteration(&mut self) -> crate::runtime::RunIteration {
 		let manager = self.manager.clone();
 		let app_handle = self.handle();
@@ -779,10 +815,10 @@ impl<R: Runtime> App<R> {
 /// Builds a Millennium application.
 ///
 /// # Examples
-/// ```rust,no_run
+/// ```no_run
 /// millennium::Builder::default()
 /// 	// on an actual app, remove the string argument
-/// 	.run(millennium::generate_context!("test/fixture/.millenniumrc"))
+/// 	.run(millennium::generate_context!("test/fixture/Millennium.toml"))
 /// 	.expect("error while running Millennium application");
 /// ```
 #[allow(clippy::type_complexity)]
@@ -834,11 +870,11 @@ pub struct Builder<R: Runtime> {
 	window_event_listeners: Vec<GlobalWindowEventListener<R>>,
 
 	/// The app system tray.
-	#[cfg(feature = "system-tray")]
+	#[cfg(all(desktop, feature = "system-tray"))]
 	system_tray: Option<tray::SystemTray>,
 
 	/// System tray event handlers.
-	#[cfg(feature = "system-tray")]
+	#[cfg(all(desktop, feature = "system-tray"))]
 	system_tray_event_listeners: Vec<SystemTrayEventListener<R>>,
 
 	/// The updater configuration.
@@ -866,9 +902,9 @@ impl<R: Runtime> Builder<R> {
 			enable_macos_default_menu: true,
 			menu_event_listeners: Vec::new(),
 			window_event_listeners: Vec::new(),
-			#[cfg(feature = "system-tray")]
+			#[cfg(all(desktop, feature = "system-tray"))]
 			system_tray: None,
-			#[cfg(feature = "system-tray")]
+			#[cfg(all(desktop, feature = "system-tray"))]
 			system_tray_event_listeners: Vec::new(),
 			#[cfg(updater)]
 			updater_settings: Default::default()
@@ -892,7 +928,7 @@ impl<R: Runtime> Builder<R> {
 	/// Defines the JS message handler callback.
 	///
 	/// # Examples
-	/// ```rust,no_run
+	/// ```no_run
 	/// #[millennium::command]
 	/// fn command_1() -> String {
 	/// 	return "hello world".to_string();
@@ -932,7 +968,7 @@ impl<R: Runtime> Builder<R> {
 	/// Defines the setup hook.
 	///
 	/// # Examples
-	/// ```rust,no_run
+	/// ```no_run
 	/// use millennium::Manager;
 	/// millennium::Builder::default()
 	/// 	.setup(|app| {
@@ -1031,7 +1067,7 @@ impl<R: Runtime> Builder<R> {
 	/// Since the managed state is global and must be [`Send`] + [`Sync`],
 	/// mutations can only happen through interior mutability:
 	///
-	/// ```rust,no_run
+	/// ```no_run
 	/// use std::{collections::HashMap, sync::Mutex};
 	///
 	/// use millennium::State;
@@ -1061,13 +1097,13 @@ impl<R: Runtime> Builder<R> {
 	/// 	.manage(DbConnection { db: Default::default() })
 	/// 	.invoke_handler(millennium::generate_handler![connect, storage_insert])
 	/// 	// on an actual app, remove the string argument
-	/// 	.run(millennium::generate_context!("test/fixture/.millenniumrc"))
+	/// 	.run(millennium::generate_context!("test/fixture/Millennium.toml"))
 	/// 	.expect("error while running millennium application");
 	/// ```
 	///
 	/// # Examples
 	///
-	/// ```rust,no_run
+	/// ```no_run
 	/// use millennium::State;
 	///
 	/// struct MyInt(isize);
@@ -1088,7 +1124,7 @@ impl<R: Runtime> Builder<R> {
 	/// 	.manage(MyString("Hello, managed state!".to_string()))
 	/// 	.invoke_handler(millennium::generate_handler![int_command, string_command])
 	/// 	// on an actual app, remove the string argument
-	/// 	.run(millennium::generate_context!("test/fixture/.millenniumrc"))
+	/// 	.run(millennium::generate_context!("test/fixture/Millennium.toml"))
 	/// 	.expect("error while running Millennium application");
 	/// ```
 	#[must_use]
@@ -1101,9 +1137,23 @@ impl<R: Runtime> Builder<R> {
 		self
 	}
 
-	/// Adds the icon configured in `.millenniumrc` to the system tray with the
-	/// specified menu items.
-	#[cfg(feature = "system-tray")]
+	/// Sets the given system tray to be built before the app runs.
+	///
+	/// Prefer the [`SystemTray#method.build`] method to create the tray at runtime instead.
+	///
+	/// # Examples
+	/// ```
+	/// use millennium::{CustomMenuItem, SystemTray, SystemTrayMenu};
+	///
+	/// millennium::Builder::default().system_tray(
+	/// 	SystemTray::new().with_menu(
+	/// 		SystemTrayMenu::new()
+	/// 			.add_item(CustomMenuItem::new("quit", "Quit"))
+	/// 			.add_item(CustomMenuItem::new("open", "Open"))
+	/// 	)
+	/// );
+	/// ```
+	#[cfg(all(desktop, feature = "system-tray"))]
 	#[cfg_attr(doc_cfg, doc(cfg(feature = "system-tray")))]
 	#[must_use]
 	pub fn system_tray(mut self, system_tray: tray::SystemTray) -> Self {
@@ -1114,7 +1164,7 @@ impl<R: Runtime> Builder<R> {
 	/// Sets the menu to use on all windows.
 	///
 	/// # Examples
-	/// ```rust,no_run
+	/// ```no_run
 	/// use millennium::{CustomMenuItem, Menu, MenuEntry, MenuItem, Submenu};
 	///
 	/// millennium::Builder::default().menu(Menu::with_items([MenuEntry::Submenu(Submenu::new(
@@ -1135,7 +1185,7 @@ impl<R: Runtime> Builder<R> {
 	/// Registers a menu event handler for all windows.
 	///
 	/// # Examples
-	/// ```rust,no_run
+	/// ```no_run
 	/// use millennium::{Menu, MenuEntry, Submenu, CustomMenuItem, api, Manager};
 	/// millennium::Builder::default()
 	/// 	.menu(Menu::with_items([
@@ -1172,7 +1222,7 @@ impl<R: Runtime> Builder<R> {
 	/// Registers a window event handler for all windows.
 	///
 	/// # Examples
-	/// ```rust,no_run
+	/// ```no_run
 	/// millennium::Builder::default().on_window_event(|event| match event.event() {
 	/// 	millennium::WindowEvent::Focused(focused) => {
 	/// 		// hide window whenever it loses focus
@@ -1192,11 +1242,11 @@ impl<R: Runtime> Builder<R> {
 	/// Registers a system tray event handler.
 	///
 	/// # Examples
-	/// ```rust,no_run
-	/// use millennium::Manager;
+	/// ```no_run
+	/// use millennium::{Manager, SystemTrayEvent};
 	/// millennium::Builder::default().on_system_tray_event(|app, event| match event {
 	/// 	// show window with id "main" when the tray is left clicked
-	/// 	millennium::SystemTrayEvent::LeftClick { .. } => {
+	/// 	SystemTrayEvent::LeftClick { .. } => {
 	/// 		let window = app.get_window("main").unwrap();
 	/// 		window.show().unwrap();
 	/// 		window.set_focus().unwrap();
@@ -1204,7 +1254,7 @@ impl<R: Runtime> Builder<R> {
 	/// 	_ => {}
 	/// });
 	/// ```
-	#[cfg(feature = "system-tray")]
+	#[cfg(all(desktop, feature = "system-tray"))]
 	#[cfg_attr(doc_cfg, doc(cfg(feature = "system-tray")))]
 	#[must_use]
 	pub fn on_system_tray_event<F: Fn(&AppHandle<R>, tray::SystemTrayEvent) + Send + Sync + 'static>(mut self, handler: F) -> Self {
@@ -1278,18 +1328,6 @@ impl<R: Runtime> Builder<R> {
 			self.menu = Some(Menu::os_default(&context.package_info().name));
 		}
 
-		#[cfg(feature = "system-tray")]
-		let system_tray_icon = context.system_tray_icon.clone();
-
-		#[cfg(all(feature = "system-tray", target_os = "macos"))]
-		let (system_tray_icon_as_template, system_tray_menu_on_left_click) = context
-			.config
-			.millennium
-			.system_tray
-			.as_ref()
-			.map(|t| (t.icon_as_template, t.menu_on_left_click))
-			.unwrap_or_default();
-
 		#[cfg(shell_scope)]
 		let shell_scope = context.shell_scope.clone();
 
@@ -1325,7 +1363,7 @@ impl<R: Runtime> Builder<R> {
 		let runtime = R::new()?;
 
 		let runtime_handle = runtime.handle();
-		#[cfg(feature = "global-shortcut")]
+		#[cfg(all(desktop, feature = "global-shortcut"))]
 		let global_shortcut_manager = runtime.global_shortcut_manager();
 		#[cfg(feature = "clipboard")]
 		let clipboard_manager = runtime.clipboard_manager();
@@ -1333,21 +1371,17 @@ impl<R: Runtime> Builder<R> {
 		let mut app = App {
 			runtime: Some(runtime),
 			manager: manager.clone(),
-			#[cfg(feature = "global-shortcut")]
+			#[cfg(all(desktop, feature = "global-shortcut"))]
 			global_shortcut_manager: global_shortcut_manager.clone(),
 			#[cfg(feature = "clipboard")]
 			clipboard_manager: clipboard_manager.clone(),
-			#[cfg(feature = "system-tray")]
-			tray_handle: None,
 			handle: AppHandle {
 				runtime_handle,
 				manager,
-				#[cfg(feature = "global-shortcut")]
+				#[cfg(all(desktop, feature = "global-shortcut"))]
 				global_shortcut_manager,
 				#[cfg(feature = "clipboard")]
 				clipboard_manager,
-				#[cfg(feature = "system-tray")]
-				tray_handle: None,
 				#[cfg(updater)]
 				updater_settings: self.updater_settings
 			}
@@ -1377,55 +1411,22 @@ impl<R: Runtime> Builder<R> {
 			}
 		}
 
-		#[cfg(feature = "system-tray")]
-		if let Some(system_tray) = self.system_tray {
-			#[allow(unused_mut)] // for rust analyzer hack
-			let mut ids = HashMap::new();
-			if let Some(menu) = system_tray.menu() {
-				tray::get_menu_ids(&mut ids, menu);
-			}
-			let tray_icon = if let Some(icon) = system_tray.icon {
-				Some(icon)
-			} else if let Some(tray_icon) = system_tray_icon {
-				Some(tray_icon.try_into()?)
-			} else {
-				None
-			};
-			let mut tray = tray::SystemTray::new().with_icon(tray_icon.expect("tray icon not found; please configure it in .millenniumrc"));
-			if let Some(menu) = system_tray.menu {
-				tray = tray.with_menu(menu);
+		#[cfg(all(desktop, feature = "system-tray"))]
+		{
+			if let Some(tray) = self.system_tray {
+				tray.build(&app)?;
 			}
 
-			#[cfg(target_os = "macos")]
-			let tray = tray
-				.with_icon_as_template(system_tray_icon_as_template)
-				.with_menu_on_left_click(system_tray_menu_on_left_click);
-
-			let tray_handler = app.runtime.as_ref().unwrap().system_tray(tray).expect("failed to run tray");
-
-			let tray_handle = tray::SystemTrayHandle {
-				ids: Arc::new(std::sync::Mutex::new(ids)),
-				inner: tray_handler
-			};
-			let ids = tray_handle.ids.clone();
-			app.tray_handle.replace(tray_handle.clone());
-			app.handle.tray_handle.replace(tray_handle);
 			for listener in self.system_tray_event_listeners {
 				let app_handle = app.handle();
-				let ids = ids.clone();
 				let listener = Arc::new(std::sync::Mutex::new(listener));
-				app.runtime.as_mut().unwrap().on_system_tray_event(move |event| {
-					let app_handle = app_handle.clone();
-					let event = match event {
-						RuntimeSystemTrayEvent::MenuItemClick(id) => tray::SystemTrayEvent::MenuItemClick {
-							id: ids.lock().unwrap().get(id).unwrap().clone()
-						},
-						RuntimeSystemTrayEvent::LeftClick { position, size } => tray::SystemTrayEvent::LeftClick { position: *position, size: *size },
-						RuntimeSystemTrayEvent::RightClick { position, size } => tray::SystemTrayEvent::RightClick { position: *position, size: *size },
-						RuntimeSystemTrayEvent::DoubleClick { position, size } => tray::SystemTrayEvent::DoubleClick { position: *position, size: *size }
-					};
-					let listener = listener.clone();
-					listener.lock().unwrap()(&app_handle, event);
+				app.runtime.as_mut().unwrap().on_system_tray_event(move |tray_id, event| {
+					if let Some((tray_id, tray)) = app_handle.manager().get_tray_by_runtime_id(tray_id) {
+						let app_handle = app_handle.clone();
+						let event = tray::SystemTrayEvent::from_runtime_event(event, tray_id, &tray.ids);
+						let listener = listener.clone();
+						listener.lock().unwrap()(&app_handle, event);
+					}
 				});
 			}
 		}

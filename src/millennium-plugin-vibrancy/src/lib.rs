@@ -14,29 +14,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(clippy::tabs_in_doc_comments)]
+
 //! Make your Millennium windows vibrant.
 //!
 //! # Platform support
 //!
-//! - **Windows:** Yes!
-//! - **macOS:** Yes!
-//! - **Linux:** No, blur effects are controlled by the compositor and they can enable it for your app if they want.
-//!
-//! # Example with Millennium Core:
-//!
-//! ```no_run
-//! # use millennium_core::{event_loop::EventLoop, window::WindowBuilder};
-//! # use millennium_plugin_vibrancy::{apply_vibrancy, apply_blur, NSVisualEffectMaterial};
-//! let event_loop = EventLoop::new();
-//!
-//! let window = WindowBuilder::new().with_decorations(false).build(&event_loop).unwrap();
-//!
-//! #[cfg(target_os = "windows")]
-//! apply_blur(&window, Some((18, 18, 18, 125))).unwrap();
-//!
-//! #[cfg(target_os = "macos")]
-//! apply_vibrancy(&window, NSVisualEffectMaterial::AppearanceBased).unwrap();
-//! ```
+//! - **Windows**: Yes!
+//! - **macOS**: Yes!
+//! - **Linux**: No, blur effects are controlled by the compositor and they can enable it for your app if they want.
 
 use std::sync::Mutex;
 

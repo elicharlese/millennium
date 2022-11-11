@@ -7,8 +7,11 @@
   "os": [
     "linux"
   ],
-  "arch": [
+  "cpu": [
     "arm64"
+  ],
+  "libc": [
+	"glibc"
   ],
   "main": "millennium-cli.linux-arm64-gnu.node",
   "files": [

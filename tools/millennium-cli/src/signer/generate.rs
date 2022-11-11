@@ -57,7 +57,7 @@ pub fn command(options: Options) -> Result<()> {
 	}
 
 	println!(
-		"\nEnvironment variabled used to sign:\n`MILLENNIUM_PRIVATE_KEY`  Path or String of your private key\n`MILLENNIUM_KEY_PASSWORD`  Your private key password (optional)\n\nATTENTION: If you lose your private key OR password, you'll not be able to sign your update package and updates will not works.\n---------------------------\n"
+		"\nEnvironment variabled used to sign:\n`MILLENNIUM_PRIVATE_KEY`  Path or String of your private key\n`MILLENNIUM_KEY_PASSWORD`  Your private key password (optional)\n\nATTENTION: If you lose your private key OR password, you'll not be able to sign your update package and updates will not work.\n---------------------------\n"
 	);
 
 	Ok(())

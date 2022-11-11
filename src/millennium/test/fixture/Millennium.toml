@@ -1,0 +1,19 @@
+[build]
+dist-dir = "./src"
+dev-path = "http://localhost:4000"
+
+[millennium.bundle]
+identifier = "io.pyke.test-fixture"
+active = true
+
+[millennium.allowlist]
+all = true
+
+[[millennium.windows]]
+title = "Millennium App"
+
+[millennium.security]
+csp = "default-src blob: data: filesystem: ws: wss: http: https: millennium: 'unsafe-eval' 'unsafe-inline' 'self'"
+
+[millennium.updater]
+active = false

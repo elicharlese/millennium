@@ -41,7 +41,7 @@ export interface CliMatches {
 
 /**
  * Parse the arguments provided to the application process and get the matches using the
- * configuration defined under `.millenniumrc > millennium > cli`.
+ * configuration defined in the Millennium config under `millennium > cli`.
  */
 export async function getMatches(): Promise<CliMatches> {
 	return await invokeMillenniumCommand<CliMatches>({

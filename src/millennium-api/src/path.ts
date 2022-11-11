@@ -38,8 +38,8 @@ const resolveBaseDirectory = async (directory: BaseDirectory) =>
 
 /**
  * Returns the path to the suggested directory for your app config files.
- * Resolves to `{configDir}/{bundleIdentifier}`, where `bundleIdentifier` is configured in
- * `.millenniumrc > millennium > bundle > identifier`.
+ * Resolves to `{configDir}/{bundleIdentifier}`, where `bundleIdentifier` is configured under
+ * `millennium > bundle > identifier` in the Millennium config.
  */
 export async function appDir(): Promise<string> { return resolveBaseDirectory(BaseDirectory.APP) }
 
@@ -78,7 +78,7 @@ export async function dataDir(): Promise<string> { return resolveBaseDirectory(B
 /**
  * Returns the path to the user's desktop directory.
  * - **Linux**: resolves to `XDG_DESKTOP_DIR` ([`xdg-user-dirs`](https://www.freedesktop.org/wiki/Software/xdg-user-dirs/))
- * - **macOS**: resolves to `$HOME/Library/Desktop`
+ * - **macOS**: resolves to `$HOME/Desktop`
  * - **Windows**: resolves to `{FOLDERID_Desktop}` (`C:\Users\{username}\Desktop`)
  */
 export async function desktopDir(): Promise<string> { return resolveBaseDirectory(BaseDirectory.DESKTOP) }
@@ -208,8 +208,8 @@ export async function resolve(...paths: string[]): Promise<string> {
 /**
  * Resolve the path to a resource file.
  *
- * @param resourcePath The path to the resource. Must follow the same syntax as defined in `.millenniumrc > millennium >
- * bundle > resources`, i.e. keeping subfolders and parent dir components (`../`).
+ * @param resourcePath The path to the resource. Must follow the same syntax as defined under `millennium > bundle >
+ * resources` in the Millennium config, i.e. keeping subfolders and parent dir components (`../`).
  * @returns The full path to the resource.
  */
 export async function resolveResource(resourcePath: string): Promise<string> {

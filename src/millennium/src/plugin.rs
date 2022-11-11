@@ -40,12 +40,14 @@ pub trait Plugin<R: Runtime>: Send {
 		Ok(())
 	}
 
-	/// The JS script to evaluate on webview initialization.
-	/// The script is wrapped into its own context with `(function () { /* your
-	/// script here */ })();`, so global variables must be assigned to `window`
-	/// instead of implicity declared.
+	/// Adds the provided JavaScript to a list of scripts that should be run after the global object has been created,
+	/// but before the HTML document has been parsed and before any other script included by the HTML document is run.
 	///
-	/// It's guaranteed that this script is executed before the page is loaded.
+	/// Since it runs on all top-level document and child frame page navigations, it's recommended to check the
+	/// `window.location` to prevent your script from running on unexpected origins.
+	///
+	/// The script is wrapped into its own context with `(function () { ... })();`, so global variables must be assigned
+	/// to `window` instead of implicity declared.
 	fn initialization_script(&self) -> Option<String> {
 		None
 	}
@@ -215,12 +217,16 @@ impl<R: Runtime, C: DeserializeOwned> Builder<R, C> {
 		self
 	}
 
-	/// The JS script to evaluate on webview initialization.
-	/// The script is wrapped into its own context with `(function () { /* your
-	/// script here */ })();`, so global variables must be assigned to `window`
-	/// instead of implicity declared.
+	/// Sets the provided JavaScript to run after the global object has been created, but before the HTML document has
+	/// been parsed and before any other script included by the HTML document is run.
 	///
-	/// It's guaranteed that this script is executed before the page is loaded.
+	/// Since it runs on all top-level document and child frame page navigations, it's recommended to check the
+	/// `window.location` to prevent your script from running on unexpected origins.
+	///
+	/// The script is wrapped into its own context with `(function () { ... })();`, so global variables must be assigned
+	/// to `window` instead of implicity declared.
+	///
+	/// Note that calling this function multiple times overrides previous values.
 	///
 	/// # Examples
 	///
@@ -231,8 +237,10 @@ impl<R: Runtime, C: DeserializeOwned> Builder<R, C> {
 	/// };
 	///
 	/// const INIT_SCRIPT: &str = r#"
-	/// 	console.log("hello world from js init script");
-	/// 	window.__MY_CUSTOM_PROPERTY__ = { foo: 'bar' };
+	/// 	if (window.location.origin === 'https://millennium.pyke.io/') {
+	/// 		console.log('Hello from JS init script!');
+	/// 		window.__MY_CUSTOM_PROPERTY__ = { foo: 'bar' };
+	/// 	}
 	/// "#;
 	///
 	/// fn init<R: Runtime>() -> MillenniumPlugin<R> {
@@ -288,10 +296,9 @@ impl<R: Runtime, C: DeserializeOwned> Builder<R, C> {
 	}
 
 	/// Define a closure that runs when the plugin is registered, accepting a
-	/// configuration object set on `.millenniumrc > plugins > yourPluginName`.
+	/// configuration object set in the Millennium config file under `plugins > yourPluginName`.
 	///
-	/// If your plugin is not pulling a configuration object from
-	/// `.millenniumrc`, use [setup].
+	/// If your plugin is not pulling a configuration object from the config file, use `.setup()`.
 	///
 	/// The closure gets called after the [setup] closure.
 	///

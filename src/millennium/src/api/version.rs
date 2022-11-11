@@ -36,7 +36,7 @@ use semver::Version;
 /// assert_eq!(compare("0.15.0", "0.15.5").unwrap(), 1);
 /// assert_eq!(compare("0.15.10", "0.15.9").unwrap(), -1);
 /// assert_eq!(compare("0.15.10", "0.16.10").unwrap(), 1);
-/// assert_eq!(compare("1.57.0", "2.17.4").unwrap(), 1);
+/// assert_eq!(compare("1.59.0", "2.17.4").unwrap(), 1);
 /// assert_eq!(compare("0.0.0", "0.0.0").unwrap(), 0);
 /// ```
 pub fn compare(first: &str, second: &str) -> crate::api::Result<i8> {

@@ -7,7 +7,7 @@
   "os": [
     "darwin"
   ],
-  "arch": [
+  "cpu": [
     "arm64"
   ],
   "main": "millennium-cli.darwin-arm64.node",

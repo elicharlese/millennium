@@ -2,7 +2,7 @@
 	<a href="https://millennium.pyke.io"><img src="https://github.com/pykeio/millennium/raw/main/.github/banner.png" width=1920></a>
 	<sub><i>*Stats are from <a href="https://github.com/tauri-apps/tauri">Tauri</a> and may not be fully accurate.</i><sub>
 	<br /><br />
-	<a href="https://github.com/pykeio/millennium/actions"><img alt="GitHub Workflow Status" src="https://img.shields.io/github/workflow/status/pykeio/millennium/Test%20Millennium%20(Rust)?style=for-the-badge&logo=github-actions&logoColor=white"></a>  <a href="https://github.com/pykeio/millennium/actions"><img alt="Audit Status" src="https://img.shields.io/github/workflow/status/pykeio/millennium/Audit?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0iI2ZmZiIgZD0iTTEyIDEyaDdjLS41IDQuMS0zLjMgNy44LTcgOXYtOUg1VjYuM2w3LTMuMU0xMiAxIDMgNXY2YzAgNS42IDMuOCAxMC43IDkgMTIgNS4yLTEuMyA5LTYuNCA5LTEyVjVsLTktNFoiLz48L3N2Zz4%3D&label=audit"></a> <a href="https://github.com/pykeio/millennium/graphs/commit-activity"><img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/pykeio/millennium?style=for-the-badge&logo=github"></a> <a href="https://crates.io/crates/millennium"><img alt="Crates.io" src="https://img.shields.io/crates/d/millennium?style=for-the-badge&logo=rust"></a> <a href="https://discord.gg/CETPevXFgD"><img alt="Discord" src="https://img.shields.io/discord/958136515010101248?style=for-the-badge&logo=discord&logoColor=white"></a>
+	<a href="https://github.com/pykeio/millennium/actions"><img alt="GitHub Workflow Status" src="https://img.shields.io/github/workflow/status/pykeio/millennium/Test%20Millennium%20(Rust)?style=for-the-badge&logo=github-actions&logoColor=white"></a>  <a href="https://github.com/pykeio/millennium/actions"><img alt="Audit Status" src="https://img.shields.io/github/workflow/status/pykeio/millennium/Audit?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0iI2ZmZiIgZD0iTTEyIDEyaDdjLS41IDQuMS0zLjMgNy44LTcgOXYtOUg1VjYuM2w3LTMuMU0xMiAxIDMgNXY2YzAgNS42IDMuOCAxMC43IDkgMTIgNS4yLTEuMyA5LTYuNCA5LTEyVjVsLTktNFoiLz48L3N2Zz4%3D&label=audit"></a> <a href="https://github.com/pykeio/millennium/graphs/commit-activity"><img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/pykeio/millennium?style=for-the-badge&logo=github"></a> <a href="https://crates.io/crates/millennium"><img alt="Crates.io" src="https://img.shields.io/crates/d/millennium?style=for-the-badge&logo=rust"></a> <a href="https://discord.gg/CETPevXFgD"><img alt="Discord" src="https://img.shields.io/discord/1029216970027049072?style=for-the-badge&logo=discord&logoColor=white"></a>
 	<br /><br />
 	<hr />
 </div>
@@ -17,7 +17,7 @@ Millennium is a fork of [Tauri](https://tauri.studio/), its [official plugins](h
 ## The `millennium-codegen` crate
 This crate:
 - Embeds, hashes, and compresses assets, including icons for the app and the system tray.
-- Parses `.millenniumrc` at compile time and generates configuration to be used by the rest of Millennium.
+- Parses the Millennium config file at compile time and generates configuration to be used by the rest of Millennium.
 
 ## Learn more
 

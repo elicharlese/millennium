@@ -180,7 +180,7 @@ pub(crate) fn generate_run_fn(input: DeriveInput) -> TokenStream {
 			}
 
 			matcher.extend(quote! {
-				_ => Err(crate::error::into_anyhow("This function is not enabled in the allowlist; enable the feature in your Cargo.toml and .millenniumrc to use it."))
+				_ => Err(crate::error::into_anyhow("This function is not enabled in the allowlist; enable the feature in your Cargo.toml and your Millennium config file to use it."))
 			})
 		}
 		_ => {

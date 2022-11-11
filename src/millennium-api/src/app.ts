@@ -19,7 +19,7 @@
 import { invokeMillenniumCommand } from './_internal';
 
 /**
- * Gets the application version defined in `.millenniumrc`.
+ * Gets the application version defined in the Millennium config file.
  */
 export async function getVersion(): Promise<string> {
 	return invokeMillenniumCommand<string>({
@@ -31,7 +31,7 @@ export async function getVersion(): Promise<string> {
 }
 
 /**
- * Gets the application name defined in `.millenniumrc`.
+ * Gets the application name defined in the Millennium config file.
  */
 export async function getName(): Promise<string> {
 	return invokeMillenniumCommand<string>({

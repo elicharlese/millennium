@@ -308,7 +308,6 @@ impl<'a, R: Runtime> WindowBuilder<'a, R> {
 	/// ## Platform-specific
 	///
 	/// - **macOS**: Supported on macOS 10.14+.
-	/// - **Linux**: Not implemented, the value is ignored.
 	#[must_use]
 	pub fn theme(mut self, theme: Option<Theme>) -> Self {
 		self.window_builder = self.window_builder.theme(theme);
@@ -397,7 +396,33 @@ impl<'a, R: Runtime> WindowBuilder<'a, R> {
 		self
 	}
 
-	/// Sets the init script.
+	/// Adds the provided JavaScript to a list of scripts that should be run after the global object has been created,
+	/// but before the HTML document has been parsed and before any other script included by the HTML document is run.
+	///
+	/// Since it runs on all top-level document and child frame page navigations, it's recommended to check the
+	/// `window.location` to prevent your script from running on unexpected origins.
+	///
+	/// # Examples
+	///
+	/// ```rust
+	/// use millennium::{Runtime, WindowBuilder};
+	///
+	/// const INIT_SCRIPT: &str = r#"
+	/// 	if (window.location.origin === 'https://millennium.pyke.io/') {
+	/// 		console.log('Hello from JS init script!');
+	/// 		window.__MY_CUSTOM_PROPERTY__ = { foo: 'bar' };
+	/// 	}
+	/// "#;
+	///
+	/// fn main() {
+	/// 	millennium::Builder::default().setup(|app| {
+	/// 		let window = WindowBuilder::new(app, "label", millennium::WindowUrl::App("index.html".into()))
+	/// 			.initialization_script(INIT_SCRIPT)
+	/// 			.build()?;
+	/// 		Ok(())
+	/// 	});
+	/// }
+	/// ```
 	#[must_use]
 	pub fn initialization_script(mut self, script: &str) -> Self {
 		self.webview_attributes.initialization_scripts.push(script.to_string());
@@ -509,11 +534,11 @@ impl<'de, R: Runtime> CommandArg<'de, R> for Window<R> {
 }
 
 /// The platform webview handle.
-#[cfg(feature = "millennium_webview")]
-#[cfg_attr(doc_Cfg, doc(cfg(feature = "millennium_webview")))]
+#[cfg(all(desktop, feature = "millennium_webview"))]
+#[cfg_attr(doc_Cfg, doc(cfg(all(desktop, feature = "millennium_webview"))))]
 pub struct PlatformWebview(millennium_runtime_webview::Webview);
 
-#[cfg(feature = "millennium_webview")]
+#[cfg(all(desktop, feature = "millennium_webview"))]
 impl PlatformWebview {
 	/// Returns a [`webkit2gtk::WebView`] handle.
 	#[cfg(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))]
@@ -604,7 +629,8 @@ impl Window<crate::MillenniumWebview> {
 	/// 		});
 	/// }
 	/// ```
-	#[cfg_attr(doc_cfg, doc(cfg(feature = "millennium_webview")))]
+	#[cfg(desktop)]
+	#[cfg_attr(doc_cfg, doc(cfg(all(desktop, feature = "millennium_webview"))))]
 	pub fn with_webview<F: FnOnce(PlatformWebview) + Send + 'static>(&self, f: F) -> crate::Result<()> {
 		self.window.dispatcher.with_webview(|w| f(PlatformWebview(w))).map_err(Into::into)
 	}
@@ -658,9 +684,8 @@ impl<R: Runtime> Window<R> {
 	pub fn on_menu_event<F: Fn(MenuEvent) + Send + 'static>(&self, f: F) -> uuid::Uuid {
 		let menu_ids = self.window.menu_ids.clone();
 		self.window.dispatcher.on_menu_event(move |event| {
-			f(MenuEvent {
-				menu_item_id: menu_ids.lock().unwrap().get(&event.menu_item_id).unwrap().clone()
-			})
+			let id = menu_ids.lock().unwrap().get(&event.menu_item_id).unwrap().clone();
+			f(MenuEvent { menu_item_id: id })
 		})
 	}
 }
@@ -795,7 +820,6 @@ impl<R: Runtime> Window<R> {
 	/// ## Platform-specific
 	///
 	/// - **macOS**: Supported on macOS 10.14+.
-	/// - **Linux**: Not implemented, always returns [`Theme::Light`].
 	pub fn theme(&self) -> crate::Result<Theme> {
 		self.window.dispatcher.theme().map_err(Into::into)
 	}

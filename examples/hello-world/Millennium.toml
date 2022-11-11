@@ -1,0 +1,28 @@
+[build]
+dist-dir = [ "./index.html" ]
+dev-path = [ "./index.html" ]
+
+[millennium.bundle]
+active = true
+targets = "all"
+identifier = "io.pyke.hello-world"
+icon = [
+	"../../.icons/32x32.png",
+	"../../.icons/128x128.png",
+	"../../.icons/256x256.png",
+	"../../.icons/icon.ico"
+]
+
+[millennium.allowlist]
+all = false
+
+[[millennium.windows]]
+title = "Millennium Example"
+width = 450
+height = 300
+resizable = true
+fullscreen = false
+center = true
+
+[millennium.security.csp]
+default-src = "millennium: millennium.localhost 'unsafe-inline' 'self'"
