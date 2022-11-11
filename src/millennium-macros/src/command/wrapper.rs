@@ -203,7 +203,7 @@ fn parse_args(function: &ItemFn, message: &Ident, case: ArgumentCase) -> syn::Re
 		.sig
 		.inputs
 		.iter()
-		.map(|arg| parse_arg(&function.sig.ident, arg, message))
+		.map(|arg| parse_arg(&function.sig.ident, arg, message, case))
 		.collect()
 }
 
