@@ -165,6 +165,7 @@ lazy_static! {
 			sel!(firstRectForCharacterRange:actualRange:),
 			first_rect_for_character_range as extern "C" fn(&Object, Sel, NSRange, *mut c_void) -> NSRect
 		);
+		decl.add_method(sel!(doCommandBySelector:), do_command_by_selector as extern "C" fn(&Object, Sel, Sel));
 		decl.add_method(sel!(keyDown:), key_down as extern "C" fn(&mut Object, Sel, id));
 		decl.add_method(sel!(keyUp:), key_up as extern "C" fn(&Object, Sel, id));
 		decl.add_method(sel!(flagsChanged:), flags_changed as extern "C" fn(&Object, Sel, id));
@@ -449,6 +450,19 @@ extern "C" fn insert_text(this: &Object, _sel: Sel, string: id, _replacement_ran
 	trace!("Completed `insertText`");
 }
 
+extern "C" fn do_command_by_selector(_this: &Object, _sel: Sel, _command: Sel) {
+	trace!("Triggered `doCommandBySelector`");
+
+	unsafe {
+		let responder: id = msg_send![this, nextResponder];
+		if !responder.is_null() {
+			let () = msg_send![responder, doCommandBySelector: command];
+		}
+	}
+
+	trace!("Completed `doCommandBySelector`");
+}
+
 // As defined in: https://www.unicode.org/Public/MAPPINGS/VENDORS/APPLE/CORPCHAR.TXT
 fn is_corporate_character(c: char) -> bool {
 	#[allow(clippy::match_like_matches_macro)]
@@ -535,6 +549,11 @@ extern "C" fn key_down(this: &mut Object, _sel: Sel, event: id) {
 			}
 		};
 		AppState::queue_event(EventWrapper::StaticEvent(window_event));
+
+		let responder: id = msg_send![this, nextResponder];
+		if !responder.is_null() {
+			let () = msg_send![responder, keyDown: event];
+		}
 	}
 	trace!("Completed `keyDown`");
 }

@@ -65,6 +65,7 @@ use crate::{
 };
 
 const IPC_MESSAGE_HANDLER_NAME: &str = "ipc";
+const ACCEPT_FIRST_MOUSE: &str = "accept_first_mouse";
 
 pub(crate) struct InnerWebView {
 	pub webview: id,
@@ -260,12 +261,14 @@ impl InnerWebView {
 					#[cfg(target_os = "macos")]
 					{
 						add_file_drop_methods(&mut decl);
-						if attributes.accept_first_mouse {
-							decl.add_method(sel!(acceptsFirstMouse:), yes as extern "C" fn(&Object, Sel, id) -> BOOL);
-						}
+						decl.add_ivar::<bool>(ACCEPT_FIRST_MOUSE);
+						decl.add_method(sel!(acceptsFirstMouse:), accept_first_mouse as extern "C" fn(&Object, Sel, id) -> BOOL);
 
-						extern "C" fn yes(_this: &Object, _sel: Sel, _event: id) -> BOOL {
-							YES
+						extern "C" fn accept_first_mouse(this: &Object, _sel: Sel, _event: id) -> BOOL {
+							unsafe {
+								let accept: bool = *this.get_ivar(ACCEPT_FIRST_MOUSE);
+								if accept { YES } else { NO }
+							}
 						}
 					}
 					decl.register()
@@ -275,6 +278,9 @@ impl InnerWebView {
 			let webview: id = msg_send![cls, alloc];
 			let _preference: id = msg_send![config, preferences];
 			let _yes: id = msg_send![class!(NSNumber), numberWithBool:1];
+
+			#[cfg(target_os = "macos")]
+			(*webview).set_ivar(ACCEPT_FIRST_MOUSE, attributes.accept_first_mouse);
 
 			#[cfg(any(debug_assertions, feature = "devtools"))]
 			if attributes.devtools {
@@ -320,6 +326,13 @@ impl InnerWebView {
 				let _: () = msg_send![webview, initWithFrame:frame configuration:config];
 			}
 
+			// allowsBackForwardNavigation
+			#[cfg(target_os = "macos")]
+			{
+				let value = attributes.swipe_navigation_gestures;
+				let _: () = msg_send![webview, setAllowsBackForwardNavigationGestures: value];
+			}
+
 			// Message handler
 			let ipc_handler_ptr = if let Some(ipc_handler) = attributes.ipc_handler {
 				let cls = ClassDecl::new("WebViewDelegate", class!(NSObject));
@@ -345,18 +358,20 @@ impl InnerWebView {
 			// Navigation handler
 			extern "C" fn navigation_policy(this: &Object, _: Sel, _: id, action: id, handler: id) {
 				unsafe {
+					// shouldPerformDownload is only available on macOS 11.3+
+					let can_download: BOOL = msg_send![action, respondsToSelector: sel!(shouldPerformDownload)];
+					let should_download: BOOL = if can_download == YES { msg_send![action, shouldPerformDownload] } else { NO };
 					let request: id = msg_send![action, request];
 					let url: id = msg_send![request, URL];
 					let url: id = msg_send![url, absoluteString];
 					let url = NSString(url);
 
-					let should_download: bool = msg_send![action, shouldPerformDownload];
 					let target_frame: id = msg_send![action, targetFrame];
 					let is_main_frame: bool = msg_send![target_frame, isMainFrame];
 
 					let handler = handler as *mut block::Block<(NSInteger,), c_void>;
 
-					if should_download {
+					if should_download == YES {
 						let has_download_handler = this.get_ivar::<*mut c_void>("HasDownloadHandler");
 						if !has_download_handler.is_null() {
 							let has_download_handler = &mut *(*has_download_handler as *mut Box<bool>);
@@ -441,7 +456,7 @@ impl InnerWebView {
 
 					// Download handler
 					let download_delegate = if attributes.download_started_handler.is_some() || attributes.download_completed_handler.is_some() {
-						let cls = match ClassDecl::new("DownloadDelegate", class!(NSObject)) {
+						let cls = match ClassDecl::new("MillenniumDownloadDelegate", class!(NSObject)) {
 							Some(mut cls) => {
 								cls.add_ivar::<*mut c_void>("started");
 								cls.add_ivar::<*mut c_void>("completed");
@@ -794,6 +809,8 @@ impl Drop for InnerWebView {
 				}
 			}
 
+			// Remove webview from window's NSView before dropping.
+			let () = msg_send![self.webview, removeFromSuperview];
 			let _: Id<_> = Id::from_retained_ptr(self.webview);
 			let _: Id<_> = Id::from_retained_ptr(self.manager);
 		}

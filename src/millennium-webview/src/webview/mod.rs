@@ -222,7 +222,13 @@ pub struct WebViewAttributes {
 	/// ## Platform-specific
 	///
 	/// Only supported on macOS.
-	pub accept_first_mouse: bool
+	pub accept_first_mouse: bool,
+	/// Whether horizontal swipe gestures should trigger backwards and forwards page navigation.
+	///
+	/// ## Platform-specific
+	///
+	/// Only impacts macOS.
+	pub swipe_navigation_gestures: bool
 }
 
 impl Default for WebViewAttributes {
@@ -248,7 +254,8 @@ impl Default for WebViewAttributes {
 			#[cfg(not(debug_assertions))]
 			devtools: false,
 			zoom_hotkeys_enabled: false,
-			accept_first_mouse: false
+			accept_first_mouse: false,
+			swipe_navigation_gestures: false
 		}
 	}
 }
@@ -549,6 +556,16 @@ impl<'a> WebViewBuilder<'a> {
 	/// Only supported on macOS.
 	pub fn with_accept_first_mouse(mut self, accept_first_mouse: bool) -> Self {
 		self.webview.accept_first_mouse = accept_first_mouse;
+		self
+	}
+
+	/// Whether horizontal swipe gestures should trigger backwards and forwards page navigation.
+	///
+	/// ## Platform-specific
+	///
+	/// Only impacts macOS.
+	pub fn with_swipe_navigation_gestures(mut self, enable: bool) -> Self {
+		self.webview.swipe_navigation_gestures = enable;
 		self
 	}
 
