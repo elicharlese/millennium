@@ -49,27 +49,29 @@
  *
  * The scope configuration is an array of glob patterns describing folder paths that are allowed.
  * For instance, this scope configuration only allows accessing files on the
- * *databases* folder of the [[path.appDir | $APP directory]]:
+ * *databases* folder of the [[path.appDataDir | $APPDATA directory]]:
  * ```json
  * {
  * 	"millennium": {
  * 		"allowlist": {
  * 			"fs": {
- * 				"scope": [ "$APP/databases/*" ]
+ * 				"scope": [ "$APPDATA/databases/*" ]
  * 			}
  * 		}
  * 	}
  * }
  * ```
  *
- * Notice the use of the `$APP` variable. The value is injected at runtime, resolving to the [[path.appDir | app directory]].
+ * Notice the use of the `$APPDATA` variable. The value is injected at runtime, resolving to the [[path.appDataDir | app data directory]].
  * The available variables are:
- * [[path.audioDir | `$AUDIO`]], [[path.cacheDir | `$CACHE`]], [[path.configDir | `$CONFIG`]], [[path.dataDir | `$DATA`]],
- * [[path.localDataDir | `$LOCALDATA`]], [[path.desktopDir | `$DESKTOP`]], [[path.documentDir | `$DOCUMENT`]],
- * [[path.downloadDir | `$DOWNLOAD`]], [[path.executableDir | `$EXE`]], [[path.fontDir | `$FONT`]], [[path.homeDir | `$HOME`]],
- * [[path.pictureDir | `$PICTURE`]], [[path.publicDir | `$PUBLIC`]], [[path.runtimeDir | `$RUNTIME`]],
- * [[path.templateDir | `$TEMPLATE`]], [[path.videoDir | `$VIDEO`]], [[path.resourceDir | `$RESOURCE`]], [[path.appDir | `$APP`]],
- * [[path.logDir | `$LOG`]], [[os.tempdir | `$TEMP`]].
+ * [[path.appConfigDir | `$APPCONFIG`]], [[path.appDataDir | `$APPDATA`]], [[path.appLocalDataDir | `$APPLOCALDATA`]],
+ * [[path.appCacheDir | `$APPCACHE`]], [[path.appLogDir | `$APPLOG`]], [[path.audioDir | `$AUDIO`]],
+ * [[path.cacheDir | `$CACHE`]], [[path.configDir | `$CONFIG`]], [[path.dataDir | `$DATA`]], [[path.localDataDir | `$LOCALDATA`]],
+ * [[path.desktopDir | `$DESKTOP`]], [[path.documentDir | `$DOCUMENT`]], [[path.downloadDir | `$DOWNLOAD`]],
+ * [[path.executableDir | `$EXE`]], [[path.fontDir | `$FONT`]], [[path.homeDir | `$HOME`]], [[path.pictureDir | `$PICTURE`]],
+ * [[path.publicDir | `$PUBLIC`]], [[path.runtimeDir | `$RUNTIME`]], [[path.templateDir | `$TEMPLATE`]],
+ * [[path.videoDir | `$VIDEO`]], [[path.resourceDir | `$RESOURCE`]], [[path.appDir | `$APP`]], [[path.logDir | `$LOG`]],
+ * [[os.tempdir | `$TEMP`]].
  *
  * Trying to execute any API with a URL not configured on the scope results in a promise rejection due to denied access.
  *
@@ -100,7 +102,12 @@ export enum BaseDirectory {
 	RESOURCE,
 	APP,
 	LOG,
-	TEMP
+	TEMP,
+	APPCONFIG,
+	APPDATA,
+	APPLOCALDATA,
+	APPCACHE,
+	APPLOG
 }
 
 interface FsOptions {

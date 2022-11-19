@@ -1401,6 +1401,9 @@ pub struct WindowAllowlistConfig {
 	/// Allows setting the cursor position.
 	#[serde(default, alias = "set-cursor-position")]
 	pub set_cursor_position: bool,
+	/// Allows ignoring cursor events.
+	#[serde(default, alias = "set-ignore-cursor-events")]
+	pub set_ignore_cursor_events: bool,
 	/// Allows start dragging on the window.
 	#[serde(default, alias = "start-dragging")]
 	pub start_dragging: bool,
@@ -1439,6 +1442,7 @@ impl Allowlist for WindowAllowlistConfig {
 			set_cursor_visible: true,
 			set_cursor_icon: true,
 			set_cursor_position: true,
+			set_ignore_cursor_events: true,
 			start_dragging: true,
 			print: true
 		};
@@ -1478,6 +1482,7 @@ impl Allowlist for WindowAllowlistConfig {
 			check_feature!(self, features, set_cursor_visible, "window-set-cursor-visible");
 			check_feature!(self, features, set_cursor_icon, "window-set-cursor-icon");
 			check_feature!(self, features, set_cursor_position, "window-set-cursor-position");
+			check_feature!(self, features, set_ignore_cursor_events, "window-set-ignore-cursor-events");
 			check_feature!(self, features, start_dragging, "window-start-dragging");
 			check_feature!(self, features, print, "window-print");
 			features
@@ -1497,10 +1502,11 @@ pub struct ShellAllowedCommand {
 
 	/// The command name.
 	/// It can start with a variable that resolves to a system base directory.
-	/// The variables are: `$AUDIO`, `$CACHE`, `$CONFIG`, `$DATA`, `$LOCALDATA`,
+	/// Available variables are: `$AUDIO`, `$CACHE`, `$CONFIG`, `$DATA`, `$LOCALDATA`,
 	/// `$DESKTOP`, `$DOCUMENT`, `$DOWNLOAD`, `$EXE`, `$FONT`, `$HOME`,
 	/// `$PICTURE`, `$PUBLIC`, `$RUNTIME`, `$TEMPLATE`, `$VIDEO`, `$RESOURCE`,
-	/// `$APP`, `$LOG`, `$TEMP`.
+	/// `$APP`, `$LOG`, `$TEMP`, `$APPCONFIG`, `$APPDATA`, `$APPLOCALDATA`,
+	/// `$APPCACHE`, `$APPLOG`.
 	#[serde(rename = "cmd", default)]
 	pub command: PathBuf,
 
@@ -2391,7 +2397,9 @@ pub struct SystemTrayConfig {
 	pub icon_as_template: bool,
 	/// Determines whether the tray menu should appear when the tray icon is left clicked on macOS.
 	#[serde(default = "default_tray_menu_on_left_click", alias = "menu-on-left-click")]
-	pub menu_on_left_click: bool
+	pub menu_on_left_click: bool,
+	/// Title for macOS tray.
+	pub title: Option<String>
 }
 
 fn default_tray_menu_on_left_click() -> bool {
@@ -3259,7 +3267,8 @@ mod build {
 			let icon_as_template = self.icon_as_template;
 			let menu_on_left_click = self.menu_on_left_click;
 			let icon_path = path_buf_lit(&self.icon_path);
-			literal_struct!(tokens, SystemTrayConfig, icon_path, icon_as_template, menu_on_left_click);
+			let title = opt_str_lit(self.title.as_ref());
+			literal_struct!(tokens, SystemTrayConfig, icon_path, icon_as_template, menu_on_left_click, title);
 		}
 	}
 

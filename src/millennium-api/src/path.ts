@@ -37,11 +37,40 @@ const resolveBaseDirectory = async (directory: BaseDirectory) =>
 	});
 
 /**
- * Returns the path to the suggested directory for your app config files.
+ * Returns the path to the suggested directory for your app's config files.
  * Resolves to `{configDir}/{bundleIdentifier}`, where `bundleIdentifier` is configured under
  * `millennium > bundle > identifier` in the Millennium config.
  */
-export async function appDir(): Promise<string> { return resolveBaseDirectory(BaseDirectory.APP) }
+export async function appConfigDir(): Promise<string> { return resolveBaseDirectory(BaseDirectory.APPCONFIG) }
+
+/**
+ * Returns the path to the suggested directory for your app's data files.
+ * Resolves to `{dataDir}/{bundleIdentifier}`, where `bundleIdentifier` is configured under
+ * `millennium > bundle > identifier` in the Millennium config.
+ */
+ export async function appDataDir(): Promise<string> { return resolveBaseDirectory(BaseDirectory.APPDATA) }
+
+/**
+ * Returns the path to the suggested directory for your app's local data files.
+ * Resolves to `{localDataDir}/{bundleIdentifier}`, where `bundleIdentifier` is configured under
+ * `millennium > bundle > identifier` in the Millennium config.
+ */
+ export async function appLocalData(): Promise<string> { return resolveBaseDirectory(BaseDirectory.APPLOCALDATA) }
+
+/**
+ * Returns the path to the suggested directory for your app's log files.
+ * Resolves to `{cacheDir}/{bundleIdentifier}`, where `bundleIdentifier` is configured under
+ * `millennium > bundle > identifier` in the Millennium config.
+ */
+ export async function appCacheDir(): Promise<string> { return resolveBaseDirectory(BaseDirectory.APPCACHE) }
+
+/**
+ * Returns the path to the suggested directory for your app's logs.
+ * - **Linux**: resolves to `{configDir}/{bundleIdentifier}`
+ * - **macOS**: resolves to `{homeDir}/Library/Logs/{bundleIdentifier}`
+ * - **Windows**: resolves to `{configDir}/{bundleIdentifier}`
+ */
+ export async function appLogDir(): Promise<string> { return resolveBaseDirectory(BaseDirectory.APPLOG) }
 
 /**
  * Returns the path to the user's audio directory.
@@ -175,14 +204,6 @@ export async function templateDir(): Promise<string> { return resolveBaseDirecto
  * - **Windows**: resolves to `{FOLDERID_Videos}` (`C:\Users\{username}\Videos`)
  */
 export async function videosDir(): Promise<string> { return resolveBaseDirectory(BaseDirectory.VIDEOS) }
-
-/**
- * Returns the path to the suggested log directory.
- * - **Linux**: resolves to `{configDir}/{bundleIdentifier}`
- * - **macOS**: resolves to `{homeDir}/Library/Logs/{bundleIdentifier}`
- * - **Windows**: resolves to `{configDir}/{bundleIdentifier}`
- */
-export async function logDir(): Promise<string> { return resolveBaseDirectory(BaseDirectory.LOG) }
 
 /** Platform-specific path segment separator. */
 export const sep = isWindows() ? '\\' : '/';

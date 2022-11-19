@@ -934,6 +934,7 @@ pub enum WindowMessage {
 	SetCursorVisible(bool),
 	SetCursorIcon(CursorIcon),
 	SetCursorPosition(Position),
+	SetIgnoreCursorEvents(bool),
 	DragWindow,
 	UpdateMenuItem(u16, MenuUpdate),
 	RequestRedraw
@@ -961,6 +962,8 @@ pub enum TrayMessage {
 	UpdateIcon(Icon),
 	#[cfg(target_os = "macos")]
 	UpdateIconAsTemplate(bool),
+	#[cfg(target_os = "macos")]
+	UpdateTitle(String),
 	Create(SystemTray, Sender<Result<()>>),
 	Destroy
 }
@@ -1258,6 +1261,10 @@ impl<T: UserEvent> Dispatch<T> for MillenniumDispatcher<T> {
 
 	fn set_cursor_position<Pos: Into<Position>>(&self, position: Pos) -> crate::Result<()> {
 		send_user_message(&self.context, Message::Window(self.window_id, WindowMessage::SetCursorPosition(position.into())))
+	}
+
+	fn set_ignore_cursor_events(&self, ignore: bool) -> crate::Result<()> {
+		send_user_message(&self.context, Message::Window(self.window_id, WindowMessage::SetIgnoreCursorEvents(ignore)))
 	}
 
 	fn start_dragging(&self) -> Result<()> {
@@ -1981,6 +1988,9 @@ fn handle_user_message<T: UserEvent>(
 						WindowMessage::SetCursorPosition(position) => {
 							let _ = window.set_cursor_position(PositionWrapper::from(position).0);
 						}
+						WindowMessage::SetIgnoreCursorEvents(ignore) => {
+							let _ = window.set_ignore_cursor_events(ignore);
+						}
 						WindowMessage::DragWindow => {
 							let _ = window.drag_window();
 						}
@@ -2108,6 +2118,12 @@ fn handle_user_message<T: UserEvent>(
 					TrayMessage::UpdateIconAsTemplate(is_template) => {
 						if let Some(tray) = &mut *tray_context.tray.lock().unwrap() {
 							tray.set_icon_as_template(is_template);
+						}
+					}
+					#[cfg(target_os = "macos")]
+					TrayMessage::UpdateTitle(title) => {
+						if let Some(tray) = &mut *tray_context.tray.lock().unwrap() {
+							tray.set_title(&title);
 						}
 					}
 					TrayMessage::Create(_tray, _tx) => {

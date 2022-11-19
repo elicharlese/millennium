@@ -273,7 +273,7 @@ mod tests {
 
 	impl Arbitrary for BaseDirectory {
 		fn arbitrary(g: &mut Gen) -> Self {
-			if bool::arbitrary(g) { BaseDirectory::App } else { BaseDirectory::Resource }
+			if bool::arbitrary(g) { BaseDirectory::AppData } else { BaseDirectory::Resource }
 		}
 	}
 

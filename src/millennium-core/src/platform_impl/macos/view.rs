@@ -450,7 +450,7 @@ extern "C" fn insert_text(this: &Object, _sel: Sel, string: id, _replacement_ran
 	trace!("Completed `insertText`");
 }
 
-extern "C" fn do_command_by_selector(_this: &Object, _sel: Sel, _command: Sel) {
+extern "C" fn do_command_by_selector(this: &Object, _sel: Sel, command: Sel) {
 	trace!("Triggered `doCommandBySelector`");
 
 	unsafe {

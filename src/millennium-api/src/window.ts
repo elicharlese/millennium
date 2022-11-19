@@ -620,6 +620,11 @@ class WindowManager extends WebviewWindowHandle {
 		});
 	}
 
+	/** Sets whether the window should ignore all cursor events. */
+	async setIgnoreCursorEvents(ignore: boolean): Promise<void> {
+		return await this._manage('setCursorIcon', ignore);
+	}
+
 	/** Starts dragging the window. */
 	async startDragging(): Promise<void> {
 		return await this._manage('startDragging');
@@ -760,11 +765,22 @@ export interface WindowOptions {
 	theme?: Theme;
 }
 
+function mapMonitor(m: Monitor | null): Monitor | null {
+	return m === null
+		? null
+		: {
+			name: m.name,
+			scaleFactor: m.scaleFactor,
+			position: new PhysicalPosition(m.position.x, m.position.y),
+			size: new PhysicalSize(m.size.width, m.size.height)
+		};
+}
+
 /**
  * Returns the monitor on which the window currently resides, or `null` if the current monitor can't be detected.
  */
 export async function currentMonitor(): Promise<Monitor | null> {
-	return await invokeMillenniumCommand({
+	return await invokeMillenniumCommand<Monitor | null>({
 		__millenniumModule: 'Window',
 		message: {
 			cmd: 'manage',
@@ -774,14 +790,14 @@ export async function currentMonitor(): Promise<Monitor | null> {
 				}
 			}
 		}
-	});
+	}).then(mapMonitor);
 }
 
 /**
  * Returns the primary monitor, or `null` if the primary monitor can't be detected.
  */
 export async function primaryMonitor(): Promise<Monitor | null> {
-	return invokeMillenniumCommand({
+	return invokeMillenniumCommand<Monitor | null>({
 		__millenniumModule: 'Window',
 		message: {
 			cmd: 'manage',
@@ -791,14 +807,14 @@ export async function primaryMonitor(): Promise<Monitor | null> {
 				}
 			}
 		}
-	});
+	}).then(mapMonitor);
 }
 
 /**
  * Returns an array of all available monitors.
  */
 export async function availableMonitors(): Promise<Monitor[]> {
-	return await invokeMillenniumCommand({
+	return await invokeMillenniumCommand<Monitor[]>({
 		__millenniumModule: 'Window',
 		message: {
 			cmd: 'manage',
@@ -808,5 +824,5 @@ export async function availableMonitors(): Promise<Monitor[]> {
 				}
 			}
 		}
-	});
+	}).then(ms => ms.map(mapMonitor) as Monitor[]);
 }

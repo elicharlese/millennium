@@ -27,7 +27,7 @@ use std::{
 	str::FromStr,
 	sync::{
 		atomic::{AtomicBool, Ordering},
-		mpsc::{channel, sync_channel},
+		mpsc::sync_channel,
 		Arc, Mutex
 	},
 	time::{Duration, Instant}
@@ -38,7 +38,8 @@ use anyhow::Context;
 use heck::ToKebabCase;
 use log::{debug, info};
 use millennium_bundler::{AppCategory, BundleBinary, BundleSettings, DebianSettings, MacOsSettings, PackageSettings, UpdaterSettings, WindowsSettings};
-use notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
+use notify::RecursiveMode;
+use notify_debouncer_mini::new_debouncer;
 use serde::Deserialize;
 use shared_child::SharedChild;
 
@@ -133,9 +134,15 @@ impl Interface for Rust {
 
 	fn new(config: &Config) -> crate::Result<Self> {
 		let manifest = {
-			let (tx, rx) = channel();
-			let mut watcher = watcher(tx, Duration::from_secs(1)).unwrap();
-			watcher.watch(millennium_dir().join("Cargo.toml"), RecursiveMode::Recursive)?;
+			let (tx, rx) = sync_channel(1);
+			let mut watcher = new_debouncer(Duration::from_secs(1), None, move |r| {
+				if let Ok(events) = r {
+					tx.send(events).unwrap()
+				}
+			})
+			.unwrap();
+			watcher.watcher().watch(&millennium_dir().join("Cargo.toml"), RecursiveMode::Recursive)?;
+
 			let manifest = rewrite_manifest(config)?;
 			let now = Instant::now();
 			let timeout = Duration::from_secs(2);
@@ -143,7 +150,7 @@ impl Interface for Rust {
 				if now.elapsed() >= timeout {
 					break;
 				}
-				if let Ok(DebouncedEvent::NoticeWrite(_)) = rx.try_recv() {
+				if rx.try_recv().is_ok() {
 					break;
 				}
 			}
@@ -276,7 +283,7 @@ impl Rust {
 		on_exit: Arc<F>
 	) -> crate::Result<()> {
 		let process = Arc::new(Mutex::new(child));
-		let (tx, rx) = channel();
+		let (tx, rx) = sync_channel(1);
 		let millennium_path = millennium_dir();
 		let workspace_path = get_workspace_dir()?;
 
@@ -298,29 +305,30 @@ impl Rust {
 				.unwrap_or_else(|| vec![millennium_path])
 		};
 
-		let mut watcher = watcher(tx, Duration::from_secs(1)).unwrap();
+		let mut watcher = new_debouncer(Duration::from_secs(1), None, move |r| {
+			if let Ok(events) = r {
+				tx.send(events).unwrap()
+			}
+		})
+		.unwrap();
 		for path in watch_folders {
 			info!(action = "Watching"; "{} for changes...", path.display());
 			lookup(&path, |file_type, p| {
 				if p != path {
 					debug!(action = "Watching"; "{} for changes...", p.display());
-					let _ = watcher.watch(p, if file_type.is_dir() { RecursiveMode::Recursive } else { RecursiveMode::NonRecursive });
+					let _ = watcher
+						.watcher()
+						.watch(&p, if file_type.is_dir() { RecursiveMode::Recursive } else { RecursiveMode::NonRecursive });
 				}
 			});
 		}
 
 		loop {
-			let on_exit = on_exit.clone();
-			if let Ok(event) = rx.recv() {
-				let event_path = match event {
-					DebouncedEvent::Create(path) => Some(path),
-					DebouncedEvent::Remove(path) => Some(path),
-					DebouncedEvent::Rename(_, dest) => Some(dest),
-					DebouncedEvent::Write(path) => Some(path),
-					_ => None
-				};
+			if let Ok(events) = rx.recv() {
+				for event in events {
+					let on_exit = on_exit.clone();
+					let event_path = event.path;
 
-				if let Some(event_path) = event_path {
 					if event_path.file_name() == Some(OsStr::new(".millenniumrc")) {
 						let config = reload_config(options.config.as_deref())?;
 						self.app_settings.manifest = rewrite_manifest(config.lock().unwrap().as_ref().unwrap())?;

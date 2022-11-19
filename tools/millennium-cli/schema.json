@@ -109,6 +109,7 @@
             "setFocus": false,
             "setFullscreen": false,
             "setIcon": false,
+            "setIgnoreCursorEvents": false,
             "setMaxSize": false,
             "setMinSize": false,
             "setPosition": false,
@@ -377,6 +378,7 @@
             "setFocus": false,
             "setFullscreen": false,
             "setIcon": false,
+            "setIgnoreCursorEvents": false,
             "setMaxSize": false,
             "setMinSize": false,
             "setPosition": false,
@@ -1463,6 +1465,7 @@
               "setFocus": false,
               "setFullscreen": false,
               "setIcon": false,
+              "setIgnoreCursorEvents": false,
               "setMaxSize": false,
               "setMinSize": false,
               "setPosition": false,
@@ -1859,7 +1862,7 @@
           ]
         },
         "cmd": {
-          "description": "The command name. It can start with a variable that resolves to a system base directory. The variables are: `$AUDIO`, `$CACHE`, `$CONFIG`, `$DATA`, `$LOCALDATA`, `$DESKTOP`, `$DOCUMENT`, `$DOWNLOAD`, `$EXE`, `$FONT`, `$HOME`, `$PICTURE`, `$PUBLIC`, `$RUNTIME`, `$TEMPLATE`, `$VIDEO`, `$RESOURCE`, `$APP`, `$LOG`, `$TEMP`.",
+          "description": "The command name. It can start with a variable that resolves to a system base directory. Available variables are: `$AUDIO`, `$CACHE`, `$CONFIG`, `$DATA`, `$LOCALDATA`, `$DESKTOP`, `$DOCUMENT`, `$DOWNLOAD`, `$EXE`, `$FONT`, `$HOME`, `$PICTURE`, `$PUBLIC`, `$RUNTIME`, `$TEMPLATE`, `$VIDEO`, `$RESOURCE`, `$APP`, `$LOG`, `$TEMP`, `$APPCONFIG`, `$APPDATA`, `$APPLOCALDATA`, `$APPCACHE`, `$APPLOG`.",
           "default": "",
           "type": "string"
         },
@@ -1954,6 +1957,13 @@
           "description": "Determines whether the tray menu should appear when the tray icon is left clicked on macOS.",
           "default": true,
           "type": "boolean"
+        },
+        "title": {
+          "description": "Title for macOS tray.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false
@@ -2237,6 +2247,11 @@
         },
         "setIcon": {
           "description": "Allows changing the window icon.",
+          "default": false,
+          "type": "boolean"
+        },
+        "setIgnoreCursorEvents": {
+          "description": "Allows ignoring cursor events.",
           "default": false,
           "type": "boolean"
         },

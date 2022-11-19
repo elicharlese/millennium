@@ -71,7 +71,9 @@ pub struct SystemTray {
 	#[cfg(target_os = "macos")]
 	menu_on_left_click_set: bool,
 	#[cfg(target_os = "macos")]
-	icon_as_template_set: bool
+	icon_as_template_set: bool,
+	#[cfg(target_os = "macos")]
+	title: Option<String>
 }
 
 impl fmt::Debug for SystemTray {
@@ -101,7 +103,9 @@ impl Default for SystemTray {
 			#[cfg(target_os = "macos")]
 			icon_as_template_set: false,
 			#[cfg(target_os = "macos")]
-			menu_on_left_click_set: false
+			menu_on_left_click_set: false,
+			#[cfg(target_os = "macos")]
+			title: None
 		}
 	}
 }
@@ -229,6 +233,30 @@ impl SystemTray {
 		self
 	}
 
+	/// Sets the menu title.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// use millennium::SystemTray;
+	///
+	/// millennium::Builder::default().setup(|app| {
+	/// 	let mut tray_builder = SystemTray::new();
+	/// 	#[cfg(target_os = "macos")]
+	/// 	{
+	/// 		tray_builder = tray_builder.with_title("My App");
+	/// 	}
+	/// 	let tray_handle = tray_builder.build(app)?;
+	/// 	Ok(())
+	/// });
+	/// ```
+	#[cfg(target_os = "macos")]
+	#[must_use]
+	pub fn with_title(mut self, title: &str) -> Self {
+		self.title = Some(title.to_owned());
+		self
+	}
+
 	/// Sets the event listener for this system tray.
 	///
 	/// # Examples
@@ -326,6 +354,9 @@ impl SystemTray {
 			if !self.menu_on_left_click_set {
 				self.menu_on_left_click = manager.config().millennium.system_tray.as_ref().map_or(false, |t| t.menu_on_left_click);
 			}
+			if self.title.is_none() {
+				self.title = manager.config().millennium.system_tray.as_ref().and_then(|t| t.title.clone())
+			}
 		}
 
 		let tray_id = self.id.clone();
@@ -350,6 +381,9 @@ impl SystemTray {
 		{
 			runtime_tray = runtime_tray.with_icon_as_template(self.icon_as_template);
 			runtime_tray = runtime_tray.with_menu_on_left_click(self.menu_on_left_click);
+			if let Some(title) = self.title {
+				runtime_tray = runtime_tray.with_title(&title);
+			}
 		}
 
 		let id = runtime_tray.id;
@@ -525,6 +559,12 @@ impl<R: Runtime> SystemTrayHandle<R> {
 	#[cfg(target_os = "macos")]
 	pub fn set_icon_as_template(&self, is_template: bool) -> crate::Result<()> {
 		self.inner.set_icon_as_template(is_template).map_err(Into::into)
+	}
+
+	/// Adds the title to the tray menu.
+	#[cfg(target_os = "macos")]
+	pub fn set_title(&self, title: &str) -> crate::Result<()> {
+		self.inner.set_title(title).map_err(Into::into)
 	}
 
 	/// Destroys this system tray.

@@ -476,6 +476,10 @@ impl<T: UserEvent> Dispatch<T> for MockDispatcher {
 		Ok(())
 	}
 
+	fn set_ignore_cursor_events(&self, ignore: bool) -> Result<()> {
+		Ok(())
+	}
+
 	fn start_dragging(&self) -> Result<()> {
 		Ok(())
 	}
@@ -508,6 +512,11 @@ impl TrayHandle for MockTrayHandler {
 	}
 	#[cfg(target_os = "macos")]
 	fn set_icon_as_template(&self, is_template: bool) -> Result<()> {
+		Ok(())
+	}
+
+	#[cfg(target_os = "macos")]
+	fn set_title(&self, title: &str) -> Result<()> {
 		Ok(())
 	}
 
