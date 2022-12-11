@@ -37,6 +37,8 @@ use millennium_runtime::{
 	menu::{SystemTrayMenu, TrayHandle},
 	SystemTray, SystemTrayEvent, TrayId
 };
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use millennium_utils::TitleBarStyle;
 use millennium_utils::{config::WindowConfig, Theme};
 use uuid::Uuid;
 #[cfg(windows)]
