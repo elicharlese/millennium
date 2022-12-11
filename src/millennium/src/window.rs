@@ -53,7 +53,8 @@ use crate::{
 	sealed::ManagerBase,
 	sealed::RuntimeOrDispatch,
 	utils::config::WindowUrl,
-	CursorIcon, EventLoopMessage, Icon, Invoke, InvokeError, InvokeMessage, InvokeResolver, Manager, PageLoadPayload, Runtime, Theme, WindowEvent
+	CursorIcon, EventLoopMessage, Icon, Invoke, InvokeError, InvokeMessage, InvokeResolver, Manager, PageLoadPayload, Runtime, Theme, TitleBarStyle,
+	WindowEvent
 };
 
 pub(crate) type WebResourceRequestHandler = dyn Fn(&HttpRequest, &mut HttpResponse) + Send + Sync;
@@ -332,14 +333,6 @@ impl<'a, R: Runtime> WindowBuilder<'a, R> {
 		self
 	}
 
-	/// Whether to hide the window's titlebar (while still having borders).
-	#[cfg(target_os = "windows")]
-	#[cfg_attr(doc_cfg, doc(cfg(target_os = "windows")))]
-	pub fn titlebar_hidden(mut self, titlebar_hidden: bool) -> Self {
-		self.window_builder = self.window_builder.titlebar_hidden(titlebar_hidden);
-		self
-	}
-
 	/// Whether the window should always be on top of other windows.
 	#[must_use]
 	pub fn always_on_top(mut self, always_on_top: bool) -> Self {
@@ -393,6 +386,22 @@ impl<'a, R: Runtime> WindowBuilder<'a, R> {
 	#[must_use]
 	pub fn owner_window(mut self, owner: HWND) -> Self {
 		self.window_builder = self.window_builder.owner_window(owner);
+		self
+	}
+
+	/// Sets the [`TitleBarStyle`].
+	#[cfg(any(target_os = "macos", target_os = "windows"))]
+	#[must_use]
+	pub fn title_bar_style(mut self, style: TitleBarStyle) -> Self {
+		self.window_builder = self.window_builder.title_bar_style(style);
+		self
+	}
+
+	/// Hide the window title.
+	#[cfg(target_os = "macos")]
+	#[must_use]
+	pub fn hidden_title(mut self, hidden: bool) -> Self {
+		self.window_builder = self.window_builder.hidden_title(hidden);
 		self
 	}
 

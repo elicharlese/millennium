@@ -217,12 +217,6 @@ impl WindowBuilder for MockWindowBuilder {
 		self
 	}
 
-	#[cfg(target_os = "windows")]
-	#[cfg_attr(doc_cfg, doc(cfg(target_os = "windows")))]
-	fn titlebar_hidden(self, titlebar_hidden: bool) -> Self {
-		self
-	}
-
 	fn always_on_top(self, always_on_top: bool) -> Self {
 		self
 	}
@@ -247,6 +241,16 @@ impl WindowBuilder for MockWindowBuilder {
 
 	#[cfg(windows)]
 	fn owner_window(self, owner: HWND) -> Self {
+		self
+	}
+
+	#[cfg(any(target_os = "macos", target_os = "windows"))]
+	fn title_bar_style(self, style: TitleBarStyle) -> Self {
+		self
+	}
+
+	#[cfg(target_os = "macos")]
+	fn hidden_title(self, transparent: bool) -> Self {
 		self
 	}
 

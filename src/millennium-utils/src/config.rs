@@ -48,6 +48,7 @@ use url::Url;
 pub mod parse;
 
 pub use self::parse::parse;
+use crate::TitleBarStyle;
 
 /// An URL to open on a Millennium webview window.
 #[derive(PartialEq, Eq, Debug, Clone, Deserialize, Serialize)]
@@ -900,10 +901,6 @@ pub struct WindowConfig {
 	/// Whether the window should have borders and bars.
 	#[serde(default = "default_decorations")]
 	pub decorations: bool,
-	/// Whether the window's titlebar should be hidden (while still having
-	/// borders).
-	#[serde(default = "default_titlebar_hidden", alias = "titlebar-hidden")]
-	pub titlebar_hidden: bool,
 	/// Whether the window should always be on top of other windows.
 	#[serde(default, alias = "always-on-top")]
 	pub always_on_top: bool,
@@ -911,7 +908,13 @@ pub struct WindowConfig {
 	#[serde(default, alias = "skip-taskbar")]
 	pub skip_taskbar: bool,
 	/// The initial window theme. Defaults to the system theme. Currently only implemented on Windows and macOS 10.14+.
-	pub theme: Option<crate::Theme>
+	pub theme: Option<crate::Theme>,
+	/// The style of the title bar.
+	#[serde(default, alias = "title-bar-style")]
+	pub title_bar_style: TitleBarStyle,
+	/// If `true`, sets the window title to be hidden on macOS.
+	#[serde(default, alias = "hidden-title")]
+	pub hidden_title: bool
 }
 
 impl Default for WindowConfig {
@@ -937,10 +940,11 @@ impl Default for WindowConfig {
 			maximized: false,
 			visible: default_visible(),
 			decorations: default_decorations(),
-			titlebar_hidden: default_titlebar_hidden(),
 			always_on_top: false,
 			skip_taskbar: false,
-			theme: None
+			theme: None,
+			title_bar_style: Default::default(),
+			hidden_title: false
 		}
 	}
 }
@@ -975,10 +979,6 @@ fn default_visible() -> bool {
 
 fn default_decorations() -> bool {
 	true
-}
-
-fn default_titlebar_hidden() -> bool {
-	false
 }
 
 fn default_file_drop_enabled() -> bool {
@@ -2888,6 +2888,19 @@ mod build {
 		}
 	}
 
+	impl ToTokens for crate::TitleBarStyle {
+		fn to_tokens(&self, tokens: &mut TokenStream) {
+			let prefix = quote! { ::millennium::utils::TitleBarStyle };
+
+			tokens.append_all(match self {
+				Self::Visible => quote! { #prefix::Visible },
+				Self::Transparent => quote! { #prefix::Transparent },
+				Self::Overlay => quote! { #prefix::Overlay },
+				Self::Hidden => quote! { #prefix::Hidden }
+			})
+		}
+	}
+
 	impl ToTokens for WindowConfig {
 		fn to_tokens(&self, tokens: &mut TokenStream) {
 			let label = str_lit(&self.label);
@@ -2910,10 +2923,11 @@ mod build {
 			let maximized = self.maximized;
 			let visible = self.visible;
 			let decorations = self.decorations;
-			let titlebar_hidden = self.titlebar_hidden;
 			let always_on_top = self.always_on_top;
 			let skip_taskbar = self.skip_taskbar;
 			let theme = opt_lit(self.theme.as_ref());
+			let title_bar_style = &self.title_bar_style;
+			let hidden_title = self.hidden_title;
 
 			literal_struct!(
 				tokens,
@@ -2938,10 +2952,11 @@ mod build {
 				maximized,
 				visible,
 				decorations,
-				titlebar_hidden,
 				always_on_top,
 				skip_taskbar,
-				theme
+				theme,
+				title_bar_style,
+				hidden_title
 			);
 		}
 	}

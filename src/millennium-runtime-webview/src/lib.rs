@@ -48,6 +48,8 @@ use millennium_runtime::{
 use millennium_runtime::{menu::NativeImage, ActivationPolicy};
 #[cfg(all(desktop, feature = "system-tray"))]
 use millennium_runtime::{SystemTray, SystemTrayEvent};
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use millennium_utils::TitleBarStyle;
 use millennium_utils::{config::WindowConfig, Theme};
 pub use millennium_webview;
 #[cfg(target_os = "macos")]
@@ -663,6 +665,14 @@ impl WindowBuilder for WindowBuilderWrapper {
 			.skip_taskbar(config.skip_taskbar)
 			.theme(config.theme);
 
+		#[cfg(target_os = "macos")]
+		{
+			window = window.hidden_title(config.hidden_title);
+		}
+		#[cfg(any(target_os = "macos", target_os = "windows"))]
+		{
+			window = window.title_bar_style(config.title_bar_style);
+		}
 		#[cfg(any(not(target_os = "macos"), feature = "macos-private-api"))]
 		{
 			window = window.transparent(config.transparent);
@@ -670,12 +680,8 @@ impl WindowBuilder for WindowBuilderWrapper {
 		#[cfg(all(target_os = "macos", not(feature = "macos-private-api"), debug_assertions))]
 		if config.transparent {
 			eprintln!(
-				"The window is set to be transparent but the `macos-private-api` is not enabled. This can be enabled via the `millennium.macOSPrivateApi` configuration property."
+				"The window is set to be transparent but `macos-private-api` is not enabled. This can be enabled via the `millennium.macOSPrivateApi` configuration property."
 			);
-		}
-		#[cfg(target_os = "windows")]
-		{
-			window = window.titlebar_hidden(config.titlebar_hidden);
 		}
 
 		if let (Some(min_width), Some(min_height)) = (config.min_width, config.min_height) {
@@ -771,12 +777,6 @@ impl WindowBuilder for WindowBuilderWrapper {
 		self
 	}
 
-	#[cfg(target_os = "windows")]
-	fn titlebar_hidden(mut self, titlebar_hidden: bool) -> Self {
-		self.inner = self.inner.with_titlebar_hidden(titlebar_hidden);
-		self
-	}
-
 	fn always_on_top(mut self, always_on_top: bool) -> Self {
 		self.inner = self.inner.with_always_on_top(always_on_top);
 		self
@@ -797,6 +797,52 @@ impl WindowBuilder for WindowBuilderWrapper {
 	#[cfg(windows)]
 	fn owner_window(mut self, owner: HWND) -> Self {
 		self.inner = self.inner.with_owner_window(owner);
+		self
+	}
+
+	#[cfg(any(target_os = "macos", target_os = "windows"))]
+	fn title_bar_style(mut self, style: TitleBarStyle) -> Self {
+		match style {
+			TitleBarStyle::Visible => {
+				#[cfg(target_os = "windows")]
+				{
+					self.inner = self.inner.with_titlebar_hidden(false);
+				}
+
+				#[cfg(target_os = "macos")]
+				{
+					self.inner = self.inner.with_titlebar_transparent(false);
+					// Fixes rendering issue when resizing window with devtools open
+					self.inner = self.inner.with_fullsize_content_view(true);
+				}
+			}
+			TitleBarStyle::Transparent => {
+				#[cfg(target_os = "macos")]
+				{
+					self.inner = self.inner.with_titlebar_transparent(true);
+					self.inner = self.inner.with_fullsize_content_view(false);
+				}
+			}
+			TitleBarStyle::Overlay => {
+				#[cfg(target_os = "macos")]
+				{
+					self.inner = self.inner.with_titlebar_transparent(true);
+					self.inner = self.inner.with_fullsize_content_view(true);
+				}
+			}
+			TitleBarStyle::Hidden => {
+				#[cfg(target_os = "windows")]
+				{
+					self.inner = self.inner.with_titlebar_hidden(true);
+				}
+			}
+		}
+		self
+	}
+
+	#[cfg(target_os = "macos")]
+	fn hidden_title(mut self, hidden: bool) -> Self {
+		self.inner = self.inner.with_title_hidden(hidden);
 		self
 	}
 
@@ -2301,19 +2347,21 @@ fn handle_event_loop<T: UserEvent>(
 		}
 		Event::WindowEvent { event, window_id, .. } => {
 			if let Some(window_id) = webview_id_map.get(&window_id) {
-				let windows_ref = windows.borrow();
-				if let Some(window) = windows_ref.get(&window_id) {
-					if let Some(event) = WindowEventWrapper::parse(&window.inner, &event).0 {
-						let label = window.label.clone();
-						let window_event_listeners = window.window_event_listeners.clone();
+				{
+					let windows_ref = windows.borrow();
+					if let Some(window) = windows_ref.get(&window_id) {
+						if let Some(event) = WindowEventWrapper::parse(&window.inner, &event).0 {
+							let label = window.label.clone();
+							let window_event_listeners = window.window_event_listeners.clone();
 
-						drop(windows_ref);
+							drop(windows_ref);
 
-						callback(RunEvent::WindowEvent { label, event: event.clone() });
-						let listeners = window_event_listeners.lock().unwrap();
-						let handlers = listeners.values();
-						for handler in handlers {
-							handler(&event);
+							callback(RunEvent::WindowEvent { label, event: event.clone() });
+							let listeners = window_event_listeners.lock().unwrap();
+							let handlers = listeners.values();
+							for handler in handlers {
+								handler(&event);
+							}
 						}
 					}
 				}
@@ -2471,10 +2519,6 @@ fn create_webview<T: UserEvent>(
 
 	let window_event_listeners = WindowEventListeners::default();
 
-	#[cfg(target_os = "macos")]
-	{
-		window_builder.inner = window_builder.inner.with_fullsize_content_view(true);
-	}
 	#[cfg(windows)]
 	{
 		window_builder.inner = window_builder.inner.with_drag_and_drop(webview_attributes.file_drop_handler_enabled);

@@ -121,6 +121,7 @@ import { invokeMillenniumCommand } from './_internal';
 import { emit, listen, once, EventName, EventCallback, Unlistener, MillenniumEvent } from './event';
 
 export type Theme = 'light' | 'dark';
+export type TitleBarStyle = 'visible' | 'transparent' | 'overlay' | 'hidden';
 
 export interface Monitor {
 	name: string | null;
@@ -750,7 +751,6 @@ export interface WindowOptions {
 	 * Store.**
 	 */
 	transparent?: boolean;
-	titlebarHidden?: boolean;
 	maximized?: boolean;
 	visibile?: boolean;
 	decorations?: boolean;
@@ -763,6 +763,10 @@ export interface WindowOptions {
 	 * Currently only implemented on Windows and macOS 10.14+.
 	 */
 	theme?: Theme;
+	/** The style of the title bar. */
+	titleBarStyle?: TitleBarStyle;
+	/** If `true`, sets the window title to be hidden on macOS. */
+	hiddenTitle?: boolean;
 }
 
 function mapMonitor(m: Monitor | null): Monitor | null {

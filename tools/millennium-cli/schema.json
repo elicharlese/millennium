@@ -1987,6 +1987,39 @@
         }
       ]
     },
+    "TitleBarStyle": {
+      "description": "How the window title bar should be displayed.",
+      "oneOf": [
+        {
+          "description": "A normal title bar.",
+          "type": "string",
+          "enum": [
+            "Visible"
+          ]
+        },
+        {
+          "description": "(macOS) Makes the title bar transparent, so the window background color is shown instead.\n\nUseful if you don't need to have actual HTML under the title bar. This lets you avoid the caveats of using `TitleBarStyle::Overlay`.",
+          "type": "string",
+          "enum": [
+            "Transparent"
+          ]
+        },
+        {
+          "description": "(macOS) Shows the title bar as a transparent overlay over the window's content.\n\nKeep in mind: - The height of the title bar is different on different OS versions, which can lead to window the controls and title not being where you don't expect. - You need to define a custom drag region to make your window draggable, however due to a limitation you can't drag the window when it's not in focus. - The color of the window title depends on the system theme.",
+          "type": "string",
+          "enum": [
+            "Overlay"
+          ]
+        },
+        {
+          "description": "(Windows) Hide the titlebar without disabling window decorations.",
+          "type": "string",
+          "enum": [
+            "Hidden"
+          ]
+        }
+      ]
+    },
     "UpdaterConfig": {
       "description": "The Updater configuration object.",
       "type": "object",
@@ -2353,6 +2386,11 @@
           "type": "number",
           "format": "double"
         },
+        "hiddenTitle": {
+          "description": "If `true`, sets the window title to be hidden on macOS.",
+          "default": false,
+          "type": "boolean"
+        },
         "label": {
           "description": "The window identifier. It must be alphanumeric.",
           "default": "main",
@@ -2421,10 +2459,14 @@
           "default": "Millennium App",
           "type": "string"
         },
-        "titlebarHidden": {
-          "description": "Whether the window's titlebar should be hidden (while still having borders).",
-          "default": false,
-          "type": "boolean"
+        "titleBarStyle": {
+          "description": "The style of the title bar.",
+          "default": "Visible",
+          "allOf": [
+            {
+              "$ref": "#/definitions/TitleBarStyle"
+            }
+          ]
         },
         "transparent": {
           "description": "Whether the window is transparent or not.\n\nNote that on `macOS` this requires the `macos-private-api` feature flag, enabled under `millennium > macOSPrivateApi`. WARNING: Using private APIs on `macOS` prevents your application from being accepted for the `App Store`.",

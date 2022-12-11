@@ -18,6 +18,8 @@
 
 use std::{fmt, path::PathBuf};
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use millennium_utils::TitleBarStyle;
 use millennium_utils::{
 	config::{WindowConfig, WindowUrl},
 	Theme
@@ -161,10 +163,6 @@ pub trait WindowBuilder: WindowBuilderBase {
 	#[must_use]
 	fn decorations(self, decorations: bool) -> Self;
 
-	#[cfg(target_os = "windows")]
-	#[cfg_attr(doc_cfg, doc(cfg(target_os = "windows")))]
-	fn titlebar_hidden(self, titlebar_hidden: bool) -> Self;
-
 	/// Whether the window should always be on top of other windows.
 	#[must_use]
 	fn always_on_top(self, always_on_top: bool) -> Self;
@@ -202,6 +200,16 @@ pub trait WindowBuilder: WindowBuilderBase {
 	#[cfg(windows)]
 	#[must_use]
 	fn owner_window(self, owner: HWND) -> Self;
+
+	/// Configure the style of the title bar.
+	#[cfg(any(target_os = "macos", target_os = "windows"))]
+	#[must_use]
+	fn title_bar_style(self, style: TitleBarStyle) -> Self;
+
+	/// Hide the window title.
+	#[cfg(target_os = "macos")]
+	#[must_use]
+	fn hidden_title(self, hidden: bool) -> Self;
 
 	/// Forces a theme or uses the system settings if None was provided.
 	fn theme(self, theme: Option<Theme>) -> Self;

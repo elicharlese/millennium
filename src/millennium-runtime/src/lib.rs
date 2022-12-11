@@ -18,10 +18,9 @@
 
 #![cfg_attr(doc_cfg, feature(doc_cfg))]
 
-use std::{
-	fmt::{self, Debug},
-	sync::mpsc::Sender
-};
+#[cfg(all(desktop, feature = "system-tray"))]
+use std::fmt;
+use std::{fmt::Debug, sync::mpsc::Sender};
 
 use millennium_utils::Theme;
 use raw_window_handle::RawDisplayHandle;

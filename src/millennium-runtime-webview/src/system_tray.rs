@@ -138,7 +138,7 @@ impl<T: UserEvent> TrayHandle for SystemTrayHandle<T> {
 	}
 
 	#[cfg(target_os = "macos")]
-	fn set_title(&self, title: &str) -> tauri_runtime::Result<()> {
+	fn set_title(&self, title: &str) -> millennium_runtime::Result<()> {
 		self.proxy
 			.send_event(Message::Tray(self.id, TrayMessage::UpdateTitle(title.to_owned())))
 			.map_err(|_| Error::FailedToSendMessage)
