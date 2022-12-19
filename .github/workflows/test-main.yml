@@ -15,7 +15,6 @@ concurrency:
   cancel-in-progress: true
 env:
   RUST_BACKTRACE: 1
-  CARGO_INCREMENTAL: 0 # This is set to 0 by rust-cache.
   CARGO_PROFILE_DEV_DEBUG: 0 # This would add unnecessary bloat to the target folder, decreasing cache efficiency.
 jobs:
   test-main:
@@ -39,6 +38,19 @@ jobs:
               os: macos-latest,
               toolchain: '1.59.0'
             }
+        features:
+          - {
+              args: --no-default-features,
+              key: no-default
+            }
+          - {
+              args: --features api-all,
+              key: api-all
+            }
+          - {
+              args: --features compression,millennium_webview,isolation,custom-protocol,api-all,cli,updater,system-tray,http-multipart,
+              key: all
+            }
     steps:
       - uses: actions/checkout@v2
       - name: Install stable Rust
@@ -47,6 +59,7 @@ jobs:
           toolchain: ${{ matrix.platform.toolchain }}
           target: ${{ matrix.platform.target }}
           override: true
+          default: true
       - name: Install Linux dependencies
         if: contains(matrix.platform.target, 'unknown-linux')
         run: |
@@ -58,29 +71,9 @@ jobs:
         run: |
           Invoke-WebRequest https://go.microsoft.com/fwlink/p/?LinkId=2124703 -OutFile installwebview.exe -UseBasicParsing
           cmd /C start /wait installwebview.exe /silent /install
-      - name: Get current date
-        if: matrix.platform.os == 'macos-latest' || matrix.platform.os == 'ubuntu-latest'
-        run: echo "CURRENT_DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
-      - name: Get current date
-        if: matrix.platform.os == 'windows-latest'
-        run: echo "CURRENT_DATE=$(Get-Date -Format "yyyy-MM-dd")" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Cache Cargo state
-        uses: actions/cache@v2
-        env:
-          cache-name: cargo-state
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/.cargo/bin
-          key: ${{ matrix.platform.os }}-${{ matrix.platform.toolchain }}-${{ env.cache-name }}-${{ hashFiles('**/Cargo.toml') }}-${{ env.CURRENT_DATE }}
-          restore-keys: |
-            ${{ matrix.platform.os }}-${{ matrix.platform.toolchain }}-${{ env.cache-name }}-${{ hashFiles('**/Cargo.toml') }}-
-            ${{ matrix.platform.os }}-${{ matrix.platform.toolchain }}-${{ env.cache-name }}-
-            ${{ matrix.platform.os }}-${{ matrix.platform.toolchain }}-
-            ${{ matrix.platform.os }}-
+          workspaces: src -> ../target
+          save-if: ${{ matrix.clippy.key == 'all' }}
       - name: Test Rust packages
-        run: |
-          cargo test --target ${{ matrix.platform.target }} --verbose -p millennium
-          cargo test --target ${{ matrix.platform.target }} --verbose -p millennium --features api-all
-          cargo test --target ${{ matrix.platform.target }} --verbose -p millennium --features compression,millennium_webview,isolation,custom-protocol,api-all,cli,updater,system-tray,windows7-compat,http-multipart
+        run: cargo test --target ${{ matrix.platform.target }} ${{ matrix.features.args }}
