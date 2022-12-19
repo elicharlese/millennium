@@ -130,8 +130,8 @@ impl Notification {
 			let curr_dir = exe_dir.display().to_string();
 			// set the notification's System.AppUserModel.ID only when running the installed
 			// app
-			if !(curr_dir.ends_with(format!("{S}target{S}debug", S = MAIN_SEPARATOR).as_str())
-				|| curr_dir.ends_with(format!("{S}target{S}release", S = MAIN_SEPARATOR).as_str()))
+			if !(curr_dir.ends_with(format!("{MAIN_SEPARATOR}target{MAIN_SEPARATOR}debug").as_str())
+				|| curr_dir.ends_with(format!("{MAIN_SEPARATOR}target{MAIN_SEPARATOR}release").as_str()))
 			{
 				notification.app_id(&self.identifier);
 			}

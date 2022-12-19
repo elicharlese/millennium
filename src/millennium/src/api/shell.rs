@@ -124,5 +124,5 @@ impl Program {
 pub fn open<P: AsRef<str>>(scope: &ShellScope, path: P, with: Option<Program>) -> crate::api::Result<()> {
 	scope
 		.open(path.as_ref(), with)
-		.map_err(|err| crate::api::Error::Shell(format!("failed to open: {}", err)))
+		.map_err(|err| crate::api::Error::Shell(format!("failed to open: {err}")))
 }

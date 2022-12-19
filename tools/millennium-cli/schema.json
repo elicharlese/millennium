@@ -2482,6 +2482,13 @@
             }
           ]
         },
+        "userAgent": {
+          "description": "The user agent for the webview",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "visible": {
           "description": "Whether the window is visible or not.",
           "default": true,

@@ -767,6 +767,8 @@ export interface WindowOptions {
 	titleBarStyle?: TitleBarStyle;
 	/** If `true`, sets the window title to be hidden on macOS. */
 	hiddenTitle?: boolean;
+	/** Overrides the webview user agent. */
+	userAgent?: string;
 }
 
 function mapMonitor(m: Monitor | null): Monitor | null {

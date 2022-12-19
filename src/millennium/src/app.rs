@@ -1148,7 +1148,7 @@ impl<R: Runtime> Builder<R> {
 		T: Send + Sync + 'static
 	{
 		let type_name = std::any::type_name::<T>();
-		assert!(self.state.set(state), "state for type '{}' is already being managed", type_name);
+		assert!(self.state.set(state), "state for type '{type_name}' is already being managed");
 		self
 	}
 
@@ -1363,8 +1363,12 @@ impl<R: Runtime> Builder<R> {
 			let url = config.url.clone();
 			let label = config.label.clone();
 			let file_drop_enabled = config.file_drop_enabled;
+			let user_agent = config.user_agent.clone();
 
 			let mut webview_attributes = WebviewAttributes::new(url);
+			if let Some(user_agent) = user_agent {
+				webview_attributes = webview_attributes.user_agent(&user_agent.to_string());
+			}
 			if !file_drop_enabled {
 				webview_attributes = webview_attributes.disable_file_drop_handler();
 			}

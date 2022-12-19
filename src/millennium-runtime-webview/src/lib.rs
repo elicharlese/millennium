@@ -2056,7 +2056,7 @@ fn handle_user_message<T: UserEvent>(
 					#[cfg_attr(not(debug_assertions), allow(unused_variables))]
 					if let Err(e) = webview.evaluate_script(&script) {
 						#[cfg(debug_assertions)]
-						eprintln!("{}", e);
+						eprintln!("{e}");
 					}
 				}
 			}
@@ -2085,7 +2085,7 @@ fn handle_user_message<T: UserEvent>(
 			#[cfg_attr(not(debug_assertions), allow(unused_variables))]
 			Err(e) => {
 				#[cfg(debug_assertions)]
-				eprintln!("{}", e);
+				eprintln!("{e}");
 			}
 		},
 		Message::CreateWindow(window_id, handler, sender) => {
@@ -2547,6 +2547,9 @@ fn create_webview<T: UserEvent>(
 		.with_transparent(is_window_transparent);
 	if webview_attributes.file_drop_handler_enabled {
 		webview_builder = webview_builder.with_file_drop_handler(create_file_drop_handler(window_event_listeners.clone()));
+	}
+	if let Some(user_agent) = webview_attributes.user_agent {
+		webview_builder = webview_builder.with_user_agent(&user_agent);
 	}
 	if let Some(handler) = ipc_handler {
 		webview_builder = webview_builder.with_ipc_handler(create_ipc_handler(context, label.clone(), menu_ids, js_event_listeners, handler));

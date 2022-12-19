@@ -260,11 +260,11 @@ mod test {
 		}
 
 		let raw_str = "T".repeat(MIN_JSON_PARSE_LEN);
-		assert_eq!(serialize_js(&raw_str).unwrap(), format!("\"{}\"", raw_str));
+		assert_eq!(serialize_js(&raw_str).unwrap(), format!("\"{raw_str}\""));
 
-		assert_eq!(serialize_js(&JsonObj { value: raw_str.clone() }).unwrap(), format!("JSON.parse('{{\"value\":\"{}\"}}')", raw_str));
+		assert_eq!(serialize_js(&JsonObj { value: raw_str.clone() }).unwrap(), format!("JSON.parse('{{\"value\":\"{raw_str}\"}}')"));
 
-		assert_eq!(serialize_js(&JsonObj { value: format!("\"{}\"", raw_str) }).unwrap(), format!("JSON.parse('{{\"value\":\"\\\\\"{}\\\\\"\"}}')", raw_str));
+		assert_eq!(serialize_js(&JsonObj { value: format!("\"{raw_str}\"") }).unwrap(), format!("JSON.parse('{{\"value\":\"\\\\\"{raw_str}\\\\\"\"}}')"));
 
 		let dangerous_json =
 			RawValue::from_string(r#"{"test":"don\\🚀🐱‍👤\\'t forget to escape me!🚀🐱‍👤","te🚀🐱‍👤st2":"don't forget to escape me!","test3":"\\🚀🐱‍👤\\\\'''\\\\🚀🐱‍👤\\\\🚀🐱‍👤\\'''''"}"#.into())

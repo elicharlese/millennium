@@ -138,7 +138,7 @@ impl Cmd {
 				Ok(cmd) => cmd,
 				Err(e) => {
 					#[cfg(debug_assertions)]
-					eprintln!("{}", e);
+					eprintln!("{e}");
 					return Err(crate::Error::ProgramNotAllowed(PathBuf::from(program)).into_anyhow());
 				}
 			}
@@ -157,7 +157,7 @@ impl Cmd {
 				if let Some(encoding) = crate::api::process::Encoding::for_label(encoding.as_bytes()) {
 					command = command.encoding(encoding);
 				} else {
-					return Err(anyhow::anyhow!(format!("unknown encoding {}", encoding)));
+					return Err(anyhow::anyhow!(format!("unknown encoding {encoding}")));
 				}
 			}
 			let (mut rx, child) = command.spawn()?;

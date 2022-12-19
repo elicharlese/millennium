@@ -418,7 +418,7 @@ impl<'de> Deserialize<'de> for HeaderMap {
 			if let (Ok(key), Ok(value)) = (header::HeaderName::from_bytes(key.as_bytes()), header::HeaderValue::from_str(&value)) {
 				headers.insert(key, value);
 			} else {
-				return Err(serde::de::Error::custom(format!("invalid header `{}` `{}`", key, value)));
+				return Err(serde::de::Error::custom(format!("invalid header `{key}` `{value}`")));
 			}
 		}
 		Ok(Self(headers))

@@ -297,7 +297,7 @@ fn parse_accelerator(accelerator_string: &str) -> Result<Accelerator, Accelerato
 			// examples:
 			// 1. "Ctrl+Shift+C+A" => only one main key should be allowd.
 			// 2. "Ctrl+C+Shift" => wrong order
-			return Err(AcceleratorParseError(format!("Unexpected accelerator string format: \"{}\"", accelerator_string)));
+			return Err(AcceleratorParseError(format!("Unexpected accelerator string format: \"{accelerator_string}\"")));
 		}
 
 		match token.to_uppercase().as_str() {
@@ -322,7 +322,7 @@ fn parse_accelerator(accelerator_string: &str) -> Result<Accelerator, Accelerato
 			_ => {
 				if let Ok(keycode) = KeyCode::from_str(&token) {
 					match keycode {
-						KeyCode::Unidentified(_) => return Err(AcceleratorParseError(format!("Couldn't identify \"{}\" as a valid `KeyCode`", token))),
+						KeyCode::Unidentified(_) => return Err(AcceleratorParseError(format!("Couldn't identify \"{token}\" as a valid `KeyCode`"))),
 						_ => key = keycode
 					}
 				}

@@ -103,7 +103,7 @@ impl<'de> Deserialize<'de> for RemoteRelease {
 		let pub_date = if let Some(date) = release.pub_date {
 			Some(
 				OffsetDateTime::parse(&date, &time::format_description::well_known::Rfc3339)
-					.map_err(|e| DeError::custom(format!("invalid value for `pub_date`: {}", e)))?
+					.map_err(|e| DeError::custom(format!("invalid value for `pub_date`: {e}")))?
 			)
 		} else {
 			None
@@ -326,7 +326,7 @@ impl<R: Runtime> UpdateBuilder<R> {
 			(target.clone(), target)
 		} else {
 			let target = get_updater_target().ok_or(Error::UnsupportedOs)?;
-			(target.to_string(), format!("{}-{}", target, arch))
+			(target.to_string(), format!("{target}-{arch}"))
 		};
 
 		// Get the extract_path from the provided executable_path
@@ -715,7 +715,7 @@ fn copy_files_and_run<R: Read + Seek>(archive_buffer: R, _extract_path: &Path, w
 					let product_name = bin_name.replace(".exe", "");
 
 					// Check if there is a task that enables the updater to skip the UAC prompt
-					let update_task_name = format!("Update {} - Skip UAC", product_name);
+					let update_task_name = format!("Update {product_name} - Skip UAC");
 					if let Ok(output) = Command::new("schtasks").arg("/QUERY").arg("/TN").arg(update_task_name.clone()).output() {
 						if output.status.success() {
 							// Rename the MSI to the match file name the Skip UAC task is expecting it to be

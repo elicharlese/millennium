@@ -424,7 +424,7 @@ impl InnerWebView {
 				custom_protocol_names.insert(name.clone());
 				unsafe {
 					webview.AddWebResourceRequestedFilter(
-						PCWSTR::from_raw(encode_wide(format!("https://{}.*", name)).as_ptr()),
+						PCWSTR::from_raw(encode_wide(format!("https://{name}.*")).as_ptr()),
 						COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL
 					)
 				}
@@ -487,7 +487,7 @@ impl InnerWebView {
 								webview_request.Uri(&mut uri)?;
 								let uri = take_pwstr(uri);
 
-								if let Some(custom_protocol) = custom_protocols.iter().find(|(name, _)| uri.starts_with(&format!("https://{}.", name))) {
+								if let Some(custom_protocol) = custom_protocols.iter().find(|(name, _)| uri.starts_with(&format!("https://{name}."))) {
 									// Undo the protocol workaround when giving path to resolver
 									let path = uri.replace(&format!("https://{}.", custom_protocol.0), &format!("{}://", custom_protocol.0));
 									let final_request = match request.uri(&path).method(request_method.as_str()).body(body_sent) {
@@ -506,7 +506,7 @@ impl InnerWebView {
 											for (name, value) in sent_response.headers().iter() {
 												let header_key = name.to_string();
 												if let Ok(value) = value.to_str() {
-													let _ = writeln!(headers_map, "{}: {}", header_key, value);
+													let _ = writeln!(headers_map, "{header_key}: {value}");
 												}
 											}
 
@@ -595,7 +595,7 @@ impl InnerWebView {
 				if custom_protocol_names.contains(name) {
 					// WebView2 doesn't support non-standard protocols yet, so we have to use this
 					// workaround See https://github.com/MicrosoftEdge/WebView2Feedback/issues/73
-					url_string = url.as_str().replace(&format!("{}://", name), &format!("https://{}.", name))
+					url_string = url.as_str().replace(&format!("{name}://"), &format!("https://{name}."))
 				}
 				unsafe {
 					webview

@@ -95,7 +95,7 @@ fn set_csp<R: Runtime>(asset: &mut String, assets: Arc<dyn Assets>, asset_path: 
 			}
 			_csp_hash => {
 				#[cfg(debug_assertions)]
-				eprintln!("Unknown CspHash variant encountered: {:?}", _csp_hash)
+				eprintln!("Unknown CspHash variant encountered: {_csp_hash:?}")
 			}
 		}
 
@@ -151,7 +151,7 @@ fn replace_csp_nonce(asset: &mut String, token: &str, csp: &mut HashMap<String, 
 	});
 
 	if !(nonces.is_empty() && hashes.is_empty()) {
-		let nonce_sources = nonces.into_iter().map(|n| format!("'nonce-{}'", n)).collect::<Vec<String>>();
+		let nonce_sources = nonces.into_iter().map(|n| format!("'nonce-{n}'")).collect::<Vec<String>>();
 		let sources = csp.entry(directive.into()).or_insert_with(Default::default);
 		let self_source = "'self'".to_string();
 		if !sources.contains(&self_source) {
@@ -432,7 +432,7 @@ impl<R: Runtime> WindowManager<R> {
 				"{}://{}{}",
 				window_url.scheme(),
 				window_url.host().unwrap(),
-				if let Some(port) = window_url.port() { format!(":{}", port) } else { "".into() }
+				if let Some(port) = window_url.port() { format!(":{port}") } else { "".into() }
 			)
 		};
 
@@ -462,13 +462,13 @@ impl<R: Runtime> WindowManager<R> {
 
 				if let Err(e) = SafePathBuf::new(path.clone().into()) {
 					#[cfg(debug_assertions)]
-					eprintln!("asset protocol path \"{}\" is not valid: {}", path, e);
+					eprintln!("asset protocol path \"{path}\" is not valid: {e}");
 					return HttpResponseBuilder::new().status(403).body(Vec::new());
 				}
 
 				if !asset_scope.is_allowed(&path) {
 					#[cfg(debug_assertions)]
-					eprintln!("asset protocol not configured to allow the path: {}", path);
+					eprintln!("asset protocol not configured to allow the path: {path}");
 					return HttpResponseBuilder::new().status(403).body(Vec::new());
 				}
 
@@ -486,7 +486,7 @@ impl<R: Runtime> WindowManager<R> {
 							Ok(file) => file,
 							Err(e) => {
 								#[cfg(debug_assertions)]
-								eprintln!("Failed to open asset: {}", e);
+								eprintln!("Failed to open asset: {e}");
 								return (headers, 404, buf);
 							}
 						};
@@ -495,7 +495,7 @@ impl<R: Runtime> WindowManager<R> {
 							Ok(metadata) => metadata.len(),
 							Err(e) => {
 								#[cfg(debug_assertions)]
-								eprintln!("Failed to read asset metadata: {}", e);
+								eprintln!("Failed to read asset metadata: {e}");
 								return (headers, 404, buf);
 							}
 						};
@@ -511,7 +511,7 @@ impl<R: Runtime> WindowManager<R> {
 							Ok(r) => r,
 							Err(e) => {
 								#[cfg(debug_assertions)]
-								eprintln!("Failed to parse range {}: {:?}", range, e);
+								eprintln!("Failed to parse range {range}: {e:?}");
 								return (headers, 400, buf);
 							}
 						};
@@ -545,7 +545,7 @@ impl<R: Runtime> WindowManager<R> {
 
 							if let Err(e) = file.take(real_length).read_to_end(&mut buf).await {
 								#[cfg(debug_assertions)]
-								eprintln!("Failed read file: {}", e);
+								eprintln!("Failed read file: {e}");
 								return (headers, 422, buf);
 							}
 							// partial content
@@ -571,7 +571,7 @@ impl<R: Runtime> WindowManager<R> {
 						}
 						Err(e) => {
 							#[cfg(debug_assertions)]
-							eprintln!("Failed to read file: {}", e);
+							eprintln!("Failed to read file: {e}");
 							response.status(404).body(Vec::new())
 						}
 					}
@@ -583,7 +583,7 @@ impl<R: Runtime> WindowManager<R> {
 		if let Pattern::Isolation { assets, schema, key: _, crypto_keys } = &self.inner.pattern {
 			let assets = assets.clone();
 			let schema_ = schema.clone();
-			let url_base = format!("{}://localhost", schema_);
+			let url_base = format!("{schema_}://localhost");
 			let aes_gcm_key = *crypto_keys.aes_gcm().raw();
 
 			pending.register_uri_scheme_protocol(schema, move |request| match request_to_path(request, &url_base).as_str() {
@@ -657,7 +657,7 @@ impl<R: Runtime> WindowManager<R> {
 			.get(&path.as_str().into())
 			.or_else(|| {
 				#[cfg(debug_assertions)]
-				eprintln!("Asset `{}` not found; fallback to {}.html", path, path);
+				eprintln!("Asset `{path}` not found; fallback to {path}.html");
 				let fallback = format!("{}.html", path.as_str()).into();
 				let asset = assets.get(&fallback);
 				asset_path = fallback;
@@ -665,7 +665,7 @@ impl<R: Runtime> WindowManager<R> {
 			})
 			.or_else(|| {
 				#[cfg(debug_assertions)]
-				eprintln!("Asset `{}` not found; fallback to {}/index.html", path, path);
+				eprintln!("Asset `{path}` not found; fallback to {path}/index.html");
 				let fallback = format!("{}/index.html", path.as_str()).into();
 				let asset = assets.get(&fallback);
 				asset_path = fallback;
@@ -673,7 +673,7 @@ impl<R: Runtime> WindowManager<R> {
 			})
 			.or_else(|| {
 				#[cfg(debug_assertions)]
-				eprintln!("Asset `{}` not found; fallback to index.html", path);
+				eprintln!("Asset `{path}` not found; fallback to index.html");
 				let fallback = AssetKey::from("index.html");
 				let asset = assets.get(&fallback);
 				asset_path = fallback;
@@ -706,7 +706,7 @@ impl<R: Runtime> WindowManager<R> {
 			}
 			Err(e) => {
 				#[cfg(debug_assertions)]
-				eprintln!("{:?}", e); // TODO log::error!
+				eprintln!("{e:?}"); // TODO log::error!
 				Err(Box::new(e))
 			}
 		}
@@ -1174,8 +1174,7 @@ fn on_window_event<R: Runtime>(window: &Window<R>, manager: &WindowManager<R>, e
 			let windows = windows_map.values();
 			for window in windows {
 				window.eval(&format!(
-					r#"window.__MILLENNIUM_METADATA__.__windows = window.__MILLENNIUM_METADATA__.__windows.filter(w => w.label !== "{}");"#,
-					label
+					r#"window.__MILLENNIUM_METADATA__.__windows = window.__MILLENNIUM_METADATA__.__windows.filter(w => w.label !== "{label}");"#
 				))?;
 			}
 		}

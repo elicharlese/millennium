@@ -570,7 +570,7 @@ impl<R: Runtime> PluginStore<R> {
 		self.store
 			.values()
 			.filter_map(|p| p.initialization_script())
-			.fold(String::new(), |acc, script| format!("{}\n(function () {{ {} }})();", acc, script))
+			.fold(String::new(), |acc, script| format!("{acc}\n(function () {{ {script} }})();"))
 	}
 
 	/// Runs the created hook for all plugins in the store.
@@ -600,7 +600,7 @@ impl<R: Runtime> PluginStore<R> {
 			invoke.message.command = tokens.next().map(|c| c.to_string()).unwrap_or_else(String::new);
 			plugin.extend_api(invoke);
 		} else {
-			invoke.resolver.reject(format!("plugin {} not found", target));
+			invoke.resolver.reject(format!("plugin {target} not found"));
 		}
 	}
 }

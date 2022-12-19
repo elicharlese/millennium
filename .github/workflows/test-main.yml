@@ -76,4 +76,4 @@ jobs:
           workspaces: src -> ../target
           save-if: ${{ matrix.clippy.key == 'all' }}
       - name: Test Rust packages
-        run: cargo test --target ${{ matrix.platform.target }} ${{ matrix.features.args }}
+        run: cargo test -p millennium --target ${{ matrix.platform.target }} ${{ matrix.features.args }}

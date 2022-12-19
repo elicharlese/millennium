@@ -46,7 +46,7 @@ fn copy_file(from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<()> {
 	Ok(())
 }
 
-fn copy_binaries<'a>(binaries: ResourcePaths<'a>, target_triple: &str, path: &Path, package_name: Option<&String>) -> Result<()> {
+fn copy_binaries(binaries: ResourcePaths<'_>, target_triple: &str, path: &Path, package_name: Option<&String>) -> Result<()> {
 	for src in binaries {
 		let src = src?;
 		println!("cargo:rerun-if-changed={}", src.display());
@@ -54,7 +54,7 @@ fn copy_binaries<'a>(binaries: ResourcePaths<'a>, target_triple: &str, path: &Pa
 			.file_name()
 			.expect("failed to extract external binary filename")
 			.to_string_lossy()
-			.replace(&format!("-{}", target_triple), "");
+			.replace(&format!("-{target_triple}"), "");
 
 		if package_name.map_or(false, |n| n == &file_name) {
 			return Err(anyhow::anyhow!(
@@ -98,7 +98,7 @@ fn has_feature(feature: &str) -> bool {
 /// `alias` must be a snake case string.
 fn cfg_alias(alias: &str, has_feature: bool) {
 	if has_feature {
-		println!("cargo:rustc-cfg={}", alias);
+		println!("cargo:rustc-cfg={alias}");
 	}
 }
 
@@ -190,8 +190,8 @@ impl Attributes {
 /// build script; see [`try_build`] for no panics.
 pub fn build() {
 	if let Err(error) = try_build(Attributes::default()) {
-		let error = format!("{:#}", error);
-		println!("{}", error);
+		let error = format!("{error:#}");
+		println!("{error}");
 		if error.starts_with("unknown field") {
 			println!(
 				"Found an unknown configuration field. This usually happens when you use a version of Millennium CLI that is newer than `millennium-build`."

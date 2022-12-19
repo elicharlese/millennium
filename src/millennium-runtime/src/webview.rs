@@ -33,6 +33,7 @@ use crate::{menu::Menu, window::DetachedWindow, Icon};
 #[derive(Debug, Clone)]
 pub struct WebviewAttributes {
 	pub url: WindowUrl,
+	pub user_agent: Option<String>,
 	pub initialization_scripts: Vec<String>,
 	pub data_directory: Option<PathBuf>,
 	pub file_drop_handler_enabled: bool,
@@ -44,11 +45,19 @@ impl WebviewAttributes {
 	pub fn new(url: WindowUrl) -> Self {
 		Self {
 			url,
+			user_agent: None,
 			initialization_scripts: Vec::new(),
 			data_directory: None,
 			file_drop_handler_enabled: true,
 			clipboard: false
 		}
+	}
+
+	/// Sets the user agent.
+	#[must_use]
+	pub fn user_agent(mut self, user_agent: &str) -> Self {
+		self.user_agent = Some(user_agent.to_string());
+		self
 	}
 
 	/// Sets the init script.

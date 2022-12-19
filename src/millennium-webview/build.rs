@@ -25,7 +25,7 @@ fn main() {
 		use std::{fs, path::PathBuf};
 
 		fn env_var(var: &str) -> String {
-			std::env::var(var).unwrap_or_else(|_| panic!("`{}` is not set, which is required to generate Kotlin files for Android.", var))
+			std::env::var(var).unwrap_or_else(|_| panic!("`{var}` is not set, which is required to generate Kotlin files for Android."))
 		}
 
 		println!("cargo:rerun-if-env-changed=MILLENNIUM_ANDROID_REVERSED_DOMAIN");
@@ -47,8 +47,8 @@ fn main() {
 				let class_extension_env = format!("MILLENNIUM_{}_CLASS_EXTENSION", file.path().file_stem().unwrap().to_string_lossy().to_uppercase());
 				let class_init_env = format!("MILLENNIUM_{}_CLASS_INIT", file.path().file_stem().unwrap().to_string_lossy().to_uppercase());
 
-				println!("cargo:rerun-if-env-changed={}", class_extension_env);
-				println!("cargo:rerun-if-env-changed={}", class_init_env);
+				println!("cargo:rerun-if-env-changed={class_extension_env}");
+				println!("cargo:rerun-if-env-changed={class_init_env}");
 
 				let content = fs::read_to_string(file.path())
 					.expect("failed to read kotlin file as string")

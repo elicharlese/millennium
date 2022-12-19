@@ -443,8 +443,7 @@ impl TryFrom<Icon> for runtime::Icon {
 						})
 					}
 					_ => panic!(
-						"image extension `{}` not supported; please file a feature request. PNG or ICO icons are supported via the `icon-png` and `icon-ico` feature flags respectively.",
-						extension
+						"image extension `{extension}` not supported; please file a feature request. PNG or ICO icons are supported via the `icon-png` and `icon-ico` feature flags respectively."
 					)
 				}
 			}
@@ -945,7 +944,7 @@ mod tests {
 		let manifest = get_manifest();
 		for checked_feature in checked_features {
 			if !manifest.features.iter().any(|(f, _)| f == checked_feature) {
-				panic!("Feature {} was checked in the alias build step but it does not exist in Cargo.toml", checked_feature);
+				panic!("Feature {checked_feature} was checked in the alias build step but it does not exist in Cargo.toml");
 			}
 		}
 	}
@@ -975,17 +974,16 @@ mod tests {
 
 		for module_all_feature in all_modules {
 			let module = module_all_feature.replace("-all", "");
-			assert!(checked_features.contains(&module_all_feature.as_str()), "`{}` is not aliased", module);
+			assert!(checked_features.contains(&module_all_feature.as_str()), "`{module}` is not aliased");
 
-			let module_prefix = format!("{}-", module);
+			let module_prefix = format!("{module}-");
 			// we assume that module features are the ones that start with `<module>-`
 			// though it's not 100% accurate, we have an allowed list to fix it
 			let module_features = manifest.features.keys().filter(|f| f.starts_with(&module_prefix));
 			for module_feature in module_features {
 				assert!(
 					allowed.contains(&module_feature.as_str()) || checked_features.contains(&module_feature.as_str()),
-					"`{}` is not aliased",
-					module_feature
+					"`{module_feature}` is not aliased"
 				);
 			}
 		}
@@ -1013,7 +1011,7 @@ mod test_utils {
 		fn check_spawn_task(task in "[a-z]+") {
 			// create dummy task function
 			let dummy_task = async move {
-				format!("{}-run-dummy-task", task);
+				format!("{task}-run-dummy-task");
 			};
 			// call spawn
 			crate::async_runtime::spawn(dummy_task);

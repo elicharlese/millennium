@@ -105,7 +105,7 @@ impl CodegenContext {
 	pub fn build(self) -> PathBuf {
 		match self.try_build() {
 			Ok(out) => out,
-			Err(error) => panic!("Error found during Codegen::build: {}", error)
+			Err(error) => panic!("Error found during Codegen::build: {error}")
 		}
 	}
 
@@ -161,7 +161,7 @@ impl CodegenContext {
 			.map(BufWriter::new)
 			.with_context(|| format!("Unable to create output file during millennium-build {}", out.display()))?;
 
-		writeln!(file, "{}", code).with_context(|| format!("Unable to write tokenstream to out file during millennium-build {}", out.display()))?;
+		writeln!(file, "{code}").with_context(|| format!("Unable to write tokenstream to out file during millennium-build {}", out.display()))?;
 
 		Ok(out)
 	}

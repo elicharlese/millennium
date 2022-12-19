@@ -97,8 +97,8 @@ pub(crate) struct PatternJavascript {
 #[allow(dead_code)]
 pub(crate) fn format_real_schema(schema: &str) -> String {
 	if cfg!(windows) {
-		format!("https://{}.localhost", schema)
+		format!("https://{schema}.localhost")
 	} else {
-		format!("{}://localhost", schema)
+		format!("{schema}://localhost")
 	}
 }

@@ -105,8 +105,8 @@ impl error::Error for ShortcutManagerError {}
 impl fmt::Display for ShortcutManagerError {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
 		match self {
-			ShortcutManagerError::AcceleratorAlreadyRegistered(e) => f.pad(&format!("hotkey already registered: {:?}", e)),
-			ShortcutManagerError::AcceleratorNotRegistered(e) => f.pad(&format!("hotkey not registered: {:?}", e)),
+			ShortcutManagerError::AcceleratorAlreadyRegistered(e) => f.pad(&format!("hotkey already registered: {e:?}")),
+			ShortcutManagerError::AcceleratorNotRegistered(e) => f.pad(&format!("hotkey not registered: {e:?}")),
 			ShortcutManagerError::InvalidAccelerator(e) => e.fmt(f)
 		}
 	}
