@@ -53,8 +53,7 @@ use crate::{
 	sealed::ManagerBase,
 	sealed::RuntimeOrDispatch,
 	utils::config::WindowUrl,
-	CursorIcon, EventLoopMessage, Icon, Invoke, InvokeError, InvokeMessage, InvokeResolver, Manager, PageLoadPayload, Runtime, Theme, TitleBarStyle,
-	WindowEvent
+	CursorIcon, EventLoopMessage, Icon, Invoke, InvokeError, InvokeMessage, InvokeResolver, Manager, PageLoadPayload, Runtime, Theme, WindowEvent
 };
 
 pub(crate) type WebResourceRequestHandler = dyn Fn(&HttpRequest, &mut HttpResponse) + Send + Sync;

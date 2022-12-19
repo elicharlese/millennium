@@ -133,6 +133,7 @@ pub enum VibrancyError {
 	NotMainThread(&'static str)
 }
 
+#[allow(unused)] // other platforms like Linux don't use this value
 pub(crate) static LAST_EFFECT: Lazy<Mutex<VibrancyEffect>> = Lazy::new(|| Mutex::new(VibrancyEffect::None));
 
 /// Sets the window's vibrancy effect.

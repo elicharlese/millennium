@@ -410,5 +410,5 @@ impl InnerWebView {
 
 pub fn platform_webview_version() -> Result<String> {
 	let (major, minor, patch) = unsafe { (webkit_get_major_version(), webkit_get_minor_version(), webkit_get_micro_version()) };
-	Ok(format!("{}.{}.{}", major, minor, patch))
+	Ok(format!("{major}.{minor}.{patch}"))
 }

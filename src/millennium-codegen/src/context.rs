@@ -48,45 +48,42 @@ fn map_core_assets(options: &AssetOptions, target: Target) -> impl Fn(&AssetKey,
 	let csp = options.csp;
 	let dangerous_disable_asset_csp_modification = options.dangerous_disable_asset_csp_modification.clone();
 	move |key, path, input, csp_hashes| {
-		if path.extension() == Some(OsStr::new("html")) {
-			#[cfg_attr(not(target_os = "linux"), allow(clippy::collapsible_if))]
-			if csp {
-				let mut document = parse_html(String::from_utf8_lossy(input).into_owned());
+		if path.extension() == Some(OsStr::new("html")) && csp {
+			let mut document = parse_html(String::from_utf8_lossy(input).into_owned());
 
-				if target == Target::Linux {
-					::millennium_utils::html::inject_csp_token(&mut document);
-				}
-
-				inject_nonce_token(&mut document, &dangerous_disable_asset_csp_modification);
-
-				if dangerous_disable_asset_csp_modification.can_modify("script-src") {
-					if let Ok(inline_script_elements) = document.select("script:not(empty)") {
-						let mut scripts = Vec::new();
-						for inline_script_el in inline_script_elements {
-							let script = inline_script_el.as_node().text_contents();
-							let mut hasher = Sha256::new();
-							hasher.update(&script);
-							let hash = hasher.finalize();
-							scripts.push(format!("'sha256-{}'", base64::encode(hash)));
-						}
-						csp_hashes.inline_scripts.entry(key.clone().into()).or_default().append(&mut scripts);
-					}
-				}
-
-				#[cfg(feature = "isolation")]
-				if dangerous_disable_asset_csp_modification.can_modify("style-src") {
-					if let millennium_utils::html::PatternObject::Isolation { .. } = &pattern {
-						// create the csp for the isolation iframe styling now, to make the runtime less
-						// complex
-						let mut hasher = Sha256::new();
-						hasher.update(millennium_utils::pattern::isolation::IFRAME_STYLE);
-						let hash = hasher.finalize();
-						csp_hashes.styles.push(format!("'sha256-{}'", base64::encode(hash)));
-					}
-				}
-
-				*input = serialize_html_node(&document);
+			if target == Target::Linux {
+				::millennium_utils::html::inject_csp_token(&mut document);
 			}
+
+			inject_nonce_token(&mut document, &dangerous_disable_asset_csp_modification);
+
+			if dangerous_disable_asset_csp_modification.can_modify("script-src") {
+				if let Ok(inline_script_elements) = document.select("script:not(empty)") {
+					let mut scripts = Vec::new();
+					for inline_script_el in inline_script_elements {
+						let script = inline_script_el.as_node().text_contents();
+						let mut hasher = Sha256::new();
+						hasher.update(&script);
+						let hash = hasher.finalize();
+						scripts.push(format!("'sha256-{}'", base64::encode(hash)));
+					}
+					csp_hashes.inline_scripts.entry(key.clone().into()).or_default().append(&mut scripts);
+				}
+			}
+
+			#[cfg(feature = "isolation")]
+			if dangerous_disable_asset_csp_modification.can_modify("style-src") {
+				if let millennium_utils::html::PatternObject::Isolation { .. } = &pattern {
+					// create the csp for the isolation iframe styling now, to make the runtime less
+					// complex
+					let mut hasher = Sha256::new();
+					hasher.update(millennium_utils::pattern::isolation::IFRAME_STYLE);
+					let hash = hasher.finalize();
+					csp_hashes.styles.push(format!("'sha256-{}'", base64::encode(hash)));
+				}
+			}
+
+			*input = serialize_html_node(&document);
 		}
 		Ok(())
 	}

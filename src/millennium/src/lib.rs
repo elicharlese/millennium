@@ -830,7 +830,7 @@ where
 	#[cfg(target_os = "windows")]
 	let path: String = id.into();
 	#[cfg(not(target_os = "windows"))]
-	let path = format!("/tmp/{}.lock", id);
+	let path = format!("/tmp/{id}.lock");
 
 	let _path = path.clone();
 	if let Ok(listener) = LocalSocketListener::bind(_path) {
@@ -981,10 +981,7 @@ mod tests {
 			// though it's not 100% accurate, we have an allowed list to fix it
 			let module_features = manifest.features.keys().filter(|f| f.starts_with(&module_prefix));
 			for module_feature in module_features {
-				assert!(
-					allowed.contains(&module_feature.as_str()) || checked_features.contains(&module_feature.as_str()),
-					"`{module_feature}` is not aliased"
-				);
+				assert!(allowed.contains(&module_feature.as_str()) || checked_features.contains(&module_feature.as_str()), "`{module_feature}` is not aliased");
 			}
 		}
 	}

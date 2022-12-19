@@ -243,7 +243,7 @@ impl Menu {
 					..
 				} => {
 					let tx_clone = tx.clone();
-					menuitem!(&format!("About {}", name), "", accel_group, window_id, Some(MenuItem::About(name.clone(), app.clone())), tx_clone)
+					menuitem!(&format!("About {name}"), "", accel_group, window_id, Some(MenuItem::About(name.clone(), app.clone())), tx_clone)
 				}
 				GtkMenuInfo {
 					menu_type: GtkMenuType::Native,

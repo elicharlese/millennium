@@ -233,7 +233,7 @@ pub(crate) fn make_key_event(key: &EventKey, is_repeat: bool, key_override: Opti
 		});
 	} else {
 		#[cfg(debug_assertions)]
-		eprintln!("Couldn't get key from code: {:?}", physical_key);
+		eprintln!("Couldn't get key from code: {physical_key:?}");
 	}
 	None
 }
