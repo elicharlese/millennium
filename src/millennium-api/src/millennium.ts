@@ -129,5 +129,5 @@ export function getAssetUri(filePath: string, protocol = 'asset'): string {
 	const path = encodeURIComponent(filePath);
 	return isWindows()
 		? `https://${protocol}.localhost/${path}`
-		: `${protocol}://${path}`;
+		: `${protocol}://localhost/${path}`;
 }

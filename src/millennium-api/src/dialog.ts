@@ -110,7 +110,7 @@ export async function open(options: OpenDialogOptions = {}): Promise<null | stri
  *
  * @returns A promise resolving to the selected path.
  */
-export async function save(options: SaveDialogOptions = {}): Promise<string> {
+export async function save(options: SaveDialogOptions = {}): Promise<string | null> {
 	if (typeof options === 'object')
 		Object.freeze(options);
 

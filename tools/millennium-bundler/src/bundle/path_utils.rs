@@ -111,7 +111,7 @@ where
 	let from = from.as_ref();
 	if !from.exists() {
 		if let Some(msg) = from.to_str() {
-			let msg = format!("Path \"{}\" does not exist or you don't have access", msg);
+			let msg = format!("Path \"{msg}\" does not exist or you don't have access");
 			return Err(crate::Error::PathUtilError(msg));
 		}
 		return Err(crate::Error::PathUtilError("Path does not exist or you don't have access!".to_owned()));
@@ -119,7 +119,7 @@ where
 
 	if !from.is_file() {
 		if let Some(msg) = from.to_str() {
-			let msg = format!("Path \"{}\" is not a file!", msg);
+			let msg = format!("Path \"{msg}\" is not a file!");
 			return Err(crate::Error::PathUtilError(msg));
 		}
 		return Err(crate::Error::PathUtilError("Path is not a file!".to_owned()));
@@ -130,7 +130,7 @@ where
 		}
 
 		if let Some(msg) = to.as_ref().to_str() {
-			let msg = format!("Path \"{}\" is exist", msg);
+			let msg = format!("Path \"{msg}\" is exist");
 			return Err(crate::Error::PathUtilError(msg));
 		}
 	}
@@ -148,14 +148,14 @@ where
 	let from = from.as_ref();
 	if !from.exists() {
 		if let Some(msg) = from.to_str() {
-			let msg = format!("Path \"{}\" does not exist or you don't have access!", msg);
+			let msg = format!("Path \"{msg}\" does not exist or you don't have access!");
 			return Err(crate::Error::PathUtilError(msg));
 		}
 		return Err(crate::Error::PathUtilError("Path does not exist or you don't have access".to_owned()));
 	}
 	if !from.is_dir() {
 		if let Some(msg) = from.to_str() {
-			let msg = format!("Path \"{}\" is not a directory!", msg);
+			let msg = format!("Path \"{msg}\" is not a directory!");
 			return Err(crate::Error::PathUtilError(msg));
 		}
 		return Err(crate::Error::PathUtilError("Path is not a directory".to_owned()));
@@ -179,7 +179,7 @@ where
 	let dir_content = get_dir_info(from, &read_options)?;
 	for directory in dir_content.directories {
 		let tmp_to = Path::new(&directory).strip_prefix(from)?;
-		let dir = to.join(&tmp_to);
+		let dir = to.join(tmp_to);
 		if !dir.exists() {
 			if options.copy_files {
 				create_all(dir, false)?;
@@ -192,7 +192,7 @@ where
 	for file in dir_content.files {
 		let to = to.to_path_buf();
 		let tp = Path::new(&file).strip_prefix(from)?;
-		let path = to.join(&tp);
+		let path = to.join(tp);
 
 		let file_options = FileOpts {
 			overwrite: options.overwrite,

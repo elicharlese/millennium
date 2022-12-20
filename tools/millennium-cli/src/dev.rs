@@ -24,7 +24,7 @@ use std::{
 };
 
 use anyhow::{bail, Context};
-use clap::Parser;
+use clap::{ArgAction, Parser};
 use log::{error, info, warn};
 use once_cell::sync::OnceCell;
 use shared_child::SharedChild;
@@ -57,7 +57,7 @@ pub struct Options {
 	#[clap(short, long)]
 	pub target: Option<String>,
 	/// Space or comma-separated list of Cargo features to activate
-	#[clap(short, long, multiple_occurrences(true), multiple_values(true))]
+	#[clap(short, long, action = ArgAction::Append, num_args(0..))]
 	pub features: Option<Vec<String>>,
 	/// Exit on panic
 	#[clap(short, long)]
@@ -91,7 +91,7 @@ fn command_internal(mut options: Options) -> Result<()> {
 		Some(if config.starts_with('{') {
 			config.to_string()
 		} else {
-			std::fs::read_to_string(&config).with_context(|| "failed to read custom configuration")?
+			std::fs::read_to_string(config).with_context(|| "failed to read custom configuration")?
 		})
 	} else {
 		None
@@ -100,6 +100,7 @@ fn command_internal(mut options: Options) -> Result<()> {
 	set_current_dir(&millennium_path).with_context(|| "failed to change current working directory")?;
 
 	let config = get_config(options.config.as_deref())?;
+	let mut interface = AppInterface::new(config.lock().unwrap().as_ref().unwrap(), options.target.clone())?;
 
 	if let Some(before_dev) = config.lock().unwrap().as_ref().unwrap().build.before_dev_command.clone() {
 		let (script, script_cwd, wait) = match before_dev {
@@ -110,16 +111,20 @@ fn command_internal(mut options: Options) -> Result<()> {
 		let cwd = script_cwd.unwrap_or_else(|| app_dir().clone());
 		if let Some(before_dev) = script {
 			info!(action = "Running"; "beforeDevCommand `{}`", before_dev);
+
+			let mut env = command_env(true);
+			env.extend(interface.env());
+
 			#[cfg(windows)]
 			let mut command = {
 				let mut command = Command::new("cmd");
-				command.arg("/S").arg("/C").arg(&before_dev).current_dir(cwd).envs(command_env(true));
+				command.arg("/S").arg("/C").arg(&before_dev).current_dir(cwd).envs(env);
 				command
 			};
 			#[cfg(not(windows))]
 			let mut command = {
 				let mut command = Command::new("sh");
-				command.arg("-c").arg(&before_dev).current_dir(cwd).envs(command_env(true));
+				command.arg("-c").arg(&before_dev).current_dir(cwd).envs(env);
 				command
 			};
 			if wait {
@@ -134,7 +139,7 @@ fn command_internal(mut options: Options) -> Result<()> {
 				command.stdout(os_pipe::dup_stdout()?);
 				command.stderr(os_pipe::dup_stderr()?);
 
-				let child = SharedChild::spawn(&mut command).unwrap_or_else(|_| panic!("failed to run `{}`", before_dev));
+				let child = SharedChild::spawn(&mut command).unwrap_or_else(|_| panic!("failed to run `{before_dev}`"));
 				let child = Arc::new(child);
 				let child_ = child.clone();
 				std::thread::spawn(move || {
@@ -184,12 +189,12 @@ fn command_internal(mut options: Options) -> Result<()> {
 				c.build.dev_path = dev_path.clone();
 				options.config = Some(serde_json::to_string(&c).unwrap());
 			} else {
-				options.config = Some(format!(r#"{{ "build": {{ "devPath": "{}" }} }}"#, SERVER_URL))
+				options.config = Some(format!(r#"{{ "build": {{ "devPath": "{SERVER_URL}" }} }}"#))
 			}
 		}
 	}
 
-	let config = reload_config(options.config.as_deref())?;
+	reload_config(options.config.as_deref())?;
 
 	if std::env::var_os("MILLENNIUM_SKIP_DEVSERVER_CHECK") != Some("true".into()) {
 		if let AppUrl::Url(WindowUrl::External(dev_server_url)) = dev_path {
@@ -237,8 +242,6 @@ fn command_internal(mut options: Options) -> Result<()> {
 			}
 		}
 	}
-
-	let mut interface = AppInterface::new(config.lock().unwrap().as_ref().unwrap())?;
 
 	let exit_on_panic = options.exit_on_panic;
 	let no_watch = options.no_watch;

@@ -82,7 +82,7 @@ impl FromStr for Template {
 			"preact-wmr" => Ok(Template::PreactWmr),
 			"svelte" => Ok(Template::Svelte),
 			"vue" => Ok(Template::Vue),
-			_ => Err(format!("Unknown template: {}", s))
+			_ => Err(format!("Unknown template: {s}"))
 		}
 	}
 }

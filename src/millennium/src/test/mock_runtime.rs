@@ -94,6 +94,18 @@ impl<T: UserEvent> RuntimeHandle<T> for MockRuntimeHandle {
 	fn raw_display_handle(&self) -> raw_window_handle::RawDisplayHandle {
 		unimplemented!()
 	}
+
+	/// Shows the application, but does not automatically focus it.
+	#[cfg(target_os = "macos")]
+	fn show(&self) -> Result<()> {
+		Ok(())
+	}
+
+	/// Hides the application.
+	#[cfg(target_os = "macos")]
+	fn hide(&self) -> Result<()> {
+		Ok(())
+	}
 }
 
 #[derive(Debug, Clone)]
@@ -197,7 +209,7 @@ impl WindowBuilder for MockWindowBuilder {
 		self
 	}
 
-	fn focus(self) -> Self {
+	fn focused(self, focused: bool) -> Self {
 		self
 	}
 
@@ -254,6 +266,11 @@ impl WindowBuilder for MockWindowBuilder {
 	#[cfg(target_os = "macos")]
 	fn hidden_title(self, transparent: bool) -> Self {
 		self
+	}
+
+	#[cfg(target_os = "macos")]
+	fn tabbing_identifier(self, identifier: &str) -> Self {
+	  self
 	}
 
 	fn theme(self, theme: Option<Theme>) -> Self {
@@ -629,6 +646,14 @@ impl<T: UserEvent> Runtime<T> for MockRuntime {
 	#[cfg(target_os = "macos")]
 	#[cfg_attr(doc_cfg, doc(cfg(target_os = "macos")))]
 	fn set_activation_policy(&mut self, activation_policy: millennium_runtime::ActivationPolicy) {}
+
+	#[cfg(target_os = "macos")]
+	#[cfg_attr(doc_cfg, doc(cfg(target_os = "macos")))]
+	fn show(&self) {}
+
+	#[cfg(target_os = "macos")]
+	#[cfg_attr(doc_cfg, doc(cfg(target_os = "macos")))]
+	fn hide(&self) {}
 
 	#[cfg(any(
 		target_os = "macos",

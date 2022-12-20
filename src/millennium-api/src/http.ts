@@ -83,18 +83,30 @@ export class Body {
 	 *
 	 * @param data The body data.
 	 */
-	public static form(data: Record<string, Part>): Body {
+	public static form(data: Record<string, Part> | FormData): Body {
 		const form: Record<string, string | number[] | FilePart<number[]>> = {};
-		for (const key in data) {
-			const v = data[key];
-			form[key] = typeof v === 'string'
-				? v
-				: v instanceof Uint8Array || Array.isArray(v)
-					? Array.from(v)
-					: typeof v.file === 'string'
-						? { file: v.file, mime: v.mime, fileName: v.fileName }
-						: { file: Array.from(v.file), mime: v.mime, fileName: v.fileName };
-		}
+
+		const append = (key: string, v: string | Uint8Array | FilePart<Uint8Array> | File): void => {
+			if (v !== null)
+				form[String(key)] = typeof v === 'string'
+					? v
+					: v instanceof Uint8Array || Array.isArray(v)
+						? Array.from(v)
+						: v instanceof File
+							? { file: v.name, mime: v.type, fileName: v.name }
+							: typeof v.file === 'string'
+								? { file: v.file, mime: v.mime, fileName: v.fileName }
+								: { file: Array.from(v.file), mime: v.mime, fileName: v.fileName };
+		};
+
+		if (data instanceof FormData)
+			// @ts-expect-error
+			for (const [ key, value ] of data)
+				append(key, value);
+		else
+			for (const [ key, value ] of Object.entries(data))
+				append(key, value);
+
 		return new Body('Form', form);
 	}
 

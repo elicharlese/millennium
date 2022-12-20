@@ -169,14 +169,11 @@ pub fn command(mut options: Options) -> Result<()> {
 	} else {
 		let (millennium_dep, millennium_build_dep) = if let Some(millennium_path) = options.millennium_path {
 			(
-				format!(r#"{{ path = {:?}, features = [ "api-all" ] }}"#, resolve_millennium_path(&millennium_path, "src/millennium")),
+				format!(r#"{{ path = {:?} }}"#, resolve_millennium_path(&millennium_path, "src/millennium")),
 				format!("{{ path = {:?} }}", resolve_millennium_path(&millennium_path, "src/millennium-build"))
 			)
 		} else {
-			(
-				format!(r#"{{ version = "{}", features = [ "api-all" ] }}"#, metadata.millennium),
-				format!(r#"{{ version = "{}" }}"#, metadata.millennium_build)
-			)
+			(format!(r#"{{ version = "{}" }}"#, metadata.millennium), format!(r#"{{ version = "{}" }}"#, metadata.millennium_build))
 		};
 
 		let handlebars = Handlebars::new();

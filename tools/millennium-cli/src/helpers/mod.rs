@@ -25,23 +25,12 @@ use std::{
 	path::{Path, PathBuf}
 };
 
-pub fn command_env(debug: bool) -> HashMap<String, String> {
+pub fn command_env(debug: bool) -> HashMap<&'static str, String> {
 	let mut map = HashMap::new();
-
-	map.insert("MILLENNIUM_PLATFORM".into(), std::env::consts::OS.into());
-	map.insert("MILLENNIUM_ARCH".into(), std::env::consts::ARCH.into());
-	map.insert("MILLENNIUM_FAMILY".into(), std::env::consts::FAMILY.into());
 	map.insert("MILLENNIUM_PLATFORM_VERSION".into(), os_info::get().version().to_string());
 
-	#[cfg(target_os = "linux")]
-	map.insert("MILLENNIUM_PLATFORM_TYPE".into(), "Linux".into());
-	#[cfg(target_os = "windows")]
-	map.insert("MILLENNIUM_PLATFORM_TYPE".into(), "Windows_NT".into());
-	#[cfg(target_os = "macos")]
-	map.insert("MILLENNIUM_PLATFORM_TYPE".into(), "Darwin".into());
-
 	if debug {
-		map.insert("MILLENNIUM_DEBUG".into(), "true".to_string());
+		map.insert("MILLENNIUM_DEBUG", "true".into());
 	}
 
 	map

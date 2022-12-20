@@ -88,7 +88,7 @@ async fn handler<T>(req: Request<T>, state: Arc<State>) -> impl IntoResponse {
 	let uri = req.uri().to_string();
 	let uri = if uri == "/" { &uri } else { uri.strip_prefix('/').unwrap_or(&uri) };
 
-	let file = std::fs::read(state.serve_dir.join(&uri))
+	let file = std::fs::read(state.serve_dir.join(uri))
 		.or_else(|_| std::fs::read(state.serve_dir.join(format!("{}.html", &uri))))
 		.or_else(|_| std::fs::read(state.serve_dir.join(format!("{}/index.html", &uri))))
 		.or_else(|_| std::fs::read(state.serve_dir.join("index.html")));

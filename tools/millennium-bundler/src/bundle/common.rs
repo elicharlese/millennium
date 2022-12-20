@@ -42,7 +42,7 @@ pub fn is_retina<P: AsRef<Path>>(path: P) -> bool {
 /// needed.
 pub fn create_file(path: &Path) -> crate::Result<BufWriter<File>> {
 	if let Some(parent) = path.parent() {
-		fs::create_dir_all(&parent)?;
+		fs::create_dir_all(parent)?;
 	}
 	let file = File::create(path)?;
 	Ok(BufWriter::new(file))
@@ -81,10 +81,10 @@ pub fn copy_file(from: impl AsRef<Path>, to: impl AsRef<Path>) -> crate::Result<
 	let from = from.as_ref();
 	let to = to.as_ref();
 	if !from.exists() {
-		return Err(crate::Error::GenericError(format!("{:?} does not exist", from)));
+		return Err(crate::Error::GenericError(format!("{from:?} does not exist")));
 	}
 	if !from.is_file() {
-		return Err(crate::Error::GenericError(format!("{:?} is not a file", from)));
+		return Err(crate::Error::GenericError(format!("{from:?} is not a file")));
 	}
 	let dest_dir = to.parent().expect("No data in parent");
 	fs::create_dir_all(dest_dir)?;
@@ -99,13 +99,13 @@ pub fn copy_file(from: impl AsRef<Path>, to: impl AsRef<Path>) -> crate::Result<
 #[allow(dead_code)]
 pub fn copy_dir(from: &Path, to: &Path) -> crate::Result<()> {
 	if !from.exists() {
-		return Err(crate::Error::GenericError(format!("{:?} does not exist", from)));
+		return Err(crate::Error::GenericError(format!("{from:?} does not exist")));
 	}
 	if !from.is_dir() {
-		return Err(crate::Error::GenericError(format!("{:?} is not a Directory", from)));
+		return Err(crate::Error::GenericError(format!("{from:?} is not a Directory")));
 	}
 	if to.exists() {
-		return Err(crate::Error::GenericError(format!("{:?} already exists", from)));
+		return Err(crate::Error::GenericError(format!("{from:?} already exists")));
 	}
 	let parent = to.parent().expect("No data in parent");
 	fs::create_dir_all(parent)?;
@@ -137,7 +137,7 @@ pub trait CommandExt {
 impl CommandExt for Command {
 	fn output_ok(&mut self) -> crate::Result<Output> {
 		let program = self.get_program().to_string_lossy().into_owned();
-		debug!(action = "Running"; "Command `{} {}`", program, self.get_args().map(|arg| arg.to_string_lossy()).fold(String::new(), |acc, arg| format!("{} {}", acc, arg)));
+		debug!(action = "Running"; "Command `{} {}`", program, self.get_args().map(|arg| arg.to_string_lossy()).fold(String::new(), |acc, arg| format!("{acc} {arg}")));
 
 		self.stdout(Stdio::piped());
 		self.stderr(Stdio::piped());
@@ -190,7 +190,7 @@ impl CommandExt for Command {
 		if output.status.success() {
 			Ok(output)
 		} else {
-			Err(crate::Error::GenericError(format!("failed to run {}", program)))
+			Err(crate::Error::GenericError(format!("failed to run {program}")))
 		}
 	}
 }

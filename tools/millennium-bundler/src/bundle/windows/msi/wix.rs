@@ -147,7 +147,7 @@ impl ResourceDirectory {
 			directories.push_str(wix_string.as_str());
 		}
 		let wix_string = if self.name.is_empty() {
-			format!("{}{}", files, directories)
+			format!("{files}{directories}")
 		} else {
 			format!(
 				r#"<Directory Id="I{id}" Name="{name}">{files}{directories}</Directory>"#,
@@ -171,7 +171,7 @@ fn copy_icon(settings: &Settings, filename: &str, path: &Path) -> crate::Result<
 	create_dir_all(&resource_dir)?;
 	let icon_target_path = resource_dir.join(filename);
 
-	let icon_path = std::env::current_dir()?.join(&path);
+	let icon_path = std::env::current_dir()?.join(path);
 
 	copy_file(
 		icon_path,
@@ -210,7 +210,7 @@ fn app_installer_output_path(settings: &Settings, language: &str, updater: bool)
 	let arch = match settings.binary_arch() {
 		"x86" => "x86",
 		"x86_64" => "x64",
-		target => return Err(crate::Error::ArchError(format!("Unsupported architecture: {}", target)))
+		target => return Err(crate::Error::ArchError(format!("Unsupported architecture: {target}")))
 	};
 
 	let package_base_name = format!("{}_{}_{}_{}", settings.main_binary_name().replace(".exe", ""), settings.version_string(), arch, language,);
@@ -269,13 +269,24 @@ pub fn get_and_extract_wix(path: &Path) -> crate::Result<()> {
 	extract_zip(&data, path)
 }
 
+fn clear_env_for_wix(cmd: &mut Command) {
+	cmd.env_clear();
+	let required_vars: Vec<std::ffi::OsString> = vec!["SYSTEMROOT".into(), "TMP".into(), "TEMP".into()];
+	for (k, v) in std::env::vars_os() {
+		let k = k.to_ascii_uppercase();
+		if required_vars.contains(&k) || k.to_string_lossy().starts_with("MILLENNIUM") {
+			cmd.env(k, v);
+		}
+	}
+}
+
 /// Runs the Candle.exe executable for Wix. Candle parses the wxs file and generates the code for building the
 /// installer.
 fn run_candle(settings: &Settings, wix_toolset_path: &Path, cwd: &Path, wxs_file_path: PathBuf, extensions: Vec<PathBuf>) -> crate::Result<()> {
 	let arch = match settings.binary_arch() {
 		"x86_64" => "x64",
 		"x86" => "x86",
-		target => return Err(crate::Error::ArchError(format!("unsupported target: {}", target)))
+		target => return Err(crate::Error::ArchError(format!("unsupported target: {target}")))
 	};
 
 	let main_binary = settings
@@ -303,6 +314,7 @@ fn run_candle(settings: &Settings, wix_toolset_path: &Path, cwd: &Path, wxs_file
 	for ext in extensions {
 		cmd.arg("-ext").arg(ext);
 	}
+	clear_env_for_wix(&mut cmd);
 	cmd.args(&args).current_dir(cwd).output_ok().context("error running candle")?;
 
 	Ok(())
@@ -327,6 +339,7 @@ fn run_light(wix_toolset_path: &Path, build_path: &Path, arguments: Vec<String>,
 	for ext in extensions {
 		cmd.arg("-ext").arg(ext);
 	}
+	clear_env_for_wix(&mut cmd);
 	cmd.args(&args).current_dir(build_path).output_ok().context("error running light")?;
 
 	Ok(())
@@ -359,7 +372,7 @@ pub fn build_wix_app_installer(settings: &Settings, wix_toolset_path: &Path, upd
 	let arch = match settings.binary_arch() {
 		"x86_64" => "x64",
 		"x86" => "x86",
-		target => return Err(crate::Error::ArchError(format!("unsupported target: {}", target)))
+		target => return Err(crate::Error::ArchError(format!("unsupported target: {target}")))
 	};
 
 	validate_version(settings.version_string())?;
@@ -377,7 +390,7 @@ pub fn build_wix_app_installer(settings: &Settings, wix_toolset_path: &Path, upd
 		if let Some(certificate_thumbprint) = &settings.windows().certificate_thumbprint {
 			info!(action = "Signing"; "{}", file_path.display());
 			sign(
-				&file_path,
+				file_path,
 				&SignParams {
 					product_name: settings.product_name().into(),
 					digest_algorithm: settings
@@ -473,7 +486,7 @@ pub fn build_wix_app_installer(settings: &Settings, wix_toolset_path: &Path, upd
 			if license.ends_with(".rtf") {
 				data.insert("license", to_json(license));
 			} else {
-				let license_contents = read_to_string(&license)?;
+				let license_contents = read_to_string(license)?;
 				let license_rtf = format!(
 					r#"{{\rtf1\ansi\ansicpg1252\deff0\nouicompat\deflang1033{{\fonttbl{{\f0\fnil\fcharset0 Calibri;}}}}
 {{\*\generator Riched20 10.0.18362}}\viewkind4\uc1
@@ -499,14 +512,14 @@ pub fn build_wix_app_installer(settings: &Settings, wix_toolset_path: &Path, upd
 	data.insert("manufacturer", to_json(manufacturer));
 	let upgrade_code = Uuid::new_v5(&Uuid::NAMESPACE_DNS, format!("{}.app.x64", &settings.main_binary_name()).as_bytes()).to_string();
 
-	data.insert("upgrade_code", to_json(&upgrade_code.as_str()));
+	data.insert("upgrade_code", to_json(upgrade_code.as_str()));
 	data.insert("allow_downgrades", to_json(settings.windows().allow_downgrades));
 
 	let path_guid = generate_package_guid(settings).to_string();
-	data.insert("path_component_guid", to_json(&path_guid.as_str()));
+	data.insert("path_component_guid", to_json(path_guid.as_str()));
 
 	let shortcut_guid = generate_package_guid(settings).to_string();
-	data.insert("shortcut_guid", to_json(&shortcut_guid.as_str()));
+	data.insert("shortcut_guid", to_json(shortcut_guid.as_str()));
 
 	let app_exe_name = settings.main_binary_name().to_string();
 	data.insert("app_exe_name", to_json(&app_exe_name));
@@ -686,7 +699,7 @@ pub fn build_wix_app_installer(settings: &Settings, wix_toolset_path: &Path, upd
 			}
 		}
 
-		let locale_contents = locale_contents.replace("</WixLocalization>", &format!("{}</WixLocalization>", unset_locale_strings));
+		let locale_contents = locale_contents.replace("</WixLocalization>", &format!("{unset_locale_strings}</WixLocalization>"));
 		let locale_path = output_path.join("locale.wxl");
 		{
 			let mut fileout = File::create(&locale_path).expect("Failed to create locale file");
@@ -880,7 +893,7 @@ fn generate_resource_data(settings: &Settings) -> crate::Result<ResourceMap> {
 	for dll in glob::glob(out_dir.join("*.dll").to_string_lossy().to_string().as_str())? {
 		let path = dll?;
 		let resource_path = path.to_string_lossy().into_owned();
-		let relative_path = path.strip_prefix(&out_dir).unwrap().to_string_lossy().into_owned();
+		let relative_path = path.strip_prefix(out_dir).unwrap().to_string_lossy().into_owned();
 		if !added_resources.iter().any(|r| r.ends_with(&relative_path)) {
 			dlls.push(ResourceFile {
 				id: format!("I{}", Uuid::new_v4().as_simple()),

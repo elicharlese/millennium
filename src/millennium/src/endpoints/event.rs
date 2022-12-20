@@ -18,6 +18,7 @@
 
 use millennium_macros::{command_enum, CommandModule};
 use serde::{de::Deserializer, Deserialize};
+use serde_json::Value as JsonValue;
 
 use super::InvokeContext;
 use crate::{
@@ -83,7 +84,7 @@ pub enum Cmd {
 	Emit {
 		event: EventId,
 		window_label: Option<WindowLabel>,
-		payload: Option<String>
+		payload: Option<JsonValue>
 	}
 }
 
@@ -118,9 +119,21 @@ impl Cmd {
 		Ok(())
 	}
 
-	fn emit<R: Runtime>(context: InvokeContext<R>, event: EventId, window_label: Option<WindowLabel>, payload: Option<String>) -> super::Result<()> {
+	fn emit<R: Runtime>(context: InvokeContext<R>, event: EventId, window_label: Option<WindowLabel>, payload: Option<JsonValue>) -> super::Result<()> {
 		// dispatch the event to Rust listeners
-		context.window.trigger(&event.0, payload.clone());
+		context.window.trigger(
+			&event.0,
+			// TODO: dispatch any serializable value instead of a string in v2
+			payload.as_ref().and_then(|p| {
+				serde_json::to_string(&p)
+					.map_err(|e| {
+						#[cfg(debug_assertions)]
+						eprintln!("{e}");
+						e
+					})
+					.ok()
+			})
+		);
 
 		if let Some(target) = window_label {
 			context.window.emit_to(&target.0, &event.0, payload).map_err(crate::error::into_anyhow)?;

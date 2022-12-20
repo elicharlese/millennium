@@ -37,7 +37,8 @@ pub struct WebviewAttributes {
 	pub initialization_scripts: Vec<String>,
 	pub data_directory: Option<PathBuf>,
 	pub file_drop_handler_enabled: bool,
-	pub clipboard: bool
+	pub clipboard: bool,
+	pub accept_first_mouse: bool
 }
 
 impl WebviewAttributes {
@@ -49,7 +50,8 @@ impl WebviewAttributes {
 			initialization_scripts: Vec::new(),
 			data_directory: None,
 			file_drop_handler_enabled: true,
-			clipboard: false
+			clipboard: false,
+			accept_first_mouse: false
 		}
 	}
 
@@ -90,6 +92,13 @@ impl WebviewAttributes {
 	#[must_use]
 	pub fn enable_clipboard_access(mut self) -> Self {
 		self.clipboard = true;
+		self
+	}
+
+	/// Sets whether clicking an inactive window also clicks through to the webview.
+	#[must_use]
+	pub fn accept_first_mouse(mut self, accept: bool) -> Self {
+		self.accept_first_mouse = accept;
 		self
 	}
 }
@@ -148,9 +157,9 @@ pub trait WindowBuilder: WindowBuilderBase {
 	#[must_use]
 	fn fullscreen(self, fullscreen: bool) -> Self;
 
-	/// Whether the window will be initially hidden or focused.
+	/// Whether the window will be initially focused or not.
 	#[must_use]
-	fn focus(self) -> Self;
+	fn focused(self, focused: bool) -> Self;
 
 	/// Whether the window should be maximized upon creation.
 	#[must_use]
@@ -219,6 +228,16 @@ pub trait WindowBuilder: WindowBuilderBase {
 	#[cfg(target_os = "macos")]
 	#[must_use]
 	fn hidden_title(self, hidden: bool) -> Self;
+
+	/// Defines the window [tabbing identifier] for macOS.
+	///
+	/// Windows with matching tabbing identifiers will be grouped together.
+	/// If the tabbing identifier is not set, automatic tabbing will be disabled.
+	///
+	/// [tabbing identifier]: <https://developer.apple.com/documentation/appkit/nswindow/1644704-tabbingidentifier>
+	#[cfg(target_os = "macos")]
+	#[must_use]
+	fn tabbing_identifier(self, identifier: &str) -> Self;
 
 	/// Forces a theme or uses the system settings if None was provided.
 	fn theme(self, theme: Option<Theme>) -> Self;

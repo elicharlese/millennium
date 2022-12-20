@@ -300,17 +300,24 @@ pub fn unlisten_js(listeners_object_name: String, event_name: String, event_id: 
 
 pub fn listen_js(listeners_object_name: String, event: String, event_id: u64, window_label: Option<String>, handler: String) -> String {
 	format!(
-		"if (window['{listeners}'] === void 0) {{
-			Object.defineProperty(window, '{listeners}', {{ value: Object.create(null) }});
-		}}
-		if (window['{listeners}'][{event}] === void 0) {{
-			Object.defineProperty(window['{listeners}'], {event}, {{ value: [] }});
-		}}
-		window['{listeners}'][{event}].push({{
-			id: {event_id},
-			windowLabel: {window_label},
-			handler: {handler}
-		}});",
+		"(() => {{
+			if (window['{listeners}'] === void 0)
+				Object.defineProperty(window, '{listeners}', {{ value: Object.create(null) }});
+
+			if (window['{listeners}'][{event}] === void 0)
+				Object.defineProperty(window['{listeners}'], {event}, {{ value: [] }});
+
+			const eventListeners = window['{listeners}'][{event}];
+			const listener = {{
+				id: {event_id},
+				windowLabel: {window_label},
+				handler: {handler}
+			}};
+			if ({event} == 'millennium://window-created')
+				eventListeners.splice(eventListeners.length - 1, 0, listener)
+			else
+				eventListeners.push(listener);
+		}})();",
 		listeners = listeners_object_name,
 		event = event,
 		event_id = event_id,

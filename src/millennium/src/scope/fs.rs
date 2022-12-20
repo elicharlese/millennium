@@ -17,7 +17,7 @@
 use std::{
 	collections::{HashMap, HashSet},
 	fmt,
-	path::{Path, PathBuf},
+	path::{Path, PathBuf, MAIN_SEPARATOR},
 	sync::{Arc, Mutex}
 };
 
@@ -58,15 +58,15 @@ impl fmt::Debug for Scope {
 	}
 }
 
-fn push_pattern<P: AsRef<Path>>(list: &mut HashSet<Pattern>, pattern: P) -> crate::Result<()> {
+fn push_pattern<P: AsRef<Path>, F: Fn(&str) -> Result<Pattern, glob::PatternError>>(list: &mut HashSet<Pattern>, pattern: P, f: F) -> crate::Result<()> {
 	let path: PathBuf = pattern.as_ref().components().collect();
-	list.insert(Pattern::new(&path.to_string_lossy())?);
+	list.insert(f(&path.to_string_lossy())?);
 	#[cfg(windows)]
 	{
 		if let Ok(p) = std::fs::canonicalize(&path) {
-			list.insert(Pattern::new(&p.to_string_lossy())?);
+			list.insert(f(&p.to_string_lossy())?);
 		} else {
-			list.insert(Pattern::new(&format!("\\\\?\\{}", path.display()))?);
+			list.insert(f(&format!("\\\\?\\{}", path.display()))?);
 		}
 	}
 	Ok(())
@@ -78,7 +78,7 @@ impl Scope {
 		let mut allowed_patterns = HashSet::new();
 		for path in scope.allowed_paths() {
 			if let Ok(path) = parse_path(config, package_info, env, path) {
-				push_pattern(&mut allowed_patterns, path)?;
+				push_pattern(&mut allowed_patterns, path, Pattern::new)?;
 			}
 		}
 
@@ -86,7 +86,7 @@ impl Scope {
 		if let Some(forbidden_paths) = scope.forbidden_paths() {
 			for path in forbidden_paths {
 				if let Ok(path) = parse_path(config, package_info, env, path) {
-					push_pattern(&mut forbidden_patterns, path)?;
+					push_pattern(&mut forbidden_patterns, path, Pattern::new)?;
 				}
 			}
 		}
@@ -129,17 +129,17 @@ impl Scope {
 	/// the Millennium API to read the directory and all of its files and
 	/// subdirectories.
 	pub fn allow_directory<P: AsRef<Path>>(&self, path: P, recursive: bool) -> crate::Result<()> {
-		let path = path.as_ref().to_path_buf();
+		let path = path.as_ref();
 		{
 			let mut list = self.allowed_patterns.lock().unwrap();
 
 			// allow the directory to be read
-			push_pattern(&mut list, &path)?;
+			push_pattern(&mut list, path, escaped_pattern)?;
 			// allow its files and subdirectories to be read
-			push_pattern(&mut list, path.join(if recursive { "**" } else { "*" }))?;
+			push_pattern(&mut list, path, |p| escaped_pattern_with(p, if recursive { "**" } else { "*" }))?;
 		}
 
-		self.trigger(Event::PathAllowed(path));
+		self.trigger(Event::PathAllowed(path.to_path_buf()));
 		Ok(())
 	}
 
@@ -149,7 +149,7 @@ impl Scope {
 	/// the Millennium API to read the contents of this file.
 	pub fn allow_file<P: AsRef<Path>>(&self, path: P) -> crate::Result<()> {
 		let path = path.as_ref();
-		push_pattern(&mut self.allowed_patterns.lock().unwrap(), path)?;
+		push_pattern(&mut self.allowed_patterns.lock().unwrap(), path, escaped_pattern)?;
 		self.trigger(Event::PathAllowed(path.to_path_buf()));
 		Ok(())
 	}
@@ -159,17 +159,17 @@ impl Scope {
 	/// **Note**: this takes precedence over allowed paths, so its access gets
 	/// denied **always**.
 	pub fn forbid_directory<P: AsRef<Path>>(&self, path: P, recursive: bool) -> crate::Result<()> {
-		let path = path.as_ref().to_path_buf();
+		let path = path.as_ref();
 		{
 			let mut list = self.forbidden_patterns.lock().unwrap();
 
 			// forbid the directory to be read
-			push_pattern(&mut list, &path)?;
+			push_pattern(&mut list, path, escaped_pattern)?;
 			// forbid its files and subdirectories to be read
-			push_pattern(&mut list, path.join(if recursive { "**" } else { "*" }))?;
+			push_pattern(&mut list, path, |p| escaped_pattern_with(p, if recursive { "**" } else { "*" }))?;
 		}
 
-		self.trigger(Event::PathForbidden(path));
+		self.trigger(Event::PathForbidden(path.to_path_buf()));
 		Ok(())
 	}
 
@@ -179,7 +179,7 @@ impl Scope {
 	/// denied **always**.
 	pub fn forbid_file<P: AsRef<Path>>(&self, path: P) -> crate::Result<()> {
 		let path = path.as_ref();
-		push_pattern(&mut self.forbidden_patterns.lock().unwrap(), path)?;
+		push_pattern(&mut self.forbidden_patterns.lock().unwrap(), path, escaped_pattern)?;
 		self.trigger(Event::PathForbidden(path.to_path_buf()));
 		Ok(())
 	}
@@ -206,5 +206,58 @@ impl Scope {
 		} else {
 			false
 		}
+	}
+}
+
+fn escaped_pattern(p: &str) -> Result<Pattern, glob::PatternError> {
+	Pattern::new(&glob::Pattern::escape(p))
+}
+
+fn escaped_pattern_with(p: &str, append: &str) -> Result<Pattern, glob::PatternError> {
+	Pattern::new(&format!("{}{}{}", glob::Pattern::escape(p), MAIN_SEPARATOR, append))
+}
+
+#[cfg(test)]
+mod tests {
+	use super::Scope;
+
+	fn new_scope() -> Scope {
+		Scope {
+			allowed_patterns: Default::default(),
+			forbidden_patterns: Default::default(),
+			event_listeners: Default::default()
+		}
+	}
+
+	#[test]
+	fn path_is_escaped() {
+		let scope = new_scope();
+		scope.allow_directory("/home/pyke/**", false).unwrap();
+		assert!(scope.is_allowed("/home/pyke/**"));
+		assert!(scope.is_allowed("/home/pyke/**/file"));
+		assert!(!scope.is_allowed("/home/pyke/anyfile"));
+
+		let scope = new_scope();
+		scope.allow_file("/home/pyke/**").unwrap();
+		assert!(scope.is_allowed("/home/pyke/**"));
+		assert!(!scope.is_allowed("/home/pyke/**/file"));
+		assert!(!scope.is_allowed("/home/pyke/anyfile"));
+
+		let scope = new_scope();
+		scope.allow_directory("/home/pyke", true).unwrap();
+		scope.forbid_directory("/home/pyke/**", false).unwrap();
+		assert!(!scope.is_allowed("/home/pyke/**"));
+		assert!(!scope.is_allowed("/home/pyke/**/file"));
+		assert!(!scope.is_allowed("/home/pyke/**/inner/file"));
+		assert!(scope.is_allowed("/home/pyke/inner/folder/anyfile"));
+		assert!(scope.is_allowed("/home/pyke/anyfile"));
+
+		let scope = new_scope();
+		scope.allow_directory("/home/pyke", true).unwrap();
+		scope.forbid_file("/home/pyke/**").unwrap();
+		assert!(!scope.is_allowed("/home/pyke/**"));
+		assert!(scope.is_allowed("/home/pyke/**/file"));
+		assert!(scope.is_allowed("/home/pyke/**/inner/file"));
+		assert!(scope.is_allowed("/home/pyke/anyfile"));
 	}
 }

@@ -64,7 +64,10 @@ if (await exists(resolve(__dirname, '../millennium')) && await exists(resolve(__
 		platform: 'browser',
 		entryPoints: [ 'src/index.ts' ],
 		globalName: 'Millennium',
-		footer: { js: ';Object.defineProperty(window,"Millennium",{value:Millennium,writable:false,configurable:false,enumerable:true});function _DF(e){const d=Object.getOwnPropertyNames(e);for(const g of d)if(typeof e[g]=="object")_DF(e[g]);Object.freeze(e)}_DF(window.Millennium);' },
+		footer: {
+			// sets window.Millennium as non-writable and non-configurable, then `Object.freeze`s all descendant properties
+			js: ';Object.defineProperty(window,"Millennium",{value:Millennium,writable:false,configurable:false,enumerable:true});(()=>{function _DF(e){const d=Object.getOwnPropertyNames(e);for(const g of d)if(typeof e[g]=="object")_DF(e[g]);Object.freeze(e)}_DF(window.Millennium)})();'
+		},
 		target,
 		outfile: resolve(__dirname, '../millennium/scripts/bundle.js')
 	});

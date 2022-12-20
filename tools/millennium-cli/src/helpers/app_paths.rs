@@ -18,17 +18,16 @@ use std::{
 	cmp::Ordering,
 	env::current_dir,
 	ffi::OsStr,
-	fs::FileType,
 	path::{Path, PathBuf}
 };
 
 use ignore::WalkBuilder;
-use millennium_utils::config::parse::ConfigFormat;
+use millennium_utils::config::parse::{folder_has_configuration_file, is_configuration_file, ConfigFormat};
 use once_cell::sync::Lazy;
 
 const MILLENNIUM_GITIGNORE: &[u8] = include_bytes!("../../millennium.gitignore");
 
-fn lookup<F: Fn(&PathBuf, FileType) -> bool>(dir: &Path, checker: F) -> Option<PathBuf> {
+fn lookup<F: Fn(&PathBuf) -> bool>(dir: &Path, checker: F) -> Option<PathBuf> {
 	let mut default_gitignore = std::env::temp_dir();
 	default_gitignore.push(".gitignore");
 	if !default_gitignore.exists() {
@@ -57,7 +56,7 @@ fn lookup<F: Fn(&PathBuf, FileType) -> bool>(dir: &Path, checker: F) -> Option<P
 
 	for entry in builder.build().flatten() {
 		let path = dir.join(entry.path());
-		if checker(&path, entry.file_type().unwrap()) {
+		if checker(&path) {
 			return Some(path);
 		}
 	}
@@ -65,27 +64,19 @@ fn lookup<F: Fn(&PathBuf, FileType) -> bool>(dir: &Path, checker: F) -> Option<P
 }
 
 fn get_millennium_dir() -> PathBuf {
-	lookup(&current_dir().expect("failed to read cwd"), |path, file_type| {
-		if file_type.is_dir() {
-			path.join(ConfigFormat::Toml.into_file_name()).exists() || path.join(ConfigFormat::Json5.into_file_name()).exists()
-		} else if let Some(file_name) = path.file_name() {
-			file_name == OsStr::new(ConfigFormat::Toml.into_file_name()) || file_name == OsStr::new(ConfigFormat::Json5.into_file_name())
-		} else {
-			false
-		}
-	})
-	.map(|p| if p.is_dir() { p } else { p.parent().unwrap().to_path_buf() })
-	.unwrap_or_else(|| {
-		panic!(
-			"Couldn't recognize the current folder as a Millennium project. It must contain a `{}` or `{}` file in any subfolder.",
-			ConfigFormat::Toml.into_file_name(),
-			ConfigFormat::Json5.into_file_name()
-		)
-	})
+	lookup(&current_dir().expect("failed to read cwd"), |path| folder_has_configuration_file(path) || is_configuration_file(path))
+		.map(|p| if p.is_dir() { p } else { p.parent().unwrap().to_path_buf() })
+		.unwrap_or_else(|| {
+			panic!(
+				"Couldn't recognize the current folder as a Millennium project. It must contain a `{}` or `{}` file in any subfolder.",
+				ConfigFormat::Toml.into_file_name(),
+				ConfigFormat::Json5.into_file_name()
+			)
+		})
 }
 
 fn get_app_dir() -> Option<PathBuf> {
-	lookup(&current_dir().expect("failed to read cwd"), |path, _| {
+	lookup(&current_dir().expect("failed to read cwd"), |path| {
 		if let Some(file_name) = path.file_name() {
 			file_name == OsStr::new("package.json")
 		} else {

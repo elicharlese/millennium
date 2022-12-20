@@ -33,6 +33,8 @@ use serde::Serialize;
 #[cfg(windows)]
 use windows::Win32::Foundation::HWND;
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use crate::TitleBarStyle;
 use crate::{
 	app::AppHandle,
 	command::{CommandArg, CommandItem},
@@ -282,10 +284,10 @@ impl<'a, R: Runtime> WindowBuilder<'a, R> {
 		self
 	}
 
-	/// Whether the window will be initially hidden or focused.
+	/// Whether the window will be initially focused or not.
 	#[must_use]
-	pub fn focus(mut self) -> Self {
-		self.window_builder = self.window_builder.focus();
+	pub fn focused(mut self, focused: bool) -> Self {
+		self.window_builder = self.window_builder.focused(focused);
 		self
 	}
 
@@ -404,6 +406,19 @@ impl<'a, R: Runtime> WindowBuilder<'a, R> {
 		self
 	}
 
+	/// Defines the window [tabbing identifier] for macOS.
+	///
+	/// Windows with matching tabbing identifiers will be grouped together.
+	/// If the tabbing identifier is not set, automatic tabbing will be disabled.
+	///
+	/// [tabbing identifier]: <https://developer.apple.com/documentation/appkit/nswindow/1644704-tabbingidentifier>
+	#[cfg(target_os = "macos")]
+	#[must_use]
+	pub fn tabbing_identifier(mut self, identifier: &str) -> Self {
+		self.window_builder = self.window_builder.tabbing_identifier(identifier);
+		self
+	}
+
 	/// Adds the provided JavaScript to a list of scripts that should be run after the global object has been created,
 	/// but before the HTML document has been parsed and before any other script included by the HTML document is run.
 	///
@@ -467,6 +482,13 @@ impl<'a, R: Runtime> WindowBuilder<'a, R> {
 	#[must_use]
 	pub fn enable_clipboard_access(mut self) -> Self {
 		self.webview_attributes.clipboard = true;
+		self
+	}
+
+	/// Sets whether clicking an inactive window also clicks through to the webview.
+	#[must_use]
+	pub fn accept_first_mouse(mut self, accept: bool) -> Self {
+		self.webview_attributes.accept_first_mouse = accept;
 		self
 	}
 }

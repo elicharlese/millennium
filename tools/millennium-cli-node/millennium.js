@@ -10,9 +10,12 @@ const binStem = path.parse(bin).name.toLowerCase();
 // can successfully detect what command likely started the execution.
 let binName;
 
-// Even if started by a package manager, the binary will be NodeJS.
-// Some distribution still use "nodejs" as the binary name.
-if (binStem === 'node' || binStem === 'nodejs') {
+if (bin === '@pyke/millennium-cli') {
+	// deno run -A --unstable --node-modules-dir npm:@tauri-apps/cli
+	binName = '@pyke/millennium-cli';
+} else if (binStem.match(/(nodejs|node)([1-9]*)*$/g)) {
+	// Even if started by a package manager, the binary will be NodeJS.
+	// Some distribution still use "nodejs" as the binary name.
 	const managerStem = process.env.npm_execpath
 		? path.parse(process.env.npm_execpath).name.toLowerCase()
 		: null;

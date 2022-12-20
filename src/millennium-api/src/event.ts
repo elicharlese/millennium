@@ -86,7 +86,7 @@ export async function emit(event: EventName | string, windowLabel?: WindowLabel 
 			cmd: 'emit',
 			event,
 			windowLabel,
-			payload: typeof payload === 'string' ? payload : JSON.stringify(payload)
+			payload
 		}
 	});
 }

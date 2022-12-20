@@ -574,7 +574,7 @@ impl Settings {
 			"ios" => vec![PackageType::IosBundle],
 			"linux" => vec![PackageType::Deb, PackageType::AppImage],
 			"windows" => vec![PackageType::WindowsMsi],
-			os => return Err(crate::Error::GenericError(format!("Native {} bundles not yet supported.", os)))
+			os => return Err(crate::Error::GenericError(format!("Native {os} bundles not yet supported.")))
 		};
 
 		// add updater if needed

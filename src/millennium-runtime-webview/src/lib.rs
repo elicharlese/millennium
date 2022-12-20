@@ -53,6 +53,8 @@ use millennium_utils::TitleBarStyle;
 use millennium_utils::{config::WindowConfig, Theme};
 pub use millennium_webview;
 #[cfg(target_os = "macos")]
+use millennium_webview::application::platform::macos::EventLoopWindowTargetExtMacOS;
+#[cfg(target_os = "macos")]
 use millennium_webview::application::platform::macos::WindowBuilderExtMacOS;
 #[cfg(target_os = "macos")]
 pub use millennium_webview::application::platform::macos::{
@@ -155,7 +157,7 @@ macro_rules! window_getter {
 	}};
 }
 
-fn send_user_message<T: UserEvent>(context: &Context<T>, message: Message<T>) -> Result<()> {
+pub(crate) fn send_user_message<T: UserEvent>(context: &Context<T>, message: Message<T>) -> Result<()> {
 	if current_thread().id() == context.main_thread_id {
 		handle_user_message(
 			&context.main_thread.window_target,
@@ -639,6 +641,8 @@ impl From<CursorIcon> for CursorIconWrapper {
 pub struct WindowBuilderWrapper {
 	inner: MillenniumWindowBuilder,
 	center: bool,
+	#[cfg(target_os = "macos")]
+	tabbing_identifier: Option<String>,
 	menu: Option<Menu>
 }
 
@@ -649,7 +653,7 @@ unsafe impl Send for WindowBuilderWrapper {}
 impl WindowBuilderBase for WindowBuilderWrapper {}
 impl WindowBuilder for WindowBuilderWrapper {
 	fn new() -> Self {
-		Default::default()
+		Self::default().focused(true)
 	}
 
 	fn with_config(config: WindowConfig) -> Self {
@@ -668,6 +672,9 @@ impl WindowBuilder for WindowBuilderWrapper {
 		#[cfg(target_os = "macos")]
 		{
 			window = window.hidden_title(config.hidden_title);
+			if let Some(identifier) = &config.tabbing_identifier {
+				window = window.tabbing_identifier(identifier);
+			}
 		}
 		#[cfg(any(target_os = "macos", target_os = "windows"))]
 		{
@@ -750,9 +757,8 @@ impl WindowBuilder for WindowBuilderWrapper {
 		self
 	}
 
-	/// Deprecated since 0.1.4 (noop)
-	/// Windows is automatically focused when created.
-	fn focus(self) -> Self {
+	fn focused(mut self, focused: bool) -> Self {
+		self.inner = self.inner.with_focused(focused);
 		self
 	}
 
@@ -846,6 +852,13 @@ impl WindowBuilder for WindowBuilderWrapper {
 		self
 	}
 
+	#[cfg(target_os = "macos")]
+	fn tabbing_identifier(mut self, identifier: &str) -> Self {
+		self.inner = self.inner.with_tabbing_identifier(identifier);
+		self.tabbing_identifier.replace(identifier.into());
+		self
+	}
+
 	fn icon(mut self, icon: Icon) -> Result<Self> {
 		self.inner = self.inner.with_window_icon(Some(MillenniumIcon::try_from(icon)?.0));
 		Ok(self)
@@ -921,6 +934,13 @@ unsafe impl Send for GtkWindow {}
 
 pub struct RawWindowHandle(pub raw_window_handle::RawWindowHandle);
 unsafe impl Send for RawWindowHandle {}
+
+#[cfg(target_os = "macos")]
+#[derive(Debug, Clone)]
+pub enum ApplicationMessage {
+	Show,
+	Hide
+}
 
 pub enum WindowMessage {
 	#[cfg(desktop)]
@@ -1011,12 +1031,14 @@ pub enum TrayMessage {
 	#[cfg(target_os = "macos")]
 	UpdateTitle(String),
 	Create(SystemTray, Sender<Result<()>>),
-	Destroy
+	Destroy(Sender<Result<()>>)
 }
 
 pub type CreateWebviewClosure<T> = Box<dyn FnOnce(&EventLoopWindowTarget<Message<T>>, &WebContextStore) -> Result<WindowWrapper> + Send>;
 pub enum Message<T: 'static> {
 	Task(Box<dyn FnOnce() + Send>),
+	#[cfg(target_os = "macos")]
+	Application(ApplicationMessage),
 	Window(WebviewId, WindowMessage),
 	Webview(WebviewId, WebviewMessage),
 	#[cfg(all(desktop, feature = "system-tray"))]
@@ -1328,8 +1350,23 @@ impl<T: UserEvent> Dispatch<T> for MillenniumDispatcher<T> {
 
 #[derive(Clone)]
 enum WindowHandle {
-	Webview(Arc<WebView>),
+	Webview {
+		inner: Arc<WebView>,
+		context_store: WebContextStore,
+		// the key of the WebContext if it's not shared
+		context_key: Option<PathBuf>
+	},
 	Window(Arc<Window>)
+}
+
+impl Drop for WindowHandle {
+	fn drop(&mut self) {
+		if let Self::Webview { inner, context_store, context_key } = self {
+			if Arc::get_mut(inner).is_some() {
+				context_store.lock().unwrap().remove(context_key);
+			}
+		}
+	}
 }
 
 impl fmt::Debug for WindowHandle {
@@ -1344,7 +1381,7 @@ impl Deref for WindowHandle {
 	#[inline(always)]
 	fn deref(&self) -> &Window {
 		match self {
-			Self::Webview(w) => w.window(),
+			Self::Webview { inner, .. } => inner.window(),
 			Self::Window(w) => w
 		}
 	}
@@ -1354,7 +1391,7 @@ impl WindowHandle {
 	fn inner_size(&self) -> MillenniumPhysicalSize<u32> {
 		match self {
 			WindowHandle::Window(w) => w.inner_size(),
-			WindowHandle::Webview(w) => w.inner_size()
+			WindowHandle::Webview { inner, .. } => inner.inner_size()
 		}
 	}
 }
@@ -1498,6 +1535,7 @@ impl<T: UserEvent> RuntimeHandle<T> for MillenniumHandle<T> {
 		send_user_message(&self.context, Message::Tray(id, TrayMessage::Create(system_tray, tx)))?;
 		rx.recv().unwrap()?;
 		Ok(SystemTrayHandle {
+			context: self.context.clone(),
 			id,
 			proxy: self.context.proxy.clone()
 		})
@@ -1505,6 +1543,16 @@ impl<T: UserEvent> RuntimeHandle<T> for MillenniumHandle<T> {
 
 	fn raw_display_handle(&self) -> RawDisplayHandle {
 		self.context.main_thread.window_target.raw_display_handle()
+	}
+
+	#[cfg(target_os = "macos")]
+	fn show(&self) -> millennium_runtime::Result<()> {
+		send_user_message(&self.context, Message::Application(ApplicationMessage::Show))
+	}
+
+	#[cfg(target_os = "macos")]
+	fn hide(&self) -> millennium_runtime::Result<()> {
+		send_user_message(&self.context, Message::Application(ApplicationMessage::Hide))
 	}
 }
 
@@ -1655,6 +1703,7 @@ impl<T: UserEvent> Runtime<T> for MillenniumWebview<T> {
 		);
 
 		Ok(SystemTrayHandle {
+			context: self.context.clone(),
 			id,
 			proxy: self.event_loop.create_proxy()
 		})
@@ -1679,6 +1728,16 @@ impl<T: UserEvent> Runtime<T> for MillenniumWebview<T> {
 			ActivationPolicy::Prohibited => MillenniumActivationPolicy::Prohibited,
 			_ => unimplemented!()
 		});
+	}
+
+	#[cfg(target_os = "macos")]
+	fn show(&self) {
+		self.event_loop.show_application();
+	}
+
+	#[cfg(target_os = "macos")]
+	fn hide(&self) {
+		self.event_loop.hide_application();
 	}
 
 	#[cfg(desktop)]
@@ -1867,6 +1926,15 @@ fn handle_user_message<T: UserEvent>(
 	} = context;
 	match message {
 		Message::Task(task) => task(),
+		#[cfg(target_os = "macos")]
+		Message::Application(application_message) => match application_message {
+			ApplicationMessage::Show => {
+				event_loop.show_application();
+			}
+			ApplicationMessage::Hide => {
+				event_loop.hide_application();
+			}
+		},
 		Message::Window(id, window_message) => {
 			if let WindowMessage::UpdateMenuItem(item_id, update) = window_message {
 				if let Some(menu_items) = windows.borrow_mut().get_mut(&id).map(|w| &mut w.menu_items) {
@@ -1890,7 +1958,7 @@ fn handle_user_message<T: UserEvent>(
 					match window_message {
 						#[cfg(desktop)]
 						WindowMessage::WithWebview(f) => {
-							if let WindowHandle::Webview(w) = window {
+							if let WindowHandle::Webview { inner: w, .. } = &window {
 								#[cfg(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))]
 								{
 									use millennium_webview::webview::WebviewExtUnix;
@@ -1921,19 +1989,19 @@ fn handle_user_message<T: UserEvent>(
 
 						#[cfg(any(debug_assertions, feature = "devtools"))]
 						WindowMessage::OpenDevTools => {
-							if let WindowHandle::Webview(w) = &window {
+							if let WindowHandle::Webview { inner: w, .. } = &window {
 								w.open_devtools();
 							}
 						}
 						#[cfg(any(debug_assertions, feature = "devtools"))]
 						WindowMessage::CloseDevTools => {
-							if let WindowHandle::Webview(w) = &window {
+							if let WindowHandle::Webview { inner: w, .. } = &window {
 								w.close_devtools();
 							}
 						}
 						#[cfg(any(debug_assertions, feature = "devtools"))]
 						WindowMessage::IsDevToolsOpen(tx) => {
-							if let WindowHandle::Webview(w) = &window {
+							if let WindowHandle::Webview { inner: w, .. } = &window {
 								tx.send(w.is_devtools_open()).unwrap();
 							} else {
 								tx.send(false).unwrap();
@@ -2052,7 +2120,7 @@ fn handle_user_message<T: UserEvent>(
 		}
 		Message::Webview(id, webview_message) => match webview_message {
 			WebviewMessage::EvaluateScript(script) => {
-				if let Some(WindowHandle::Webview(webview)) = windows.borrow().get(&id).and_then(|w| w.inner.as_ref()) {
+				if let Some(WindowHandle::Webview { inner: webview, .. }) = windows.borrow().get(&id).and_then(|w| w.inner.as_ref()) {
 					#[cfg_attr(not(debug_assertions), allow(unused_variables))]
 					if let Err(e) = webview.evaluate_script(&script) {
 						#[cfg(debug_assertions)]
@@ -2061,7 +2129,7 @@ fn handle_user_message<T: UserEvent>(
 				}
 			}
 			WebviewMessage::Print => {
-				if let Some(WindowHandle::Webview(webview)) = windows.borrow().get(&id).and_then(|w| w.inner.as_ref()) {
+				if let Some(WindowHandle::Webview { inner: webview, .. }) = windows.borrow().get(&id).and_then(|w| w.inner.as_ref()) {
 					let _ = webview.print();
 				}
 			}
@@ -2175,10 +2243,11 @@ fn handle_user_message<T: UserEvent>(
 					TrayMessage::Create(_tray, _tx) => {
 						// already handled
 					}
-					TrayMessage::Destroy => {
+					TrayMessage::Destroy(tx) => {
 						*tray_context.tray.lock().unwrap() = None;
 						tray_context.listeners.lock().unwrap().clear();
 						tray_context.items.lock().unwrap().clear();
+						tx.send(Ok(())).unwrap();
 					}
 				}
 			}
@@ -2295,14 +2364,13 @@ fn handle_event_loop<T: UserEvent>(
 					items.contains_key(&menu_id.0)
 				};
 				if has_menu {
-					listeners.replace(tray_context.listeners.clone());
+					listeners.replace(tray_context.listeners.lock().unwrap().clone());
 					tray_id = *id;
 					break;
 				}
 			}
 			drop(trays);
 			if let Some(listeners) = listeners {
-				let listeners = listeners.lock().unwrap();
 				let handlers = listeners.iter();
 				for handler in handlers {
 					handler(&event);
@@ -2497,7 +2565,7 @@ fn to_millennium_menu(custom_menu_items: &mut HashMap<MenuHash, MillenniumCustom
 fn create_webview<T: UserEvent>(
 	window_id: WebviewId,
 	event_loop: &EventLoopWindowTarget<Message<T>>,
-	web_context: &WebContextStore,
+	web_context_store: &WebContextStore,
 	context: Context<T>,
 	pending: PendingWindow<T, MillenniumWebview<T>>
 ) -> Result<WindowWrapper> {
@@ -2524,6 +2592,13 @@ fn create_webview<T: UserEvent>(
 		window_builder.inner = window_builder.inner.with_drag_and_drop(webview_attributes.file_drop_handler_enabled);
 	}
 
+	#[cfg(target_os = "macos")]
+	{
+		if window_builder.tabbing_identifier.is_none() || window_builder.inner.window.transparent || !window_builder.inner.window.decorations {
+			window_builder.inner = window_builder.inner.with_automatic_window_tabbing(false);
+		}
+	}
+
 	let is_window_transparent = window_builder.inner.window.transparent;
 	let menu_items = if let Some(menu) = window_builder.menu {
 		let mut menu_items = HashMap::new();
@@ -2544,7 +2619,8 @@ fn create_webview<T: UserEvent>(
 		.map_err(|e| Error::CreateWebview(Box::new(e)))?
 		.with_url(&url)
 		.unwrap() // safe to unwrap because we validate the URL beforehand
-		.with_transparent(is_window_transparent);
+		.with_transparent(is_window_transparent)
+		.with_accept_first_mouse(webview_attributes.accept_first_mouse);
 	if webview_attributes.file_drop_handler_enabled {
 		webview_builder = webview_builder.with_file_drop_handler(create_file_drop_handler(window_event_listeners.clone()));
 	}
@@ -2566,10 +2642,11 @@ fn create_webview<T: UserEvent>(
 		webview_builder = webview_builder.with_initialization_script(&script);
 	}
 
-	let mut web_context = web_context.lock().expect("poisoned WebContext store");
+	let mut web_context = web_context_store.lock().expect("poisoned WebContext store");
 	let is_first_context = web_context.is_empty();
 	let automation_enabled = std::env::var("MILLENNIUM_AUTOMATION").as_deref() == Ok("true");
-	let entry = web_context.entry(
+
+	let web_context_key = // force a unique WebContext when automation is false;
 		// force a unique WebContext when automation is false;
 		// the context must be stored on the HashMap because it must outlive the WebView on macOS
 		if automation_enabled {
@@ -2577,8 +2654,8 @@ fn create_webview<T: UserEvent>(
 		} else {
 			// random unique key
 			Some(Uuid::new_v4().as_hyphenated().to_string().into())
-		}
-	);
+		};
+	let entry = web_context.entry(web_context_key.clone());
 	let web_context = match entry {
 		Occupied(occupied) => occupied.into_mut(),
 		Vacant(vacant) => {
@@ -2631,7 +2708,11 @@ fn create_webview<T: UserEvent>(
 
 	Ok(WindowWrapper {
 		label,
-		inner: Some(WindowHandle::Webview(Arc::new(webview))),
+		inner: Some(WindowHandle::Webview {
+			inner: Arc::new(webview),
+			context_store: web_context_store.clone(),
+			context_key: if automation_enabled { None } else { web_context_key }
+		}),
 		menu_items,
 		window_event_listeners,
 		menu_event_listeners: Default::default()

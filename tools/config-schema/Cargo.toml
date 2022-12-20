@@ -1,0 +1,12 @@
+[package]
+name = "config-schema"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[build-dependencies]
+millennium-utils = { version = "1.0.0-beta.3", path = "../../src/millennium-utils", features = [ "schema", "isolation" ] }
+schemars = { version = "0.8", features = [ "url" ] }
+serde = { version = "1.0", features = [ "derive" ] }
+serde_json = "1.0"
+url = { version = "2.3", features = [ "serde" ] }

@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use millennium_macros::{command_enum, CommandModule};
+use millennium_macros::{command_enum, module_command_handler, CommandModule};
 use serde::Deserialize;
 
 use super::InvokeContext;
@@ -31,7 +31,13 @@ pub enum Cmd {
 	/// Get Application Name
 	GetAppName,
 	/// Get Millennium Version
-	GetMillenniumVersion
+	GetMillenniumVersion,
+	/// Shows the application on macOS.
+	#[cmd(app_show, "app > show")]
+	Show,
+	/// Hides the application on macOS.
+	#[cmd(app_hide, "app > hide")]
+	Hide
 }
 
 impl Cmd {
@@ -45,5 +51,21 @@ impl Cmd {
 
 	fn get_millennium_version<R: Runtime>(_context: InvokeContext<R>) -> super::Result<&'static str> {
 		Ok(env!("CARGO_PKG_VERSION"))
+	}
+
+	#[module_command_handler(app_show)]
+	#[allow(unused_variables)]
+	fn show<R: Runtime>(context: InvokeContext<R>) -> super::Result<()> {
+		#[cfg(target_os = "macos")]
+		context.window.app_handle.show()?;
+		Ok(())
+	}
+
+	#[module_command_handler(app_hide)]
+	#[allow(unused_variables)]
+	fn hide<R: Runtime>(context: InvokeContext<R>) -> super::Result<()> {
+		#[cfg(target_os = "macos")]
+		context.window.app_handle.hide()?;
+		Ok(())
 	}
 }

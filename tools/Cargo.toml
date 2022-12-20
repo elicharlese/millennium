@@ -2,7 +2,8 @@
 members = [
 	"./millennium-bundler",
 	"./millennium-cli",
-	"./millennium-cli-node"
+	"./millennium-cli-node",
+	"./config-schema"
 ]
 
 # default to small, optimized workspace release binaries

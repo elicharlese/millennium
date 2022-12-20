@@ -884,7 +884,7 @@ pub struct WindowConfig {
 	/// Whether the window starts as fullscreen or not.
 	#[serde(default)]
 	pub fullscreen: bool,
-	/// Whether the window will be initially hidden or focused.
+	/// Whether the window will be initially focused or not.
 	#[serde(default = "default_focus")]
 	pub focus: bool,
 	/// Whether the window is transparent or not.
@@ -917,7 +917,18 @@ pub struct WindowConfig {
 	pub title_bar_style: TitleBarStyle,
 	/// If `true`, sets the window title to be hidden on macOS.
 	#[serde(default, alias = "hidden-title")]
-	pub hidden_title: bool
+	pub hidden_title: bool,
+	/// Whether clicking an inactive window also clicks through to the webview.
+	#[serde(default, alias = "accept-first-mouse")]
+	pub accept_first_mouse: bool,
+	/// Defines the window [tabbing identifier] for macOS.
+	///
+	/// Windows with matching tabbing identifiers will be grouped together.
+	/// If the tabbing identifier is not set, automatic tabbing will be disabled.
+	///
+	/// [tabbing identifier]: <https://developer.apple.com/documentation/appkit/nswindow/1644704-tabbingidentifier>
+	#[serde(default, alias = "tabbing-identifier")]
+	pub tabbing_identifier: Option<String>
 }
 
 impl Default for WindowConfig {
@@ -948,7 +959,9 @@ impl Default for WindowConfig {
 			skip_taskbar: false,
 			theme: None,
 			title_bar_style: Default::default(),
-			hidden_title: false
+			hidden_title: false,
+			accept_first_mouse: false,
+			tabbing_identifier: None
 		}
 	}
 }
@@ -2021,6 +2034,42 @@ impl Allowlist for ClipboardAllowlistConfig {
 	}
 }
 
+/// Allowlist for the app APIs.
+#[derive(Debug, Default, PartialEq, Eq, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "schema", derive(JsonSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AppAllowlistConfig {
+	/// Use this flag to enable all app APIs.
+	#[serde(default)]
+	pub all: bool,
+	/// Enables the app's `show` API.
+	#[serde(default)]
+	pub show: bool,
+	/// Enables the app's `hide` API.
+	#[serde(default)]
+	pub hide: bool
+}
+
+impl Allowlist for AppAllowlistConfig {
+	fn all_features() -> Vec<&'static str> {
+		let allowlist = Self { all: false, show: true, hide: true };
+		let mut features = allowlist.to_features();
+		features.push("app-all");
+		features
+	}
+
+	fn to_features(&self) -> Vec<&'static str> {
+		if self.all {
+			vec!["app-all"]
+		} else {
+			let mut features = Vec::new();
+			check_feature!(self, features, show, "app-show");
+			check_feature!(self, features, hide, "app-hide");
+			features
+		}
+	}
+}
+
 /// Allowlist configuration.
 #[derive(Debug, Default, PartialEq, Eq, Clone, Deserialize, Serialize)]
 #[cfg_attr(feature = "schema", derive(JsonSchema))]
@@ -2064,7 +2113,10 @@ pub struct AllowlistConfig {
 	pub process: ProcessAllowlistConfig,
 	/// Clipboard APIs allowlist.
 	#[serde(default)]
-	pub clipboard: ClipboardAllowlistConfig
+	pub clipboard: ClipboardAllowlistConfig,
+	/// App APIs allowlist.
+	#[serde(default)]
+	pub app: AppAllowlistConfig
 }
 
 impl Allowlist for AllowlistConfig {
@@ -2082,6 +2134,7 @@ impl Allowlist for AllowlistConfig {
 		features.extend(ProtocolAllowlistConfig::all_features());
 		features.extend(ProcessAllowlistConfig::all_features());
 		features.extend(ClipboardAllowlistConfig::all_features());
+		features.extend(AppAllowlistConfig::all_features());
 		features
 	}
 
@@ -2116,7 +2169,6 @@ pub enum PatternKind {
 	/// Brownfield pattern.
 	Brownfield,
 	/// Isolation pattern. Recommended for security purposes.
-	#[cfg(feature = "isolation")]
 	Isolation {
 		/// The dir containing the index.html file that contains the secure
 		/// isolation application.
@@ -2190,7 +2242,6 @@ impl MillenniumConfig {
 		if self.macos_private_api {
 			features.push("macos-private-api");
 		}
-		#[cfg(feature = "isolation")]
 		if let PatternKind::Isolation { .. } = self.pattern {
 			features.push("isolation");
 		}
@@ -2933,6 +2984,8 @@ mod build {
 			let theme = opt_lit(self.theme.as_ref());
 			let title_bar_style = &self.title_bar_style;
 			let hidden_title = self.hidden_title;
+			let accept_first_mouse = self.accept_first_mouse;
+			let tabbing_identifier = opt_str_lit(self.tabbing_identifier.as_ref());
 
 			literal_struct!(
 				tokens,
@@ -2962,7 +3015,9 @@ mod build {
 				skip_taskbar,
 				theme,
 				title_bar_style,
-				hidden_title
+				hidden_title,
+				accept_first_mouse,
+				tabbing_identifier
 			);
 		}
 	}
@@ -3053,6 +3108,8 @@ mod build {
 
 			tokens.append_all(match self {
 				Self::Brownfield => quote! { #prefix::Brownfield },
+				#[cfg(not(feature = "isolation"))]
+				Self::Isolation { dir: _ } => quote! { #prefix::Brownfield },
 				#[cfg(feature = "isolation")]
 				Self::Isolation { dir } => {
 					let dir = path_buf_lit(dir);

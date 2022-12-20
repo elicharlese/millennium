@@ -260,7 +260,7 @@ impl<'d> serde::de::Visitor<'d> for AppCategoryVisitor {
 
 	fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self.did_you_mean {
-			Some(string) => write!(formatter, "a valid app category string (did you mean \"{}\"?)", string),
+			Some(string) => write!(formatter, "a valid app category string (did you mean \"{string}\"?)"),
 			None => write!(formatter, "a valid app category string")
 		}
 	}

@@ -58,7 +58,7 @@ impl Manifest {
 	}
 
 	pub fn all_enabled_features(&self, enabled_features: &[String]) -> Vec<String> {
-		let mut all_enabled_features: Vec<String> = self.millennium_features.iter().map(|f| format!("millennium/{}", f)).collect();
+		let mut all_enabled_features: Vec<String> = self.millennium_features.iter().map(|f| format!("millennium/{f}")).collect();
 
 		let manifest_features = self.features();
 		for f in enabled_features {
@@ -88,7 +88,7 @@ fn get_enabled_features(list: &HashMap<String, Vec<String>>, feature: &str) -> V
 fn read_manifest(manifest_path: &Path) -> crate::Result<Document> {
 	let mut manifest_str = String::new();
 
-	let mut manifest_file = File::open(manifest_path).with_context(|| format!("failed to open `{:?}` file", manifest_path))?;
+	let mut manifest_file = File::open(manifest_path).with_context(|| format!("failed to open `{manifest_path:?}` file"))?;
 	manifest_file.read_to_string(&mut manifest_str)?;
 
 	let manifest: Document = manifest_str.parse::<Document>().with_context(|| "failed to parse Cargo.toml")?;
@@ -159,7 +159,7 @@ fn write_features(dependencies: &mut Table, dependency_name: &str, all_features:
 			}
 			Value::String(version) => {
 				let mut def = InlineTable::default();
-				def.get_or_insert("version", version.to_string().replace('\"', "").replace(' ', ""));
+				def.get_or_insert("version", version.to_string().replace(['\"', ' '], ""));
 				def.get_or_insert("features", Value::Array(toml_array(features)));
 				*dep = Value::InlineTable(def);
 			}

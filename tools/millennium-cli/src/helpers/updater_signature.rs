@@ -35,7 +35,7 @@ pub struct KeyPair {
 
 fn create_file(path: &Path) -> crate::Result<BufWriter<File>> {
 	if let Some(parent) = path.parent() {
-		fs::create_dir_all(&parent)?;
+		fs::create_dir_all(parent)?;
 	}
 	let file = File::create(path)?;
 	Ok(BufWriter::new(file))
@@ -48,15 +48,15 @@ pub fn generate_key(password: Option<String>) -> crate::Result<KeyPair> {
 	let pk_box_str = pk.to_box().unwrap().to_string();
 	let sk_box_str = sk.to_box(None).unwrap().to_string();
 
-	let encoded_pk = encode(&pk_box_str);
-	let encoded_sk = encode(&sk_box_str);
+	let encoded_pk = encode(pk_box_str);
+	let encoded_sk = encode(sk_box_str);
 
 	Ok(KeyPair { pk: encoded_pk, sk: encoded_sk })
 }
 
 /// Transform a base64 String to readable string for the main signer
 pub fn decode_key(base64_key: String) -> crate::Result<String> {
-	let decoded_str = &decode(&base64_key)?[..];
+	let decoded_str = &decode(base64_key)?[..];
 	Ok(String::from(str::from_utf8(decoded_str)?))
 }
 
@@ -77,23 +77,23 @@ where
 				sk_path.display()
 			));
 		} else {
-			std::fs::remove_file(&sk_path)?;
+			std::fs::remove_file(sk_path)?;
 		}
 	}
 
 	if pk_path.exists() {
-		std::fs::remove_file(&pk_path)?;
+		std::fs::remove_file(pk_path)?;
 	}
 
 	let mut sk_writer = create_file(sk_path)?;
-	write!(sk_writer, "{:}", key)?;
+	write!(sk_writer, "{key:}")?;
 	sk_writer.flush()?;
 
 	let mut pk_writer = create_file(pk_path)?;
-	write!(pk_writer, "{:}", pubkey)?;
+	write!(pk_writer, "{pubkey:}")?;
 	pk_writer.flush()?;
 
-	Ok((fs::canonicalize(&sk_path)?, fs::canonicalize(&pk_path)?))
+	Ok((fs::canonicalize(sk_path)?, fs::canonicalize(pk_path)?))
 }
 
 /// Read key from file
@@ -124,7 +124,7 @@ where
 
 	let signature_box = sign(None, secret_key, data_reader, Some(trusted_comment.as_str()), Some("signature from Millennium secret key"))?;
 
-	let encoded_signature = encode(&signature_box.to_string());
+	let encoded_signature = encode(signature_box.to_string());
 	signature_box_writer.write_all(encoded_signature.as_bytes())?;
 	signature_box_writer.flush()?;
 	Ok((fs::canonicalize(&signature_path)?, signature_box))

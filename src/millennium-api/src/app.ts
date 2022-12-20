@@ -53,3 +53,27 @@ export async function getMillenniumVersion(): Promise<string> {
 		}
 	});
 }
+
+/**
+ * Shows the application on macOS. This function does not automatically focus any app window.
+ */
+export async function show(): Promise<void> {
+	return invokeMillenniumCommand({
+		__millenniumModule: 'App',
+		message: {
+			cmd: 'show'
+		}
+	});
+}
+
+/**
+ * Hides the application on macOS.
+ */
+export async function hide(): Promise<void> {
+	return invokeMillenniumCommand({
+		__millenniumModule: 'App',
+		message: {
+			cmd: 'hide'
+		}
+	});
+}

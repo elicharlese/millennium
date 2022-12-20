@@ -28,7 +28,7 @@ pub enum ArchiveReader<R: Read + Seek> {
 	/// A plain reader.
 	Plain(R),
 	/// A gzip reader.
-	GzCompressed(flate2::read::GzDecoder<R>)
+	GzCompressed(Box<flate2::read::GzDecoder<R>>)
 }
 
 impl<R: Read + Seek> Read for ArchiveReader<R> {
@@ -170,7 +170,7 @@ impl<'a, R: Read + Seek> Extract<'a, R> {
 		let compression = if let ArchiveFormat::Tar(compression) = archive_format { compression } else { None };
 		Extract {
 			reader: match compression {
-				Some(Compression::Gz) => ArchiveReader::GzCompressed(flate2::read::GzDecoder::new(reader)),
+				Some(Compression::Gz) => ArchiveReader::GzCompressed(Box::new(flate2::read::GzDecoder::new(reader))),
 				_ => ArchiveReader::Plain(reader)
 			},
 			archive_format,

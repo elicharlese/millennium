@@ -67,7 +67,7 @@ impl Options {
 
 pub fn command(mut options: Options) -> Result<()> {
 	options.load();
-	let template_target_path = PathBuf::from(options.directory).join(&format!("millennium-plugin-{}", options.plugin_name.to_kebab_case()));
+	let template_target_path = PathBuf::from(options.directory).join(format!("millennium-plugin-{}", options.plugin_name.to_kebab_case()));
 	let metadata = serde_json::from_str::<VersionMetadata>(include_str!("../../metadata.json"))?;
 	if template_target_path.exists() {
 		warn!("Plugin dir ({:?}) not empty.", template_target_path);
@@ -75,13 +75,13 @@ pub fn command(mut options: Options) -> Result<()> {
 		let (millennium_dep, millennium_example_dep, millennium_build_dep) = if let Some(millennium_path) = options.millennium_path {
 			(
 				format!(r#"{{ path = {:?} }}"#, resolve_millennium_path(&millennium_path, "src/millennium")),
-				format!(r#"{{ path = {:?}, features = [ "api-all" ] }}"#, resolve_millennium_path(&millennium_path, "src/millennium")),
+				format!(r#"{{ path = {:?} }}"#, resolve_millennium_path(&millennium_path, "src/millennium")),
 				format!(r#"{{ path = {:?} }}"#, resolve_millennium_path(&millennium_path, "src/millennium-build"))
 			)
 		} else {
 			(
 				format!(r#"{{ version = "{}" }}"#, metadata.millennium),
-				format!(r#"{{ version = "{}", features = [ "api-all" ] }}"#, metadata.millennium),
+				format!(r#"{{ version = "{}" }}"#, metadata.millennium),
 				format!(r#"{{ version = "{}" }}"#, metadata.millennium_build)
 			)
 		};

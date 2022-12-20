@@ -141,12 +141,14 @@ fn get_internal(merge_config: Option<&str>, reload: bool) -> crate::Result<Confi
 			for error in errors {
 				let path = error.instance_path.clone().into_vec().join(" > ");
 				if path.is_empty() {
-					eprintln!("`{config_file_name}` error: {}", error);
+					log::error!("`{config_file_name}` error: {error}");
 				} else {
-					eprintln!("`{config_file_name}` error on `{}`: {}", path, error);
+					log::error!("`{config_file_name}` error on `{path}`: {error}");
 				}
 			}
-			exit(1);
+			if !reload {
+				exit(1);
+			}
 		}
 	}
 

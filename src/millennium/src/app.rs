@@ -680,6 +680,28 @@ macro_rules! shared_app_impl {
 			pub fn asset_resolver(&self) -> AssetResolver<R> {
 				AssetResolver { manager: self.manager.clone() }
 			}
+
+			/// Shows the application, but does not automatically focus it.
+			#[cfg(target_os = "macos")]
+			pub fn show(&self) -> crate::Result<()> {
+				match self.runtime() {
+					RuntimeOrDispatch::Runtime(r) => r.show(),
+					RuntimeOrDispatch::RuntimeHandle(h) => h.show()?,
+					_ => unreachable!()
+				}
+				Ok(())
+			}
+
+			/// Hides the application.
+			#[cfg(target_os = "macos")]
+			pub fn hide(&self) -> crate::Result<()> {
+				match self.runtime() {
+					RuntimeOrDispatch::Runtime(r) => r.hide(),
+					RuntimeOrDispatch::RuntimeHandle(h) => h.hide()?,
+					_ => unreachable!()
+				}
+				Ok(())
+			}
 		}
 	};
 }
@@ -1362,14 +1384,12 @@ impl<R: Runtime> Builder<R> {
 		for config in manager.config().millennium.windows.clone() {
 			let url = config.url.clone();
 			let label = config.label.clone();
-			let file_drop_enabled = config.file_drop_enabled;
-			let user_agent = config.user_agent.clone();
 
-			let mut webview_attributes = WebviewAttributes::new(url);
-			if let Some(user_agent) = user_agent {
+			let mut webview_attributes = WebviewAttributes::new(url).accept_first_mouse(config.accept_first_mouse);
+			if let Some(user_agent) = &config.user_agent {
 				webview_attributes = webview_attributes.user_agent(&user_agent.to_string());
 			}
-			if !file_drop_enabled {
+			if !config.file_drop_enabled {
 				webview_attributes = webview_attributes.disable_file_drop_handler();
 			}
 
@@ -1414,7 +1434,7 @@ impl<R: Runtime> Builder<R> {
 			#[cfg(http_request)]
 			http: crate::scope::HttpScope::for_http_api(&app.config().millennium.allowlist.http.scope),
 			#[cfg(shell_scope)]
-			shell: ShellScope::new(shell_scope)
+			shell: ShellScope::new(&app.manager.config(), app.package_info(), &env, shell_scope)
 		});
 		app.manage(env);
 

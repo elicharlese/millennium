@@ -48,7 +48,7 @@ fn parse_rust_cfg(cfg: String) -> RustCfg {
 /// * Errors:
 ///     * Unexpected system config
 pub fn target_triple() -> Result<String, crate::Error> {
-	let arch_res = Command::new("rustc").args(&["--print", "cfg"]).output_ok();
+	let arch_res = Command::new("rustc").args(["--print", "cfg"]).output_ok();
 
 	let arch = match arch_res {
 		Ok(output) => parse_rust_cfg(String::from_utf8_lossy(&output.stdout).into())
@@ -95,10 +95,10 @@ pub fn target_triple() -> Result<String, crate::Error> {
 			return Err(crate::Error::ArchError(String::from("Unable to determine target-environment")));
 		};
 
-		format!("{}-{}", os, env)
+		format!("{os}-{env}")
 	};
 
-	Ok(format!("{}-{}", arch, os))
+	Ok(format!("{arch}-{os}"))
 }
 
 #[cfg(test)]

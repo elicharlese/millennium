@@ -7,7 +7,7 @@ repository = "https://github.com/pykeio/millennium"
 homepage = "https://millennium.pyke.io/"
 authors = [ "pykeio", "George Burton <burtonageo@gmail.com>", "Tauri Programme within The Commons Conservancy" ]
 categories = [ "command-line-utilities", "development-tools::cargo-plugins" ]
-rust-version = "1.57"
+rust-version = "1.59"
 edition = "2021"
 exclude = [
 	"/target"
@@ -31,7 +31,7 @@ log = { version = "0.4.17", features = [ "kv_unstable" ] }
 dirs-next = "2.0"
 
 [target."cfg(target_os = \"windows\")".dependencies]
-attohttpc = "0.22"
+attohttpc = "0.23"
 uuid = { version = "1", features = [ "v4", "v5" ] }
 bitness = "0.4"
 winreg = "0.10"

@@ -105,6 +105,28 @@ pub enum ConfigError {
 	}
 }
 
+/// Determines if the given folder has a configuration file.
+pub fn folder_has_configuration_file(folder: &Path) -> bool {
+	folder.join(ConfigFormat::Json5.into_file_name()).exists()
+		|| folder.join(ConfigFormat::Toml.into_file_name()).exists()
+		 // platform file names
+		|| folder.join(ConfigFormat::Json5.into_platform_file_name()).exists()
+		|| folder.join(ConfigFormat::Toml.into_platform_file_name()).exists()
+}
+
+/// Determines if the given file path represents a Millennium configuration file.
+pub fn is_configuration_file(path: &Path) -> bool {
+	path.file_name()
+		.map(|file_name| {
+			file_name == OsStr::new(ConfigFormat::Json5.into_file_name())
+			|| file_name == OsStr::new(ConfigFormat::Toml.into_file_name())
+		// platform file names
+			|| file_name == OsStr::new(ConfigFormat::Json5.into_platform_file_name())
+			|| file_name == OsStr::new(ConfigFormat::Toml.into_platform_file_name())
+		})
+		.unwrap_or_default()
+}
+
 /// Reads the configuration from the given root directory.
 ///
 /// It first looks for a `.millenniumrc` file on the given directory. The file
