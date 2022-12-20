@@ -23,12 +23,13 @@ use std::{
 };
 
 use millennium_macros::default_runtime;
+#[cfg(protocol_asset)]
+use millennium_utils::debug_eprintln;
 #[cfg(feature = "isolation")]
 use millennium_utils::pattern::isolation::RawIsolationPayload;
 use millennium_utils::{
 	assets::{AssetKey, CspHash},
 	config::{Csp, CspDirectiveSources},
-	debug_eprintln,
 	html::{SCRIPT_NONCE_TOKEN, STYLE_NONCE_TOKEN}
 };
 use serde::Serialize;
