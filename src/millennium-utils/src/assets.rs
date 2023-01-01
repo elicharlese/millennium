@@ -172,7 +172,7 @@ impl Assets for EmbeddedAssets {
 		Box::new(
 			self.global_hashes
 				.iter()
-				.chain(self.html_hashes.get(html_path.as_ref()).copied().into_iter().flatten().into_iter())
+				.chain(self.html_hashes.get(html_path.as_ref()).copied().into_iter().flatten())
 				.copied()
 		)
 	}

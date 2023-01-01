@@ -326,7 +326,7 @@ impl<T: 'static> EventLoop<T> {
 						);
 
 						// Allow resizing unmaximized borderless window
-						window.connect_motion_notify_event(|window, motion| {
+						window.connect_motion_notify_event(|window, event| {
 							if !window.is_decorated() && window.is_resizable() && !window.is_maximized() {
 								if let Some(window) = window.window() {
 									let (cx, cy) = event.root();
