@@ -327,21 +327,27 @@ impl<T: 'static> EventLoop<T> {
 
 						// Allow resizing unmaximized borderless window
 						window.connect_motion_notify_event(|window, motion| {
-							if cursor_moved {
-								if let Some(cursor) = motion.device() {
-									let scale_factor = window.scale_factor();
-									let (_, x, y) = cursor.window_at_position();
-									if let Err(e) = tx_clone.send(Event::WindowEvent {
-										window_id: RootWindowId(id),
-										event: WindowEvent::CursorMoved {
-											position: LogicalPosition::new(x, y).to_physical(scale_factor as f64),
-											device_id: DEVICE_ID,
-											// this field is depracted so it is fine to pass empty state
-											modifiers: ModifiersState::empty()
-										}
-									}) {
-										log::warn!("Failed to send cursor moved event to event channel: {}", e);
-									}
+							if !window.is_decorated() && window.is_resizable() && !window.is_maximized() {
+								if let Some(window) = window.window() {
+									let (cx, cy) = event.root();
+									let edge = hit_test(&window, cx, cy);
+									window.set_cursor(
+										Cursor::from_name(
+											&window.display(),
+											match edge {
+												WindowEdge::North => "n-resize",
+												WindowEdge::South => "s-resize",
+												WindowEdge::East => "e-resize",
+												WindowEdge::West => "w-resize",
+												WindowEdge::NorthWest => "nw-resize",
+												WindowEdge::NorthEast => "ne-resize",
+												WindowEdge::SouthEast => "se-resize",
+												WindowEdge::SouthWest => "sw-resize",
+												_ => "default"
+											}
+										)
+										.as_ref()
+									);
 								}
 							}
 							Inhibit(false)
@@ -466,19 +472,21 @@ impl<T: 'static> EventLoop<T> {
 
 						let tx_clone = event_tx.clone();
 						window.connect_motion_notify_event(move |window, motion| {
-							if let Some(cursor) = motion.device() {
-								let scale_factor = window.scale_factor();
-								let (_, x, y) = cursor.window_at_position();
-								if let Err(e) = tx_clone.send(Event::WindowEvent {
-									window_id: RootWindowId(id),
-									event: WindowEvent::CursorMoved {
-										position: LogicalPosition::new(x, y).to_physical(scale_factor as f64),
-										device_id: DEVICE_ID,
-										// this field is depracted so it is fine to pass empty state
-										modifiers: ModifiersState::empty()
+							if cursor_moved {
+								if let Some(cursor) = motion.device() {
+									let scale_factor = window.scale_factor();
+									let (_, x, y) = cursor.window_at_position();
+									if let Err(e) = tx_clone.send(Event::WindowEvent {
+										window_id: RootWindowId(id),
+										event: WindowEvent::CursorMoved {
+											position: LogicalPosition::new(x, y).to_physical(scale_factor as f64),
+											device_id: DEVICE_ID,
+											// this field is depracted so it is fine to pass empty state
+											modifiers: ModifiersState::empty()
+										}
+									}) {
+										log::warn!("Failed to send cursor moved event to event channel: {}", e);
 									}
-								}) {
-									log::warn!("Failed to send cursor moved event to event channel: {}", e);
 								}
 							}
 							Inhibit(false)

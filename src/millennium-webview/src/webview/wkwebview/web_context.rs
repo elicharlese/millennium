@@ -22,7 +22,7 @@ use crate::{webview::web_context::WebContextData, Result};
 
 #[derive(Debug)]
 pub struct WebContextImpl {
-	protocol_ptrs: Vec<*mut Box<dyn Fn(&Request<Vec<u8>>) -> Result<Response<Cow<'static, [u8]>>>>>
+	protocols: Vec<*mut Box<dyn Fn(&Request<Vec<u8>>) -> Result<Response<Cow<'static, [u8]>>>>>
 }
 
 impl WebContextImpl {

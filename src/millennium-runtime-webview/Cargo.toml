@@ -51,3 +51,5 @@ macos-private-api = [
 objc-exception = [ "millennium-webview/objc-exception" ]
 global-shortcut = [ "millennium-runtime/global-shortcut" ]
 clipboard = [ "millennium-runtime/clipboard" ]
+linux-headers = [ "millennium-webview/linux-headers" ]
+

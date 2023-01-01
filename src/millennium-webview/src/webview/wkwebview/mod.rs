@@ -317,7 +317,6 @@ impl InnerWebView {
 			{
 				use core_graphics::geometry::{CGPoint, CGSize};
 				let frame: CGRect = CGRect::new(&CGPoint::new(0., 0.), &CGSize::new(0., 0.));
-				let frame: CGRect = msg_send![ns_view, frame];
 				let _: () = msg_send![webview, initWithFrame:frame configuration:config];
 				// Auto-resize on macOS
 				webview.setAutoresizingMask_(NSViewHeightSizable | NSViewWidthSizable);
