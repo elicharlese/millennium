@@ -113,8 +113,13 @@ bitflags! {
 		const MARKER_RETAIN_STATE_ON_SIZE = 1 << 22;
 		const MARKER_IN_SIZE_MOVE = 1 << 23;
 		const MARKER_DONT_FOCUS = 1 << 24;
+		/// When minmizing a maximized Windows, `WM_SIZE` (which we use to update the `MAXIMIZED` bit) is fired, with
+		/// `wparam` set to `SIZE_MINIMIZED`, and thus the `MAXIMIZED` bit will be unset. When un-minimizing the window,
+		/// the `MAXIMIZED` bit will still be unset, and later on in `apply_diff` when `new.to_window_styles()` is
+		/// called, it will not add `WS_MAXIMIZE` window style.
+		const MARKER_WAS_MAXIMIZED = 1 << 25;
 
-		const IGNORE_CURSOR_EVENT = 1 << 25;
+		const IGNORE_CURSOR_EVENT = 1 << 26;
 
 		const EXCLUSIVE_FULLSCREEN_OR_MASK = WindowFlags::ALWAYS_ON_TOP.bits;
 	}
@@ -392,13 +397,17 @@ impl WindowFlags {
 		}
 
 		if diff != WindowFlags::empty() {
-			let (style, style_ex) = new.to_window_styles();
+			let (mut style, style_ex) = new.to_window_styles();
 
 			unsafe {
 				SendMessageW(window, *event_loop::SET_RETAIN_STATE_ON_SIZE_MSG_ID, WPARAM(1), LPARAM(0));
 
 				// This condition is necessary to avoid having an unrestorable window
 				if !new.contains(WindowFlags::MINIMIZED) {
+					if self.contains(WindowFlags::MARKER_WAS_MAXIMIZED) {
+						style |= WS_MAXIMIZE;
+					}
+
 					SetWindowLongW(window, GWL_STYLE, style.0 as i32);
 					SetWindowLongW(window, GWL_EXSTYLE, style_ex.0 as i32);
 				}

@@ -24,7 +24,7 @@ use millennium_core::platform::android::ndk_glue::jni::{
 	JNIEnv
 };
 
-use super::{IPC, REQUEST_HANDLER};
+use super::{create_headers_map, IPC, REQUEST_HANDLER, TITLE_CHANGE_HANDLER};
 
 fn handle_request(env: JNIEnv, request: JObject) -> Result<jobject, JniError> {
 	let mut request_builder = Request::builder();
@@ -49,35 +49,55 @@ fn handle_request(env: JNIEnv, request: JObject) -> Result<jobject, JniError> {
 	if let Some(handler) = REQUEST_HANDLER.get() {
 		let final_request = match request_builder.body(Vec::new()) {
 			Ok(req) => req,
-			Err(_) => {
+			Err(e) => {
+				log::warn!("Failed to build response: {}", e);
 				return Ok(*JObject::null());
 			}
 		};
 		let response = (handler.0)(final_request);
 		if let Some(response) = response {
-			let status_code = response.status().as_u16() as i32;
-			let reason_phrase = "OK";
-			let encoding = "UTF-8";
-			let mime_type = if let Some(mime) = response.headers().get(CONTENT_TYPE) {
-				env.new_string(mime.to_str().unwrap())?.into()
+			let status = response.status();
+			let status_code = status.as_u16();
+			let status_err = if status_code < 100 {
+				Some("Status code can't be less than 100.")
+			} else if status_code > 599 {
+				Some("Status code can't be greater than 599.")
+			} else if status_code > 299 && status_code < 400 {
+				Some("Status code can't be in the [300, 399] range.")
 			} else {
-				JObject::null()
+				None
+			};
+			if let Some(err) = status_err {
+				log::warn!("{}", err);
+				return Ok(*JObject::null());
+			}
+
+			let reason_phrase = status.canonical_reason().unwrap_or("OK");
+			let (mime_type, encoding) = if let Some(content_type) = response.headers().get(CONTENT_TYPE) {
+				let content_type = content_type.to_str().unwrap().trim();
+				let mut s = content_type.split(';');
+				let mime_type = s.next().unwrap().trim();
+				let mut encoding = None;
+				for token in s {
+					let token = token.trim();
+					if token.starts_with("charset=") {
+						encoding.replace(token.split('=').nth(1).unwrap());
+						break;
+					}
+				}
+				(
+					env.new_string(mime_type)?.into(),
+					if let Some(encoding) = encoding {
+						env.new_string(&encoding)?.into()
+					} else {
+						JObject::null().into()
+					}
+				)
+			} else {
+				(JObject::null().into(), JObject::null().into())
 			};
 
-			let hashmap = env.find_class("java/util/HashMap")?;
-			let response_headers = env.new_object(hashmap, "()V", &[])?;
-			for (key, value) in response.headers().iter() {
-				env.call_method(
-					response_headers,
-					"put",
-					"(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;",
-					&[
-						env.new_string(key.as_str())?.into(),
-						// TODO can we handle this better?
-						env.new_string(String::from_utf8_lossy(value.as_bytes()))?.into()
-					]
-				)?;
-			}
+			let response_headers = create_headers_map(&env, response.headers())?;
 
 			let bytes = response.body();
 
@@ -90,9 +110,9 @@ fn handle_request(env: JNIEnv, request: JObject) -> Result<jobject, JniError> {
 				web_resource_response_class,
 				"(Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/util/Map;Ljava/io/InputStream;)V",
 				&[
-					mime_type.into(),
-					env.new_string(encoding)?.into(),
-					status_code.into(),
+					mime_type,
+					encoding,
+					(status_code as i32).into(),
 					env.new_string(reason_phrase)?.into(),
 					response_headers.into(),
 					stream.into()
@@ -110,7 +130,7 @@ pub unsafe fn handleRequest(env: JNIEnv, _: JClass, request: JObject) -> jobject
 	match handle_request(env, request) {
 		Ok(response) => response,
 		Err(e) => {
-			log::error!("Failed to handle request: {}", e);
+			log::warn!("Failed to handle request: {}", e);
 			*JObject::null()
 		}
 	}
@@ -124,6 +144,19 @@ pub unsafe fn ipc(env: JNIEnv, _: JClass, arg: JString) {
 				(w.0)(&w.1, arg)
 			}
 		}
-		Err(e) => log::error!("Failed to parse JString: {}", e)
+		Err(e) => log::warn!("Failed to parse JString: {}", e)
+	}
+}
+
+#[allow(non_snake_case)]
+pub unsafe fn handleReceivedTitle(env: JNIEnv, _: JClass, _webview: JObject, title: JString) {
+	match env.get_string(title) {
+		Ok(title) => {
+			let title = title.to_string_lossy().to_string();
+			if let Some(w) = TITLE_CHANGE_HANDLER.get() {
+				(w.0)(&w.1, title)
+			}
+		}
+		Err(e) => log::warn!("Failed to parse JString: {}", e)
 	}
 }

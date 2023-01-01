@@ -13,7 +13,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 
-use std::rc::Rc;
+use std::{borrow::Cow, rc::Rc};
 
 use crossbeam_channel::*;
 use html5ever::{interface::QualName, namespace_url, ns, tendril::TendrilSink, LocalName};
@@ -29,7 +29,7 @@ use millennium_core::platform::android::ndk_glue::{
 		JNIEnv
 	},
 	ndk::looper::{FdEvent, ForeignLooper},
-	PACKAGE
+	JMap, PACKAGE
 };
 use once_cell::sync::OnceCell;
 use sha2::{Digest, Sha256};
@@ -49,17 +49,19 @@ macro_rules! android_binding {
 	};
 	($domain:ident, $package:ident, $main: ident, $millennium_webview: path) => {
 		use $millennium_webview::{
-			application::{android_binding as core_android_binding, android_fn, platform::android::ndk_glue::*},
+			application::{android_binding as core_android_binding, android_fn, generate_package_name, platform::android::ndk_glue::*},
 			webview::prelude::*
 		};
 		core_android_binding!($domain, $package, setup, $main);
-		android_fn!($domain, $package, RustWebViewClient, handleRequest, JObject, jobject);
-		android_fn!($domain, $package, Ipc, ipc, JString);
+		android_fn!($domain, $package, RustWebViewClient, handleRequest, [JObject], jobject);
+		android_fn!($domain, $package, Ipc, ipc, [JString]);
+		android_fn!($domain, $package, RustWebChromeClient, handleReceivedTitle, [JObject, JString]);
 	};
 }
 
 pub static IPC: OnceCell<UnsafeIpc> = OnceCell::new();
 pub static REQUEST_HANDLER: OnceCell<UnsafeRequestHandler> = OnceCell::new();
+pub static TITLE_CHANGE_HANDLER: OnceCell<UnsafeTitleHandler> = OnceCell::new();
 
 pub struct UnsafeIpc(Box<dyn Fn(&Window, String)>, Rc<Window>);
 impl UnsafeIpc {
@@ -70,14 +72,23 @@ impl UnsafeIpc {
 unsafe impl Send for UnsafeIpc {}
 unsafe impl Sync for UnsafeIpc {}
 
-pub struct UnsafeRequestHandler(Box<dyn Fn(Request<Vec<u8>>) -> Option<Response<Vec<u8>>>>);
+pub struct UnsafeRequestHandler(Box<dyn Fn(Request<Vec<u8>>) -> Option<Response<Cow<'static, [u8]>>>>);
 impl UnsafeRequestHandler {
-	pub fn new(f: Box<dyn Fn(Request<Vec<u8>>) -> Option<Response<Vec<u8>>>>) -> Self {
+	pub fn new(f: Box<dyn Fn(Request<Vec<u8>>) -> Option<Response<Cow<'static, [u8]>>>>) -> Self {
 		Self(f)
 	}
 }
 unsafe impl Send for UnsafeRequestHandler {}
 unsafe impl Sync for UnsafeRequestHandler {}
+
+pub struct UnsafeTitleHandler(Box<dyn Fn(&Window, String)>, Rc<Window>);
+impl UnsafeTitleHandler {
+	pub fn new(f: Box<dyn Fn(&Window, String)>, w: Rc<Window>) -> Self {
+		Self(f, w)
+	}
+}
+unsafe impl Send for UnsafeTitleHandler {}
+unsafe impl Sync for UnsafeTitleHandler {}
 
 pub unsafe fn setup(env: JNIEnv, looper: &ForeignLooper, activity: GlobalRef) {
 	// we must create the `WebChromeClient` here because it calls `registerForActivityResult`,
@@ -131,14 +142,15 @@ impl InnerWebView {
 			custom_protocols,
 			background_color,
 			transparent,
+			headers,
 			..
 		} = attributes;
 
 		if let Some(u) = url {
 			let mut url_string = String::from(u.as_str());
 			let name = u.scheme();
-			let schemes = custom_protocols.iter().map(|(name, _)| name.as_str()).collect::<Vec<_>>();
-			if schemes.contains(&name) {
+			let is_custom_protocol = custom_protocols.iter().any(|(n, _)| n == name);
+			if is_custom_protocol {
 				url_string = u.as_str().replace(&format!("{}://", name), &format!("https://{}.", name))
 			}
 
@@ -146,7 +158,8 @@ impl InnerWebView {
 				url: url_string,
 				devtools,
 				background_color,
-				transparent
+				transparent,
+				headers
 			}));
 		}
 
@@ -166,11 +179,12 @@ impl InnerWebView {
 					if let Ok(mut response) = (custom_protocol.1)(&request) {
 						if response.headers().get(CONTENT_TYPE) == Some(&HeaderValue::from_static("text/html")) {
 							if !initialization_scripts.is_empty() {
-								let mut document = kuchiki::parse_html().one(String::from_utf8_lossy(&response.body()).into_owned());
+								let mut document = kuchiki::parse_html().one(String::from_utf8_lossy(response.body()).into_owned());
 								let csp = response.headers_mut().get_mut(CONTENT_SECURITY_POLICY);
 								let mut hashes = Vec::new();
 								with_html_head(&mut document, |head| {
-									for script in &initialization_scripts {
+									// iterate in reverse order since we are prepending each script to the head tag
+									for script in initialization_scripts.iter().rev() {
 										let script_el = NodeRef::new_element(QualName::new(None, ns!(html), "script".into()), None);
 										script_el.append(NodeRef::new_text(script));
 
@@ -191,7 +205,7 @@ impl InnerWebView {
 									*csp = HeaderValue::from_str(&csp_string).unwrap();
 								}
 
-								*response.body_mut() = document.to_string().as_bytes().to_vec();
+								*response.body_mut() = document.to_string().into_bytes().into();
 							}
 						}
 						return Some(response);
@@ -205,6 +219,11 @@ impl InnerWebView {
 		let w = window.clone();
 		if let Some(i) = ipc_handler {
 			IPC.get_or_init(move || UnsafeIpc::new(Box::new(i), w));
+		}
+
+		let w = window.clone();
+		if let Some(i) = attributes.document_title_changed_handler {
+			TITLE_CHANGE_HANDLER.get_or_init(move || UnsafeTitleHandler::new(i, w));
 		}
 
 		Ok(Self { window })
@@ -240,6 +259,14 @@ impl InnerWebView {
 	pub fn set_background_color(&self, background_color: Rgba) -> Result<()> {
 		MainPipe::send(WebViewMessage::SetBackgroundColor(background_color));
 		Ok(())
+	}
+
+	pub fn load_url(&self, url: &str) {
+		MainPipe::send(WebViewMessage::LoadUrl(url.to_string(), None));
+	}
+
+	pub fn load_url_with_headers(&self, url: &str, headers: http::HeaderMap) {
+		MainPipe::send(WebViewMessage::LoadUrl(url.to_string(), Some(headers)));
 	}
 }
 
@@ -281,10 +308,21 @@ fn hash_script(script: &str) -> String {
 	format!("'sha256-{}'", base64::encode(hash))
 }
 
-fn find_my_class<'a>(env: JNIEnv<'a>, activity: JObject<'a>, name: String) -> Result<JClass<'a>, JniError> {
+fn find_my_class<'a>(env: JNIEnv<'a>, activity: JObject<'a>, name: String) -> std::result::Result<JClass<'a>, JniError> {
 	let class_name = env.new_string(name.replace('/', "."))?;
 	let my_class = env
 		.call_method(activity, "getAppClass", "(Ljava/lang/String;)Ljava/lang/Class;", &[class_name.into()])?
 		.l()?;
 	Ok(my_class.into())
+}
+
+fn create_headers_map<'a, 'b>(env: &'a JNIEnv, headers: &http::HeaderMap) -> std::result::Result<JMap<'a, 'b>, JniError> {
+	let obj = env.new_object("java/util/HashMap", "()V", &[])?;
+	let headers_map = JMap::from_env(&env, obj)?;
+	for (name, value) in headers.iter() {
+		let key = env.new_string(name)?;
+		let value = env.new_string(value.to_str().unwrap_or_default())?;
+		headers_map.put(key.into(), value.into())?;
+	}
+	Ok(headers_map)
 }

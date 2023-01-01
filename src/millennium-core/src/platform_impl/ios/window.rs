@@ -374,6 +374,11 @@ impl Inner {
 		unsafe { return monitor::uiscreens() }
 	}
 
+	#[inline]
+	pub fn monitor_from_point(&self, x: f64, y: f64) -> Option<RootMonitorHandle> {
+		None
+	}
+
 	pub fn primary_monitor(&self) -> Option<RootMonitorHandle> {
 		let monitor = unsafe { monitor::main_uiscreen() };
 		return Some(RootMonitorHandle { inner: monitor });

@@ -14,12 +14,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package {{app-domain-reversed}}.{{app-name-snake-case}}
+package {{package}}
 
 import android.annotation.SuppressLint
 import android.webkit.*
 import android.content.Context
 import android.os.Build
+import kotlin.collections.Map
 
 class RustWebView(context: Context): WebView(context) {
     init {
@@ -37,6 +38,12 @@ class RustWebView(context: Context): WebView(context) {
 			super.loadUrl(url)
 		}
 	}
+
+    fun loadUrlMainThread(url: String, additionalHttpHeaders: Map<String, String>) {
+        post {
+          super.loadUrl(url, additionalHttpHeaders)
+        }
+    }
 
     {{class-extension}}
 }

@@ -19,14 +19,14 @@ use crossbeam_channel::*;
 use millennium_core::platform::android::ndk_glue::{
 	jni::{
 		errors::Error as JniError,
-		objects::{GlobalRef, JObject},
+		objects::{GlobalRef, JObject, JString},
 		JNIEnv
 	},
 	PACKAGE
 };
 use once_cell::sync::Lazy;
 
-use super::find_my_class;
+use super::{create_headers_map, find_my_class};
 use crate::{webview::Rgba, Error};
 
 static CHANNEL: Lazy<(Sender<WebViewMessage>, Receiver<WebViewMessage>)> = Lazy::new(|| bounded(8));
@@ -61,7 +61,8 @@ impl MainPipe<'_> {
 						url,
 						devtools,
 						transparent,
-						background_color
+						background_color,
+						headers
 					} = attrs;
 
 					// Create webview
@@ -74,7 +75,7 @@ impl MainPipe<'_> {
 
 					// Load URL
 					if let Ok(url) = env.new_string(url) {
-						env.call_method(webview, "loadUrlMainThread", "(Ljava/lang/String;)V", &[url.into()])?;
+						load_url(env, webview, url, headers, true)?;
 					}
 
 					// Enable devtools
@@ -153,10 +154,27 @@ impl MainPipe<'_> {
 						f(env, activity, webview.as_obj());
 					}
 				}
+				WebViewMessage::LoadUrl(url, headers) => {
+					if let Some(webview) = &self.webview {
+						let url = env.new_string(url)?;
+						load_url(env, webview.as_obj(), url, headers, false)?;
+					}
+				}
 			}
 		}
 		Ok(())
 	}
+}
+
+fn load_url<'a>(env: JNIEnv<'a>, webview: JObject<'a>, url: JString<'a>, headers: Option<http::HeaderMap>, main_thread: bool) -> Result<(), JniError> {
+	let function = if main_thread { "loadUrlMainThread" } else { "loadUrl" };
+	if let Some(headers) = headers {
+		let headers_map = create_headers_map(&env, &headers)?;
+		env.call_method(webview, function, "(Ljava/lang/String;Ljava/util/Map;)V", &[url.into(), headers_map.into()])?;
+	} else {
+		env.call_method(webview, function, "(Ljava/lang/String;)V", &[url.into()])?;
+	}
+	Ok(())
 }
 
 fn set_background_color<'a>(env: JNIEnv<'a>, webview: JObject<'a>, background_color: RGBA) -> Result<(), JniError> {
@@ -177,7 +195,8 @@ pub enum WebViewMessage {
 	SetBackgroundColor(Rgba),
 	GetWebViewVersion(Sender<Result<String, Error>>),
 	GetUrl(Sender<String>),
-	Jni(Box<dyn FnOnce(JNIEnv, JObject, JObject) + Send>)
+	Jni(Box<dyn FnOnce(JNIEnv, JObject, JObject) + Send>),
+	LoadUrl(String, Option<http::HeaderMap>)
 }
 
 #[derive(Debug)]
@@ -185,5 +204,6 @@ pub struct CreateWebViewAttributes {
 	pub url: String,
 	pub devtools: bool,
 	pub transparent: bool,
-	pub background_color: Option<Rgba>
+	pub background_color: Option<Rgba>,
+	pub headers: Option<http::HeaderMap>
 }

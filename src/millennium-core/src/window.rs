@@ -285,7 +285,7 @@ impl Default for WindowAttributes {
 			window_icon: None,
 			window_menu: None,
 			preferred_theme: None,
-			focused: false,
+			focused: true,
 			content_protection: false
 		}
 	}
@@ -1203,6 +1203,16 @@ impl Window {
 	#[inline]
 	pub fn current_monitor(&self) -> Option<MonitorHandle> {
 		self.window.current_monitor()
+	}
+
+	/// Returns the monitor that contains the given point.
+	///
+	/// ## Platform-specific
+	///
+	/// - **Android / iOS**: Unsupported.
+	#[inline]
+	pub fn monitor_from_point(&self, x: f64, y: f64) -> Option<MonitorHandle> {
+		self.window.monitor_from_point(x, y)
 	}
 
 	/// Returns the list of all the monitors available on the system.

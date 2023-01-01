@@ -17,6 +17,7 @@
 //! Unix platform extensions for [`WebContext`](super::WebContext).
 
 use std::{
+	borrow::Cow,
 	cell::RefCell,
 	collections::{HashSet, VecDeque},
 	path::PathBuf,
@@ -29,22 +30,14 @@ use std::{
 };
 
 use glib::FileError;
-use http::{
-	header::{HeaderName, CONTENT_TYPE},
-	HeaderValue, Request, Response
-};
-use soup::{MessageHeaders, MessageHeadersType};
+use http::{header::CONTENT_TYPE, Request, Response};
 use url::Url;
 use webkit2gtk::{
-	traits::*, ApplicationInfo, CookiePersistentStorage, LoadEvent, URISchemeResponse, UserContentManager, WebContext, WebContextBuilder, WebView,
+	traits::*, ApplicationInfo, CookiePersistentStorage, LoadEvent, URIRequest, UserContentManager, WebContext, WebContextBuilder, WebView,
 	WebsiteDataManagerBuilder
 };
-use webkit2gtk_sys::webkit_get_minor_version;
 
 use crate::{webview::web_context::WebContextData, Error};
-
-// header support was introduced in webkit2gtk v2.36
-const HEADER_SUPPORT_MINOR_RELEASE: u32 = 36;
 
 #[derive(Debug)]
 pub struct WebContextImpl {
@@ -53,8 +46,7 @@ pub struct WebContextImpl {
 	webview_uri_loader: Rc<WebviewUriLoader>,
 	registered_protocols: HashSet<String>,
 	automation: bool,
-	app_info: Option<ApplicationInfo>,
-	webkit2gtk_minor_ver: u32
+	app_info: Option<ApplicationInfo>
 }
 
 impl WebContextImpl {
@@ -87,16 +79,13 @@ impl WebContextImpl {
 			env!("CARGO_PKG_VERSION_PATCH").parse().expect("invalid Millennium Webview version patch")
 		);
 
-		let webkit2gtk_minor_ver = unsafe { webkit_get_minor_version() };
-
 		Self {
 			context,
 			automation,
 			manager: UserContentManager::new(),
 			registered_protocols: Default::default(),
 			webview_uri_loader: Rc::default(),
-			app_info: Some(app_info),
-			webkit2gtk_minor_ver
+			app_info: Some(app_info)
 		}
 	}
 
@@ -123,7 +112,7 @@ pub trait WebContextExt {
 	/// implementation to properly handle duplicated scheme handlers.
 	fn register_uri_scheme<F>(&mut self, name: &str, handler: F) -> crate::Result<()>
 	where
-		F: Fn(&Request<Vec<u8>>) -> crate::Result<Response<Vec<u8>>> + 'static;
+		F: Fn(&Request<Vec<u8>>) -> crate::Result<Response<Cow<'static, [u8]>>> + 'static;
 
 	/// Register a custom protocol to the web context, only if it is not a
 	/// duplicate scheme.
@@ -133,12 +122,12 @@ pub trait WebContextExt {
 	/// `Err(Error::DuplicateCustomProtocol)`.
 	fn try_register_uri_scheme<F>(&mut self, name: &str, handler: F) -> crate::Result<()>
 	where
-		F: Fn(&Request<Vec<u8>>) -> crate::Result<Response<Vec<u8>>> + 'static;
+		F: Fn(&Request<Vec<u8>>) -> crate::Result<Response<Cow<'static, [u8]>>> + 'static;
 
 	/// Add a [`WebView`] to the queue waiting to be opened.
 	///
 	/// See the `WebviewUriLoader` for more information.
-	fn queue_load_uri(&self, webview: Rc<WebView>, url: Url);
+	fn queue_load_uri(&self, webview: Rc<WebView>, url: Url, headers: Option<http::HeaderMap>);
 
 	/// Flush all queued [`WebView`]s waiting to load a uri.
 	///
@@ -170,7 +159,7 @@ impl WebContextExt for super::WebContext {
 
 	fn register_uri_scheme<F>(&mut self, name: &str, handler: F) -> crate::Result<()>
 	where
-		F: Fn(&Request<Vec<u8>>) -> crate::Result<Response<Vec<u8>>> + 'static
+		F: Fn(&Request<Vec<u8>>) -> crate::Result<Response<Cow<'static, [u8]>>> + 'static
 	{
 		actually_register_uri_scheme(self, name, handler)?;
 		if self.os.registered_protocols.insert(name.to_string()) {
@@ -182,7 +171,7 @@ impl WebContextExt for super::WebContext {
 
 	fn try_register_uri_scheme<F>(&mut self, name: &str, handler: F) -> crate::Result<()>
 	where
-		F: Fn(&Request<Vec<u8>>) -> crate::Result<Response<Vec<u8>>> + 'static
+		F: Fn(&Request<Vec<u8>>) -> crate::Result<Response<Cow<'static, [u8]>>> + 'static
 	{
 		if self.os.registered_protocols.insert(name.to_string()) {
 			actually_register_uri_scheme(self, name, handler)
@@ -191,8 +180,8 @@ impl WebContextExt for super::WebContext {
 		}
 	}
 
-	fn queue_load_uri(&self, webview: Rc<WebView>, url: Url) {
-		self.os.webview_uri_loader.push(webview, url)
+	fn queue_load_uri(&self, webview: Rc<WebView>, url: Url, headers: Option<http::HeaderMap>) {
+		self.os.webview_uri_loader.push(webview, url, headers)
 	}
 
 	fn flush_queue_loader(&self) {
@@ -278,10 +267,9 @@ impl WebContextExt for super::WebContext {
 
 fn actually_register_uri_scheme<F>(context: &mut super::WebContext, name: &str, handler: F) -> crate::Result<()>
 where
-	F: Fn(&Request<Vec<u8>>) -> crate::Result<Response<Vec<u8>>> + 'static
+	F: Fn(&Request<Vec<u8>>) -> crate::Result<Response<Cow<'static, [u8]>>> + 'static
 {
 	use webkit2gtk::traits::*;
-	let webkit2gtk_minor_ver = context.os.webkit2gtk_minor_ver;
 
 	let context = &context.os.context;
 	// Enable secure context
@@ -294,8 +282,12 @@ where
 		if let Some(uri) = request.uri() {
 			let uri = uri.as_str();
 
+			#[allow(unused_mut)]
 			let mut http_request = Request::builder().uri(uri).method("GET");
-			if webkit2gtk_minor_ver >= HEADER_SUPPORT_MINOR_RELEASE {
+			#[cfg(feature = "linux-headers")]
+			{
+				use http::{header::HeaderName, HeaderValue};
+
 				if let Some(mut headers) = request.http_headers() {
 					if let Some(map) = http_request.headers_mut() {
 						headers.foreach(move |k, v| {
@@ -325,7 +317,12 @@ where
 					let buffer = http_response.body();
 					let input = gio::MemoryInputStream::from_bytes(&glib::Bytes::from(buffer));
 					let content_type = http_response.headers().get(CONTENT_TYPE).and_then(|h| h.to_str().ok());
-					if webkit2gtk_minor_ver >= HEADER_SUPPORT_MINOR_RELEASE {
+
+					#[cfg(feature = "linux-headers")]
+					{
+						use soup::{MessageHeaders, MessageHeadersType};
+						use webkit2gtk::URISchemeResponse;
+
 						let response = URISchemeResponse::new(&input, buffer.len() as i64);
 						response.set_status(http_response.status().as_u16() as u32, None);
 						if let Some(content_type) = content_type {
@@ -339,9 +336,9 @@ where
 						response.set_http_headers(&mut headers);
 
 						request.finish_with_response(&response);
-					} else {
-						request.finish(&input, buffer.len() as i64, content_type)
 					}
+					#[cfg(not(feature = "linux-headers"))]
+					request.finish(&input, buffer.len() as i64, content_type)
 				}
 				Err(_) => request.finish_error(&mut glib::Error::new(FileError::Exist, "Could not get requested file."))
 			}
@@ -387,7 +384,7 @@ where
 #[derive(Debug, Default)]
 struct WebviewUriLoader {
 	lock: AtomicBool,
-	queue: Mutex<VecDeque<(Rc<WebView>, Url)>>
+	queue: Mutex<VecDeque<(Rc<WebView>, Url, Option<http::HeaderMap>)>>
 }
 
 impl WebviewUriLoader {
@@ -402,13 +399,13 @@ impl WebviewUriLoader {
 	}
 
 	/// Add a [`WebView`] to the queue.
-	fn push(&self, webview: Rc<WebView>, url: Url) {
+	fn push(&self, webview: Rc<WebView>, url: Url, headers: Option<http::HeaderMap>) {
 		let mut queue = self.queue.lock().expect("poisoned load queue");
-		queue.push_back((webview, url))
+		queue.push_back((webview, url, headers))
 	}
 
 	/// Remove a [`WebView`] from the queue and return it.
-	fn pop(&self) -> Option<(Rc<WebView>, Url)> {
+	fn pop(&self) -> Option<(Rc<WebView>, Url, Option<http::HeaderMap>)> {
 		let mut queue = self.queue.lock().expect("poisoned load queue");
 		queue.pop_front()
 	}
@@ -416,7 +413,7 @@ impl WebviewUriLoader {
 	/// Load the next uri to load if the lock is not engaged.
 	fn flush(self: Rc<Self>) {
 		if !self.is_locked() {
-			if let Some((webview, url)) = self.pop() {
+			if let Some((webview, url, headers)) = self.pop() {
 				// we do not need to listen to failed events because those will finish the
 				// change event anyways
 				webview.connect_load_changed(move |_, event| {
@@ -426,7 +423,19 @@ impl WebviewUriLoader {
 					};
 				});
 
-				webview.load_uri(url.as_str());
+				if let Some(headers) = headers {
+					let req = URIRequest::builder().uri(url.as_str()).build();
+
+					if let Some(ref mut req_headers) = req.http_headers() {
+						for (header, value) in headers.iter() {
+							req_headers.append(header.to_string().as_str(), value.to_str().unwrap_or_default());
+						}
+					}
+
+					webview.load_request(&req);
+				} else {
+					webview.load_uri(url.as_str());
+				}
 			} else {
 				self.unlock();
 			}

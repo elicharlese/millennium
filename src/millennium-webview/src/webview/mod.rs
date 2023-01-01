@@ -16,16 +16,30 @@
 
 //! [`WebView`] struct and associated types.
 
+use std::{borrow::Cow, path::PathBuf, rc::Rc};
+
+use http::{Request, Response};
+pub use url::Url;
+#[cfg(target_os = "windows")]
+use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller;
+#[cfg(target_os = "windows")]
+use windows::{Win32::Foundation::HWND, Win32::UI::WindowsAndMessaging::DestroyWindow};
+
+#[cfg(target_os = "windows")]
+use crate::application::platform::windows::WindowExtWindows;
+use crate::{
+	application::{dpi::PhysicalSize, window::Window},
+	Result
+};
+
 mod web_context;
 
-pub use self::web_context::WebContext;
-
-#[cfg(target_os = "android")]
-pub(crate) mod android;
 #[cfg(target_os = "android")]
 pub mod prelude {
 	pub use super::android::{binding::*, setup};
 }
+#[cfg(target_os = "android")]
+pub(crate) mod android;
 #[cfg(target_os = "android")]
 pub use self::android::JniHandle;
 #[cfg(target_os = "android")]
@@ -40,21 +54,10 @@ pub(crate) mod wkwebview;
 use self::wkwebview::*;
 #[cfg(target_os = "windows")]
 pub(crate) mod webview2;
-use std::{path::PathBuf, rc::Rc};
 
-use http::{Request, Response};
-pub use url::Url;
-#[cfg(target_os = "windows")]
-use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller;
-#[cfg(target_os = "windows")]
-use windows::{Win32::Foundation::HWND, Win32::UI::WindowsAndMessaging::DestroyWindow};
-
+pub use self::web_context::WebContext;
 #[cfg(target_os = "windows")]
 use self::webview2::*;
-#[cfg(target_os = "windows")]
-use crate::application::platform::windows::WindowExtWindows;
-use crate::application::{dpi::PhysicalSize, window::Window};
-use crate::Result;
 
 pub struct WebViewAttributes {
 	/// Whether the WebView should have a custom user-agent.
@@ -81,6 +84,8 @@ pub struct WebViewAttributes {
 	pub background_color: Option<Rgba>,
 	/// Whether load the provided URL to [`WebView`].
 	pub url: Option<Url>,
+	/// Headers used when loading the requested `url`.
+	pub headers: Option<http::HeaderMap>,
 	/// Whether page zooming via hotkeys is enabled.
 	///
 	/// ## Platform-specific
@@ -139,7 +144,7 @@ pub struct WebViewAttributes {
 	///   So, a URL like `millennium://assets/index.html` would get the HTML file in the assets directory.
 	///
 	/// [bug]: https://bugs.webkit.org/show_bug.cgi?id=229034
-	pub custom_protocols: Vec<(String, Box<dyn Fn(&Request<Vec<u8>>) -> Result<Response<Vec<u8>>>>)>,
+	pub custom_protocols: Vec<(String, Box<dyn Fn(&Request<Vec<u8>>) -> Result<Response<Cow<'static, [u8]>>>>)>,
 	/// Set the IPC handler to receive the message from Javascript on webview to
 	/// host Rust code. The message sent from webview should call
 	/// `window.ipc.postMessage("insert_message_here");`.
@@ -228,7 +233,9 @@ pub struct WebViewAttributes {
 	/// ## Platform-specific
 	///
 	/// Only impacts macOS.
-	pub swipe_navigation_gestures: bool
+	pub swipe_navigation_gestures: bool,
+	/// Set a handler closure to process the change of the webview's document title.
+	pub document_title_changed_handler: Option<Box<dyn Fn(&Window, String)>>
 }
 
 impl Default for WebViewAttributes {
@@ -239,6 +246,7 @@ impl Default for WebViewAttributes {
 			transparent: false,
 			background_color: None,
 			url: None,
+			headers: None,
 			html: None,
 			initialization_scripts: vec![],
 			custom_protocols: vec![],
@@ -255,15 +263,29 @@ impl Default for WebViewAttributes {
 			devtools: false,
 			zoom_hotkeys_enabled: false,
 			accept_first_mouse: false,
-			swipe_navigation_gestures: false
+			swipe_navigation_gestures: false,
+			document_title_changed_handler: None
 		}
 	}
 }
 
 #[cfg(windows)]
-#[derive(Default)]
+#[derive(Clone)]
 pub(crate) struct PlatformSpecificWebViewAttributes {
-	additional_browser_args: Option<String>
+	additional_browser_args: Option<String>,
+	browser_accelerator_keys: bool,
+	theme: Option<Theme>
+}
+
+#[cfg(windows)]
+impl Default for PlatformSpecificWebViewAttributes {
+	fn default() -> Self {
+		Self {
+			additional_browser_args: None,
+			browser_accelerator_keys: true, // This is WebView2's default behavior
+			theme: None
+		}
+	}
 }
 
 #[cfg(any(
@@ -384,7 +406,7 @@ impl<'a> WebViewBuilder<'a> {
 	#[cfg(feature = "protocol")]
 	pub fn with_custom_protocol<F>(mut self, name: String, handler: F) -> Self
 	where
-		F: Fn(&Request<Vec<u8>>) -> Result<Response<Vec<u8>>> + 'static
+		F: Fn(&Request<Vec<u8>>) -> Result<Response<Cow<'static, [u8]>>> + 'static
 	{
 		self.webview.custom_protocols.push((name, Box::new(handler)));
 		self
@@ -439,10 +461,17 @@ impl<'a> WebViewBuilder<'a> {
 		self
 	}
 
-	/// Load the provided URL when the builder calling [`WebViewBuilder::build`]
-	/// to create the [`WebView`]. The provided URL must be valid.
+	/// Load the provided URL with the given headers to create the [`WebView`]. The provided URL must be valid.
+	pub fn with_url_and_headers(mut self, url: &str, headers: http::HeaderMap) -> Result<Self> {
+		self.webview.url = Some(url.parse()?);
+		self.webview.headers = Some(headers);
+		Ok(self)
+	}
+
+	/// Load the provided URL to create the [`WebView`]. The provided URL must be valid.
 	pub fn with_url(mut self, url: &str) -> Result<Self> {
 		self.webview.url = Some(Url::parse(url)?);
+		self.webview.headers = None;
 		Ok(self)
 	}
 
@@ -569,6 +598,12 @@ impl<'a> WebViewBuilder<'a> {
 		self
 	}
 
+	/// Set a handler closure to process the change of the webview's document title.
+	pub fn with_document_title_changed_handler(mut self, callback: impl Fn(&Window, String) + 'static) -> Self {
+		self.webview.document_title_changed_handler = Some(Box::new(callback));
+		self
+	}
+
 	/// Consume the builder and create the [`WebView`].
 	///
 	/// Platform-specific behavior:
@@ -591,13 +626,35 @@ pub trait WebViewBuilderExtWindows {
 	/// The default arguments are `--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection` - if you'd like to
 	/// disable OOUI (the menu that appears when selecting text) and SmartScreen, make sure to include those arguments
 	/// in your custom arguments.
-	fn with_additional_browser_args<S: AsRef<str>>(self, additional_args: S) -> Self;
+	fn with_additional_browser_args<S: Into<String>>(self, additional_args: S) -> Self;
+
+	/// Determines whether browser-specific accelerator keys are enabled. When this setting is set to
+	/// `false`, it disables all accelerator keys that access features specific to a web browser, like F5 for reload or
+	/// Ctrl+F for Find. The default value is `true`. See [the Microsoft docs][ms] for more info.
+	///
+	/// [ms]: https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/winrt/microsoft_web_webview2_core/corewebview2settings#arebrowseracceleratorkeysenabled
+	fn with_browser_accelerator_keys(self, enabled: bool) -> Self;
+
+	/// Overrides the browser theme. This affects things like `prefers-color-scheme`.
+	///
+	/// Defaults to [`Theme::Auto`], which will follow the OS defaults.
+	fn with_theme(self, theme: Theme) -> Self;
 }
 
 #[cfg(windows)]
 impl WebViewBuilderExtWindows for WebViewBuilder<'_> {
-	fn with_additional_browser_args<S: AsRef<str>>(mut self, additional_args: S) -> Self {
-		self.platform_attrs.additional_browser_args = Some(additional_args.as_ref().to_string());
+	fn with_additional_browser_args<S: Into<String>>(mut self, additional_args: S) -> Self {
+		self.platform_attrs.additional_browser_args = Some(additional_args.into());
+		self
+	}
+
+	fn with_browser_accelerator_keys(mut self, enabled: bool) -> Self {
+		self.platform_attrs.browser_accelerator_keys = enabled;
+		self
+	}
+
+	fn with_theme(mut self, theme: Theme) -> Self {
+		self.platform_attrs.theme = Some(theme);
 		self
 	}
 }
@@ -744,6 +801,14 @@ impl WebView {
 	pub fn set_background_color(&self, background_color: Rgba) -> Result<()> {
 		self.webview.set_background_color(background_color)
 	}
+
+	pub fn load_url(&self, url: &str) {
+		self.webview.load_url(url)
+	}
+
+	pub fn load_url_with_headers(&self, url: &str, headers: http::HeaderMap) {
+		self.webview.load_url_with_headers(url, headers)
+	}
 }
 
 /// An event enumeration sent to [`FileDropHandler`].
@@ -767,14 +832,20 @@ pub fn webview_version() -> Result<String> {
 /// Additional methods on `WebView` that are specific to Windows.
 #[cfg(target_os = "windows")]
 pub trait WebviewExtWindows {
-	/// Returns WebView2 Controller
+	/// Returns the webview controller.
 	fn controller(&self) -> ICoreWebView2Controller;
+	// Overrides the WebView2 theme.
+	fn set_theme(&self, theme: Theme);
 }
 
 #[cfg(target_os = "windows")]
 impl WebviewExtWindows for WebView {
 	fn controller(&self) -> ICoreWebView2Controller {
 		self.webview.controller.clone()
+	}
+
+	fn set_theme(&self, theme: Theme) {
+		self.webview.set_theme(theme)
 	}
 }
 
@@ -803,15 +874,15 @@ pub trait WebviewExtMacOS {
 #[cfg(target_os = "macos")]
 impl WebviewExtMacOS for WebView {
 	fn webview(&self) -> cocoa::base::id {
-		self.webview.webview.clone()
+		self.webview.webview
 	}
 
 	fn manager(&self) -> cocoa::base::id {
-		self.webview.manager.clone()
+		self.webview.manager
 	}
 
 	fn ns_window(&self) -> cocoa::base::id {
-		self.webview.ns_window.clone()
+		self.webview.ns_window
 	}
 }
 
@@ -826,6 +897,13 @@ impl WebviewExtAndroid for WebView {
 	fn handle(&self) -> JniHandle {
 		JniHandle
 	}
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Theme {
+	Dark,
+	Light,
+	Auto
 }
 
 #[cfg(test)]

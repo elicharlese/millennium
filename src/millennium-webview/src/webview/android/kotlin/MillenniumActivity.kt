@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package {{app-domain-reversed}}.{{app-name-snake-case}}
+package {{package}}
 
 import android.annotation.SuppressLint
 import android.os.Build
@@ -107,7 +107,7 @@ abstract class MillenniumActivity : AppCompatActivity() {
 
 	companion object {
 		init {
-			System.loadLibrary("{{app-name-snake-case}}")
+			System.loadLibrary("{{library}}")
 		}
 	}
 

@@ -153,9 +153,10 @@ pub fn command(mut options: Options) -> Result<()> {
 		options.runner = config_.build.runner.clone();
 	}
 
-	if let Some(list) = options.features.as_mut() {
-		list.extend(config_.build.features.clone().unwrap_or_default());
-	}
+	options
+		.features
+		.get_or_insert(Vec::new())
+		.extend(config_.build.features.clone().unwrap_or_default());
 
 	let mut interface = AppInterface::new(config_, options.target.clone())?;
 	let app_settings = interface.app_settings();

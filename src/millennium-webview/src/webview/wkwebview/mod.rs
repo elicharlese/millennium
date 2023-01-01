@@ -14,17 +14,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod download;
-#[cfg(target_os = "macos")]
-mod file_drop;
-mod web_context;
-
 use std::{
+	borrow::Cow,
 	ffi::{c_void, CStr},
 	os::raw::c_char,
 	ptr::{null, null_mut},
 	rc::Rc,
-	slice, str
+	slice, str,
+	sync::{Arc, Mutex}
 };
 
 #[cfg(target_os = "macos")]
@@ -49,8 +46,6 @@ use objc::{
 use objc_id::Id;
 use url::Url;
 
-use self::download::{add_download_methods, download_did_fail, download_did_finish, download_policy, set_download_delegate};
-pub use self::web_context::WebContextImpl;
 #[cfg(target_os = "ios")]
 use crate::application::platform::ios::WindowExtIOS;
 #[cfg(target_os = "macos")]
@@ -64,6 +59,14 @@ use crate::{
 	Result
 };
 
+mod download;
+#[cfg(target_os = "macos")]
+mod file_drop;
+mod web_context;
+
+use self::download::{add_download_methods, download_did_fail, download_did_finish, download_policy, set_download_delegate};
+pub use self::web_context::WebContextImpl;
+
 const IPC_MESSAGE_HANDLER_NAME: &str = "ipc";
 const ACCEPT_FIRST_MOUSE: &str = "accept_first_mouse";
 
@@ -72,14 +75,16 @@ pub(crate) struct InnerWebView {
 	#[cfg(target_os = "macos")]
 	pub ns_window: id,
 	pub manager: id,
+	pending_scripts: Arc<Mutex<Option<Vec<String>>>>,
 	// Note that if following functions signatures are changed in the future,
 	// all fucntions pointer declarations in objc callbacks below all need to get updated.
 	ipc_handler_ptr: *mut (Box<dyn Fn(&Window, String)>, Rc<Window>),
+	document_title_changed_handler: *mut (Box<dyn Fn(&Window, String)>, Rc<Window>),
 	nav_decide_policy_ptr: *mut Box<dyn Fn(String, bool) -> bool>,
 	#[cfg(target_os = "macos")]
 	file_drop_ptr: *mut (Box<dyn Fn(&Window, FileDropEvent) -> bool>, Rc<Window>),
 	download_delegate: id,
-	protocol_ptrs: Vec<*mut Box<dyn Fn(&Request<Vec<u8>>) -> Result<Response<Vec<u8>>>>>
+	protocol_ptrs: Vec<*mut Box<dyn Fn(&Request<Vec<u8>>) -> Result<Response<Cow<'static, [u8]>>>>>
 }
 
 impl InnerWebView {
@@ -112,7 +117,7 @@ impl InnerWebView {
 			unsafe {
 				let function = this.get_ivar::<*mut c_void>("function");
 				if !function.is_null() {
-					let function = &mut *(*function as *mut Box<dyn for<'s> Fn(&'s Request<Vec<u8>>) -> Result<Response<Vec<u8>>>>);
+					let function = &mut *(*function as *mut Box<dyn Fn(&Request<Vec<u8>>) -> Result<Response<Cow<'static, [u8]>>>>);
 
 					// Get url request
 					let request: id = msg_send![task, request];
@@ -310,7 +315,8 @@ impl InnerWebView {
 
 			#[cfg(target_os = "macos")]
 			{
-				let ns_view = window.ns_view() as id;
+				use core_graphics::geometry::{CGPoint, CGSize};
+				let frame: CGRect = CGRect::new(&CGPoint::new(0., 0.), &CGSize::new(0., 0.));
 				let frame: CGRect = msg_send![ns_view, frame];
 				let _: () = msg_send![webview, initWithFrame:frame configuration:config];
 				// Auto-resize on macOS
@@ -355,6 +361,46 @@ impl InnerWebView {
 				null_mut()
 			};
 
+			// Document title changed handler
+			let document_title_changed_handler = if let Some(document_title_changed_handler) = attributes.document_title_changed_handler {
+				let cls = ClassDecl::new("DocumentTitleChangedDelegate", class!(NSObject));
+				let cls = match cls {
+					Some(mut cls) => {
+						cls.add_ivar::<*mut c_void>("function");
+						cls.add_method(
+							sel!(observeValueForKeyPath:ofObject:change:context:),
+							observe_value_for_key_path as extern "C" fn(&Object, Sel, id, id, id, id)
+						);
+						extern "C" fn observe_value_for_key_path(this: &Object, _sel: Sel, key_path: id, of_object: id, _change: id, _context: id) {
+							let key = NSString(key_path);
+							if key.to_str() == "title" {
+								unsafe {
+									let function = this.get_ivar::<*mut c_void>("function");
+									if !function.is_null() {
+										let function = &mut *(*function as *mut (Box<dyn for<'r> Fn(&'r Window, String)>, Rc<Window>));
+										let title: id = msg_send![of_object, title];
+										(function.0)(&function.1, NSString(title).to_str().to_string());
+									}
+								}
+							}
+						}
+						cls.register()
+					}
+					None => class!(DocumentTitleChangedDelegate)
+				};
+
+				let handler: id = msg_send![cls, new];
+				let document_title_changed_handler = Box::into_raw(Box::new((document_title_changed_handler, window.clone())));
+
+				(*handler).set_ivar("function", document_title_changed_handler as *mut _ as *mut c_void);
+
+				let _: () = msg_send![webview, addObserver:handler forKeyPath:NSString::new("title") options:0x01 context:nil ];
+
+				document_title_changed_handler
+			} else {
+				null_mut()
+			};
+
 			// Navigation handler
 			extern "C" fn navigation_policy(this: &Object, _: Sel, _: id, action: id, handler: id) {
 				unsafe {
@@ -377,10 +423,14 @@ impl InnerWebView {
 							let has_download_handler = &mut *(*has_download_handler as *mut Box<bool>);
 							if **has_download_handler {
 								(*handler).call((2,));
+							} else {
+								(*handler).call((0,));
 							}
+						} else {
+							(*handler).call((0,));
 						}
 					} else {
-						let function = this.get_ivar::<*mut c_void>("function");
+						let function = this.get_ivar::<*mut c_void>("navigation_policy_function");
 						if !function.is_null() {
 							let function = &mut *(*function as *mut Box<dyn for<'s> Fn(String, bool) -> bool>);
 							match (function)(url.to_str().to_string(), is_main_frame) {
@@ -388,7 +438,6 @@ impl InnerWebView {
 								false => (*handler).call((0,))
 							};
 						} else {
-							log::warn!("WebView instance is dropped! This navigation handler shouldn't be called.");
 							(*handler).call((1,));
 						}
 					}
@@ -416,27 +465,48 @@ impl InnerWebView {
 				}
 			}
 
+			extern "C" fn did_commit_navigation(this: &Object, _: Sel, webview: id, _navigation: id) {
+				unsafe {
+					let pending_scripts_ptr: *mut c_void = *this.get_ivar("pending_scripts");
+					let pending_scripts = &(*(pending_scripts_ptr as *mut Arc<Mutex<Option<Vec<String>>>>));
+					let mut pending_scripts_ = pending_scripts.lock().unwrap();
+					if let Some(pending_scripts) = &*pending_scripts_ {
+						for script in pending_scripts {
+							let _: id = msg_send![webview, evaluateJavaScript:NSString::new(script) completionHandler:null::<*const c_void>()];
+						}
+						*pending_scripts_ = None;
+					}
+				}
+			}
+
+			let pending_scripts = Arc::new(Mutex::new(Some(Vec::new())));
+
+			let navigation_delegate_cls = match ClassDecl::new("MillenniumNavigationDelegate", class!(NSObject)) {
+				Some(mut cls) => {
+					cls.add_ivar::<*mut c_void>("pending_scripts");
+					cls.add_ivar::<*mut c_void>("navigation_policy_function");
+					cls.add_ivar::<*mut c_void>("HasDownloadHandler");
+					cls.add_method(
+						sel!(webView:decidePolicyForNavigationAction:decisionHandler:),
+						navigation_policy as extern "C" fn(&Object, Sel, id, id, id)
+					);
+					cls.add_method(
+						sel!(webView:decidePolicyForNavigationResponse:decisionHandler:),
+						navigation_policy_response as extern "C" fn(&Object, Sel, id, id, id)
+					);
+					cls.add_method(sel!(webView:didCommitNavigation:), did_commit_navigation as extern "C" fn(&Object, Sel, id, id));
+					add_download_methods(&mut cls);
+					cls.register()
+				}
+				None => class!(MillenniumNavigationDelegate)
+			};
+
+			let navigation_policy_handler: id = msg_send![navigation_delegate_cls, new];
+
+			(*navigation_policy_handler).set_ivar("pending_scripts", Box::into_raw(Box::new(pending_scripts.clone())) as *mut c_void);
+
 			let (nav_decide_policy_ptr, download_delegate) =
 				if attributes.navigation_handler.is_some() || attributes.new_window_handler.is_some() || attributes.download_started_handler.is_some() {
-					let cls = match ClassDecl::new("UIViewController", class!(NSObject)) {
-						Some(mut cls) => {
-							cls.add_ivar::<*mut c_void>("function");
-							cls.add_ivar::<*mut c_void>("HasDownloadHandler");
-							cls.add_method(
-								sel!(webView:decidePolicyForNavigationAction:decisionHandler:),
-								navigation_policy as extern "C" fn(&Object, Sel, id, id, id)
-							);
-							cls.add_method(
-								sel!(webView:decidePolicyForNavigationResponse:decisionHandler:),
-								navigation_policy_response as extern "C" fn(&Object, Sel, id, id, id)
-							);
-							add_download_methods(&mut cls);
-							cls.register()
-						}
-						None => class!(UIViewController)
-					};
-
-					let handler: id = msg_send![cls, new];
 					let function_ptr = {
 						let navigation_handler = attributes.navigation_handler;
 						let new_window_handler = attributes.new_window_handler;
@@ -448,11 +518,10 @@ impl InnerWebView {
 							}
 						}) as Box<dyn Fn(String, bool) -> bool>))
 					};
-					(*handler).set_ivar("function", function_ptr as *mut _ as *mut c_void);
+					(*navigation_policy_handler).set_ivar("navigation_policy_function", function_ptr as *mut _ as *mut c_void);
 
 					let has_download_handler = Box::into_raw(Box::new(Box::new(attributes.download_started_handler.is_some())));
-					(*handler).set_ivar("HasDownloadHandler", has_download_handler as *mut _ as *mut c_void);
-					let _: () = msg_send![webview, setNavigationDelegate: handler];
+					(*navigation_policy_handler).set_ivar("HasDownloadHandler", has_download_handler as *mut _ as *mut c_void);
 
 					// Download handler
 					let download_delegate = if attributes.download_started_handler.is_some() || attributes.download_completed_handler.is_some() {
@@ -481,9 +550,9 @@ impl InnerWebView {
 							(*download_delegate).set_ivar("completed", download_completed_ptr as *mut _ as *mut c_void);
 						}
 
-						set_download_delegate(handler, download_delegate);
+						set_download_delegate(navigation_policy_handler, download_delegate);
 
-						handler
+						navigation_policy_handler
 					} else {
 						null_mut()
 					};
@@ -491,6 +560,8 @@ impl InnerWebView {
 				} else {
 					(null_mut(), null_mut())
 				};
+
+			let _: () = msg_send![webview, setNavigationDelegate: navigation_policy_handler];
 
 			// File upload panel handler
 			extern "C" fn run_file_upload_panel(_this: &Object, _: Sel, _webview: id, open_panel_params: id, _frame: id, handler: id) {
@@ -567,7 +638,9 @@ impl InnerWebView {
 				#[cfg(target_os = "macos")]
 				ns_window,
 				manager,
+				pending_scripts,
 				ipc_handler_ptr,
+				document_title_changed_handler,
 				nav_decide_policy_ptr,
 				#[cfg(target_os = "macos")]
 				file_drop_ptr,
@@ -599,7 +672,7 @@ impl InnerWebView {
 						w.navigate_to_string(path);
 					}
 				} else {
-					w.navigate(url.as_str());
+					w.navigate_to_url(url.as_str(), attributes.headers);
 				}
 			} else if let Some(html) = attributes.html {
 				w.navigate_to_string(&html);
@@ -608,14 +681,32 @@ impl InnerWebView {
 			// Inject the web view into the window as main content
 			#[cfg(target_os = "macos")]
 			{
-				let ns_view = window.ns_view() as id;
-				let _: () = msg_send![ns_view, addSubview: webview];
+				let parent_view_cls = match ClassDecl::new("MillenniumWebViewParent", class!(NSView)) {
+					Some(mut decl) => {
+						decl.add_method(sel!(keyDown:), key_down as extern "C" fn(&mut Object, Sel, id));
 
-				// Tell the webview we use layers (macOS only)
-				let _: () = msg_send![webview, setWantsLayer: YES];
+						extern "C" fn key_down(_this: &mut Object, _sel: Sel, event: id) {
+							unsafe {
+								let app = cocoa::appkit::NSApp();
+								let menu: id = msg_send![app, mainMenu];
+								let () = msg_send![menu, performKeyEquivalent: event];
+							}
+						}
+
+						decl.register()
+					}
+					None => class!(NSView)
+				};
+
+				let parent_view: id = msg_send![parent_view_cls, alloc];
+				let _: () = msg_send![parent_view, init];
+				parent_view.setAutoresizingMask_(NSViewHeightSizable | NSViewWidthSizable);
+				let _: () = msg_send![parent_view, addSubview: webview];
+
 				// inject the webview into the window
 				let ns_window = window.ns_window() as id;
 				// Tell the webview to receive keyboard events in the window.
+				let _: () = msg_send![ns_window, setContentView: parent_view];
 				let _: () = msg_send![ns_window, makeFirstResponder: webview];
 
 				// make sure the window is always on top when we create a new webview
@@ -651,9 +742,13 @@ impl InnerWebView {
 	}
 
 	pub fn eval(&self, js: &str) -> Result<()> {
-		// Safety: objc runtime calls are unsafe
-		unsafe {
-			let _: id = msg_send![self.webview, evaluateJavaScript:NSString::new(js) completionHandler:null::<*const c_void>()];
+		if let Some(scripts) = &mut *self.pending_scripts.lock().unwrap() {
+			scripts.push(js.into());
+		} else {
+			// Safety: objc runtime calls are unsafe
+			unsafe {
+				let _: id = msg_send![self.webview, evaluateJavaScript:NSString::new(js) completionHandler:null::<*const c_void>()];
+			}
 		}
 		Ok(())
 	}
@@ -675,11 +770,26 @@ impl InnerWebView {
 		}
 	}
 
-	fn navigate(&self, url: &str) {
+	pub fn load_url(&self, url: &str) {
+		self.navigate_to_url(url, None)
+	}
+
+	pub fn load_url_with_headers(&self, url: &str, headers: http::HeaderMap) {
+		self.navigate_to_url(url, Some(headers))
+	}
+
+	fn navigate_to_url(&self, url: &str, headers: Option<http::HeaderMap>) {
 		// Safety: objc runtime calls are unsafe
 		unsafe {
 			let url: id = msg_send![class!(NSURL), URLWithString: NSString::new(url)];
-			let request: id = msg_send![class!(NSURLRequest), requestWithURL: url];
+			let request: id = msg_send![class!(NSMutableURLRequest), requestWithURL: url];
+			if let Some(headers) = headers {
+				for (name, value) in headers.iter() {
+					let key = NSString::new(name.as_str());
+					let value = NSString::new(value.to_str().unwrap_or_default());
+					let _: () = msg_send![request, addValue:value.as_ptr() forHTTPHeaderField:key.as_ptr()];
+				}
+			}
 			let () = msg_send![self.webview, loadRequest: request];
 		}
 	}
@@ -784,28 +894,32 @@ impl Drop for InnerWebView {
 		// We need to drop handler closures here
 		unsafe {
 			if !self.ipc_handler_ptr.is_null() {
-				let _ = Box::from_raw(self.ipc_handler_ptr);
+				drop(Box::from_raw(self.ipc_handler_ptr));
 
 				let ipc = NSString::new(IPC_MESSAGE_HANDLER_NAME);
 				let _: () = msg_send![self.manager, removeScriptMessageHandlerForName: ipc];
 			}
 
+			if !self.document_title_changed_handler.is_null() {
+				drop(Box::from_raw(self.document_title_changed_handler));
+			}
+
 			if !self.nav_decide_policy_ptr.is_null() {
-				let _ = Box::from_raw(self.nav_decide_policy_ptr);
+				drop(Box::from_raw(self.nav_decide_policy_ptr));
 			}
 
 			#[cfg(target_os = "macos")]
 			if !self.file_drop_ptr.is_null() {
-				let _ = Box::from_raw(self.file_drop_ptr);
+				drop(Box::from_raw(self.file_drop_ptr));
 			}
 
 			if !self.download_delegate.is_null() {
-				let _ = self.download_delegate.drop_in_place();
+				drop(self.download_delegate.drop_in_place());
 			}
 
 			for ptr in self.protocol_ptrs.iter() {
 				if !ptr.is_null() {
-					let _ = Box::from_raw(*ptr);
+					drop(Box::from_raw(*ptr));
 				}
 			}
 
@@ -839,5 +953,9 @@ impl NSString {
 			let bytes = slice::from_raw_parts(bytes as *const u8, len);
 			str::from_utf8_unchecked(bytes)
 		}
+	}
+
+	fn as_ptr(&self) -> id {
+		self.0
 	}
 }

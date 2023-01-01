@@ -233,6 +233,16 @@ impl<T> EventLoopWindowTarget<T> {
 		self.p.primary_monitor()
 	}
 
+	/// Returns the monitor that contains the given point.
+	///
+	/// ## Platform-specific
+	///
+	/// - **Android / iOS**: Unsupported.
+	#[inline]
+	pub fn monitor_from_point(&self, x: f64, y: f64) -> Option<MonitorHandle> {
+		self.p.monitor_from_point(x, y).map(|inner| MonitorHandle { inner })
+	}
+
 	/// Change the [`DeviceEvent`] filter mode.
 	///
 	/// Since the [`DeviceEvent`] capture can lead to high CPU usage, Millennium Core will ignore them by default for

@@ -15,14 +15,12 @@
 // limitations under the License.
 
 #[cfg(any(debug_assertions, feature = "devtools"))]
-use std::sync::{
-	atomic::{AtomicBool, Ordering},
-	Arc
-};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
 	collections::hash_map::DefaultHasher,
 	hash::{Hash, Hasher},
-	rc::Rc
+	rc::Rc,
+	sync::{Arc, Mutex}
 };
 
 use gdk::{Cursor, EventMask, WindowEdge};
@@ -31,25 +29,28 @@ use glib::signal::Inhibit;
 use gtk::prelude::*;
 use url::Url;
 use webkit2gtk::{
-	traits::*, NavigationPolicyDecision, PolicyDecisionType, UserContentInjectedFrames, UserScript, UserScriptInjectionTime, WebView, WebViewBuilder
+	traits::*, LoadEvent, NavigationPolicyDecision, PolicyDecisionType, URIRequest, UserContentInjectedFrames, UserScript, UserScriptInjectionTime, WebView,
+	WebViewBuilder
 };
 use webkit2gtk_sys::{webkit_get_major_version, webkit_get_micro_version, webkit_get_minor_version, webkit_policy_decision_ignore, webkit_policy_decision_use};
 
-mod file_drop;
-mod web_context;
-
-use self::web_context::WebContextExt;
-pub use self::web_context::WebContextImpl;
 use crate::{
 	application::{platform::unix::*, window::Window},
 	webview::{web_context::WebContext, Rgba, WebViewAttributes},
 	Error, Result
 };
 
+mod file_drop;
+mod web_context;
+
+use self::web_context::WebContextExt;
+pub use self::web_context::WebContextImpl;
+
 pub(crate) struct InnerWebView {
 	pub webview: Rc<WebView>,
 	#[cfg(any(debug_assertions, feature = "devtools"))]
-	is_inspector_open: Arc<AtomicBool>
+	is_inspector_open: Arc<AtomicBool>,
+	pending_scripts: Arc<Mutex<Option<Vec<String>>>>
 }
 
 impl InnerWebView {
@@ -113,6 +114,12 @@ impl InnerWebView {
 		webview.connect_close(move |_| {
 			close_window.gtk_window().close();
 		});
+
+		// document title changed handler
+		if let Some(document_title_changed_handler) = attributes.document_title_changed_handler {
+			let w = window_rc.clone();
+			webview.connect_title_notify(move |webview| document_title_changed_handler(&w, webview.title().map(|t| t.to_string()).unwrap_or_default()));
+		}
 
 		webview.add_events(EventMask::POINTER_MOTION_MASK | EventMask::BUTTON1_MOTION_MASK | EventMask::BUTTON_PRESS_MASK | EventMask::TOUCH_MASK);
 		webview.connect_motion_notify_event(|webview, event| {
@@ -305,7 +312,8 @@ impl InnerWebView {
 		let w = Self {
 			webview,
 			#[cfg(any(debug_assertions, feature = "devtools"))]
-			is_inspector_open
+			is_inspector_open,
+			pending_scripts: Arc::new(Mutex::new(Some(Vec::new())))
 		};
 
 		// Initialize message handler
@@ -332,11 +340,25 @@ impl InnerWebView {
 
 		// Navigation
 		if let Some(url) = attributes.url {
-			web_context.queue_load_uri(Rc::clone(&w.webview), url);
+			web_context.queue_load_uri(Rc::clone(&w.webview), url, attributes.headers);
 			web_context.flush_queue_loader();
 		} else if let Some(html) = attributes.html {
 			w.webview.load_html(&html, Some("http://localhost"));
 		}
+
+		let pending_scripts = w.pending_scripts.clone();
+		w.webview.connect_load_changed(move |webview, event| {
+			if let LoadEvent::Committed = event {
+				let mut pending_scripts_ = pending_scripts.lock().unwrap();
+				if let Some(pending_scripts) = &*pending_scripts_ {
+					let cancellable: Option<&Cancellable> = None;
+					for script in pending_scripts {
+						webview.run_javascript(script, cancellable, |_| ());
+					}
+					*pending_scripts_ = None;
+				}
+			}
+		});
 
 		Ok(w)
 	}
@@ -351,8 +373,12 @@ impl InnerWebView {
 	}
 
 	pub fn eval(&self, js: &str) -> Result<()> {
-		let cancellable: Option<&Cancellable> = None;
-		self.webview.run_javascript(js, cancellable, |_| ());
+		if let Some(pending_scripts) = &mut *self.pending_scripts.lock().unwrap() {
+			pending_scripts.push(js.into());
+		} else {
+			let cancellable: Option<&Cancellable> = None;
+			self.webview.run_javascript(js, cancellable, |_| ());
+		}
 		Ok(())
 	}
 
@@ -405,6 +431,22 @@ impl InnerWebView {
 		self.webview
 			.set_background_color(&gdk::RGBA::new(background_color.0 as _, background_color.1 as _, background_color.2 as _, background_color.3 as _));
 		Ok(())
+	}
+
+	pub fn load_url(&self, url: &str) {
+		self.webview.load_uri(url)
+	}
+
+	pub fn load_url_with_headers(&self, url: &str, headers: http::HeaderMap) {
+		let req = URIRequest::builder().uri(url).build();
+
+		if let Some(ref mut req_headers) = req.http_headers() {
+			for (header, value) in headers.iter() {
+				req_headers.append(header.to_string().as_str(), value.to_str().unwrap_or_default());
+			}
+		}
+
+		self.webview.load_request(&req);
 	}
 }
 

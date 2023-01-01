@@ -37,57 +37,26 @@ use ndk::{
 };
 use once_cell::sync::{Lazy, OnceCell};
 
+pub static PACKAGE: OnceCell<&str> = OnceCell::new();
+
 #[macro_export]
 macro_rules! android_binding {
 	($domain:ident, $package:ident, $setup:ident, $main:ident) => {
-		paste::paste! {
-			#[no_mangle]
-			unsafe extern "C" fn [< Java_ $domain _ $package _ MillenniumActivity_create >](
-			  env: JNIEnv,
-			  class: JClass,
-			  object: JObject,
-			) {
-				let domain = stringify!($domain).replace("_", "/");
-				let package = format!("{}/{}", domain, stringify!($package).replace("_1","_"));
-				PACKAGE.get_or_init(move || package);
-				create(env, class, object, $setup, $main)
-			}
-
-			android_fn!($domain, $package, MillenniumActivity, start);
-			android_fn!($domain, $package, MillenniumActivity, stop);
-			android_fn!($domain, $package, MillenniumActivity, resume);
-			android_fn!($domain, $package, MillenniumActivity, pause);
-			android_fn!($domain, $package, MillenniumActivity, save);
-			android_fn!($domain, $package, MillenniumActivity, destroy);
-			android_fn!($domain, $package, MillenniumActivity, memory);
-			android_fn!($domain, $package, MillenniumActivity, focus, i32);
+		fn __store_package_name__() {
+			PACKAGE.get_or_init(move || generate_package_name!($domain, $package));
 		}
+
+		android_fn!($domain, $package, MillenniumActivity, create, [JObject], __VOID__, [$setup, $main], __store_package_name__,);
+		android_fn!($domain, $package, MillenniumActivity, start, [JObject]);
+		android_fn!($domain, $package, MillenniumActivity, stop, [JObject]);
+		android_fn!($domain, $package, MillenniumActivity, resume, [JObject]);
+		android_fn!($domain, $package, MillenniumActivity, pause, [JObject]);
+		android_fn!($domain, $package, MillenniumActivity, save, [JObject]);
+		android_fn!($domain, $package, MillenniumActivity, destroy, [JObject]);
+		android_fn!($domain, $package, MillenniumActivity, memory, [JObject]);
+		android_fn!($domain, $package, MillenniumActivity, focus, [i32]);
 	};
 }
-
-#[macro_export]
-macro_rules! android_fn {
-	($domain:ident, $package:ident, $class:ident, $function:ident) => {
-		android_fn!($domain, $package, $class, $function, JObject)
-	};
-	($domain:ident, $package:ident, $class:ident, $function:ident, $arg:ty) => {
-		android_fn!($domain, $package, $class, $function, $arg, ())
-	};
-	($domain:ident, $package:ident, $class:ident, $function:ident, $arg:ty, $ret: ty) => {
-		paste::paste! {
-			#[no_mangle]
-			unsafe extern "C" fn [< Java_ $domain _ $package _ $class _ $function >](
-			  env: JNIEnv,
-			  class: JClass,
-			  object: $arg,
-			) -> $ret {
-				$function(env, class, object)
-			}
-		}
-	};
-}
-
-pub static PACKAGE: OnceCell<String> = OnceCell::new();
 
 /// `ndk-glue` macros register the reading end of an event pipe with the
 /// main [`ThreadLooper`] under this `ident`.

@@ -425,6 +425,11 @@ impl<T: 'static> EventLoopWindowTarget<T> {
 		Some(monitor::MonitorHandle { inner: MonitorHandle });
 	}
 
+	#[inline]
+	pub fn monitor_from_point(&self, _x: f64, _y: f64) -> Option<MonitorHandle> {
+		None
+	}
+
 	pub fn available_monitors(&self) -> VecDeque<MonitorHandle> {
 		let mut v = VecDeque::with_capacity(1);
 		v.push_back(MonitorHandle);
@@ -481,6 +486,11 @@ impl Window {
 		let mut v = VecDeque::with_capacity(1);
 		v.push_back(MonitorHandle);
 		v
+	}
+
+	#[inline]
+	pub fn monitor_from_point(&self, _x: f64, _y: f64) -> Option<monitor::MonitorHandle> {
+		None
 	}
 
 	pub fn current_monitor(&self) -> Option<monitor::MonitorHandle> {

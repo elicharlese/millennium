@@ -14,8 +14,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod file_drop;
-
 use std::{collections::HashSet, fmt::Write, iter::once, mem::MaybeUninit, os::windows::prelude::OsStrExt, path::PathBuf, rc::Rc, sync::mpsc};
 
 use http::Request;
@@ -40,12 +38,15 @@ use windows::{
 	}
 };
 
-use self::file_drop::FileDropController;
+use super::Theme;
 use crate::{
 	application::{platform::windows::WindowExtWindows, window::Window},
 	webview::{Rgba, WebContext, WebViewAttributes},
 	Error, Result
 };
+
+mod file_drop;
+use self::file_drop::FileDropController;
 
 impl From<webview2_com::Error> for Error {
 	fn from(err: webview2_com::Error) -> Self {
@@ -56,6 +57,7 @@ impl From<webview2_com::Error> for Error {
 pub(crate) struct InnerWebView {
 	pub controller: ICoreWebView2Controller,
 	webview: ICoreWebView2,
+	env: ICoreWebView2Environment,
 	// Store FileDropController in here to make sure it gets dropped when
 	// the webview gets dropped, otherwise we'll have a memory leak
 	#[allow(dead_code)]
@@ -74,9 +76,9 @@ impl InnerWebView {
 		let file_drop_handler = attributes.file_drop_handler.take();
 		let file_drop_window = window.clone();
 
-		let env = Self::create_environment(&web_context, pl_attrs)?;
+		let env = Self::create_environment(&web_context, pl_attrs.clone())?;
 		let controller = Self::create_controller(hwnd, &env)?;
-		let webview = Self::init_webview(window, hwnd, attributes, &env, &controller)?;
+		let webview = Self::init_webview(window, hwnd, attributes, &env, &controller, pl_attrs)?;
 
 		if let Some(file_drop_handler) = file_drop_handler {
 			let mut controller = FileDropController::new();
@@ -87,6 +89,7 @@ impl InnerWebView {
 		Ok(Self {
 			controller,
 			webview,
+			env,
 			file_drop_controller
 		})
 	}
@@ -179,9 +182,14 @@ impl InnerWebView {
 		hwnd: HWND,
 		mut attributes: WebViewAttributes,
 		env: &ICoreWebView2Environment,
-		controller: &ICoreWebView2Controller
+		controller: &ICoreWebView2Controller,
+		pl_attrs: super::PlatformSpecificWebViewAttributes
 	) -> webview2_com::Result<ICoreWebView2> {
 		let webview = unsafe { controller.CoreWebView2() }.map_err(webview2_com::Error::WindowsError)?;
+
+		if let Some(theme) = pl_attrs.theme {
+			set_theme(&webview, theme);
+		}
 
 		if !attributes.transparent {
 			if let Some(background_color) = attributes.background_color {
@@ -223,6 +231,13 @@ impl InnerWebView {
 			if attributes.devtools {
 				settings.SetAreDevToolsEnabled(true).map_err(webview2_com::Error::WindowsError)?;
 			}
+			if !pl_attrs.browser_accelerator_keys {
+				if let Ok(settings3) = settings.cast::<ICoreWebView2Settings3>() {
+					settings3
+						.SetAreBrowserAcceleratorKeysEnabled(false)
+						.map_err(webview2_com::Error::WindowsError)?;
+				}
+			}
 
 			let settings5 = settings.cast::<ICoreWebView2Settings5>()?;
 			let _ = settings5.SetIsPinchZoomEnabled(attributes.zoom_hotkeys_enabled);
@@ -230,6 +245,27 @@ impl InnerWebView {
 			let mut rect = RECT::default();
 			win32wm::GetClientRect(hwnd, &mut rect);
 			controller.SetBounds(rect).map_err(webview2_com::Error::WindowsError)?;
+		}
+
+		// document title changed handler
+		if let Some(document_title_changed_handler) = attributes.document_title_changed_handler {
+			let window_c = window.clone();
+			unsafe {
+				webview
+					.add_DocumentTitleChanged(
+						&DocumentTitleChangedEventHandler::create(Box::new(move |webview, _| {
+							let mut title = PWSTR::null();
+							if let Some(webview) = webview {
+								webview.DocumentTitle(&mut title)?;
+								let title = take_pwstr(title);
+								document_title_changed_handler(&window_c, title);
+							}
+							Ok(())
+						})),
+						&mut token
+					)
+					.map_err(webview2_com::Error::WindowsError)?;
+			}
 		}
 
 		// Initialize scripts
@@ -597,10 +633,14 @@ impl InnerWebView {
 					// workaround See https://github.com/MicrosoftEdge/WebView2Feedback/issues/73
 					url_string = url.as_str().replace(&format!("{name}://"), &format!("https://{name}."))
 				}
-				unsafe {
-					webview
-						.Navigate(PCWSTR::from_raw(encode_wide(url_string).as_ptr()))
-						.map_err(webview2_com::Error::WindowsError)?;
+
+				if let Some(headers) = attributes.headers {
+					load_url_with_headers(&webview, env, &url_string, headers);
+				} else {
+					let url = PCWSTR::from_raw(encode_wide(url_string).as_ptr());
+					unsafe {
+						webview.Navigate(url).map_err(webview2_com::Error::WindowsError)?;
+					}
 				}
 			}
 		} else if let Some(html) = attributes.html {
@@ -719,10 +759,52 @@ impl InnerWebView {
 	pub fn set_background_color(&self, background_color: Rgba) -> Result<()> {
 		set_background_color(&self.controller, background_color).map_err(Into::into)
 	}
+
+	pub fn load_url(&self, url: &str) {
+		let url = encode_wide(url);
+		let _ = unsafe { self.webview.Navigate(PCWSTR::from_raw(url.as_ptr())) };
+	}
+
+	pub fn load_url_with_headers(&self, url: &str, headers: http::HeaderMap) {
+		load_url_with_headers(&self.webview, &self.env, url, headers);
+	}
+
+	pub fn set_theme(&self, theme: Theme) {
+		set_theme(&self.webview, theme);
+	}
 }
 
 fn encode_wide(string: impl AsRef<std::ffi::OsStr>) -> Vec<u16> {
 	string.as_ref().encode_wide().chain(once(0)).collect()
+}
+
+fn load_url_with_headers(webview: &ICoreWebView2, env: &ICoreWebView2Environment, url: &str, headers: http::HeaderMap) {
+	let url = encode_wide(url);
+
+	let headers_map = {
+		let mut headers_map = String::new();
+		for (name, value) in headers.iter() {
+			let header_key = name.to_string();
+			if let Ok(value) = value.to_str() {
+				let _ = writeln!(headers_map, "{header_key}: {value}");
+			}
+		}
+		encode_wide(headers_map)
+	};
+
+	unsafe {
+		let env = env.cast::<ICoreWebView2Environment9>().unwrap();
+
+		if let Ok(request) = env.CreateWebResourceRequest(
+			PCWSTR::from_raw(url.as_ptr()),
+			PCWSTR::from_raw(encode_wide("GET").as_ptr()),
+			None,
+			PCWSTR::from_raw(headers_map.as_ptr())
+		) {
+			let webview: ICoreWebView2_10 = webview.cast().unwrap();
+			let _ = webview.NavigateWithWebResourceRequest(&request);
+		}
+	};
 }
 
 pub fn set_background_color(controller: &ICoreWebView2Controller, background_color: Rgba) -> webview2_com::Result<()> {
@@ -741,6 +823,21 @@ pub fn set_background_color(controller: &ICoreWebView2Controller, background_col
 				A: color.3
 			})
 			.map_err(webview2_com::Error::WindowsError)
+	}
+}
+
+fn set_theme(webview: &ICoreWebView2, theme: Theme) {
+	unsafe {
+		let _ = webview
+			.cast::<ICoreWebView2_13>()
+			.unwrap()
+			.Profile()
+			.unwrap()
+			.SetPreferredColorScheme(match theme {
+				Theme::Dark => COREWEBVIEW2_PREFERRED_COLOR_SCHEME_DARK,
+				Theme::Light => COREWEBVIEW2_PREFERRED_COLOR_SCHEME_LIGHT,
+				Theme::Auto => COREWEBVIEW2_PREFERRED_COLOR_SCHEME_AUTO
+			});
 	}
 }
 

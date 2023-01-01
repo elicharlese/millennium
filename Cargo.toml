@@ -5,6 +5,7 @@ members = [
 	"src/millennium-build",
 	"src/millennium-codegen",
 	"src/millennium-core",
+	"src/millennium-core-macros",
 	"src/millennium-macros",
 	"src/millennium-plugin-vibrancy",
 	"src/millennium-runtime",

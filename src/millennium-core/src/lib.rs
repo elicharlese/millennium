@@ -189,6 +189,9 @@ extern crate bitflags;
 #[macro_use]
 extern crate objc;
 
+#[cfg(target_os = "android")]
+pub use millennium_core_macros::{android_fn, generate_package_name};
+
 /// Identifier of a system tray.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct TrayId(pub u16);

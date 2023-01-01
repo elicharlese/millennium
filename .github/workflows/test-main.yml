@@ -48,7 +48,7 @@ jobs:
               key: api-all
             }
           - {
-              args: --features compression,millennium_webview,isolation,custom-protocol,api-all,cli,updater,system-tray,http-multipart,
+              args: --features compression,millennium_webview,linux-protocol-headers,isolation,custom-protocol,api-all,cli,updater,system-tray,http-multipart,
               key: all
             }
     steps:

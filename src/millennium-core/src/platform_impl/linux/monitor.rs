@@ -14,6 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use gdk::Display;
+
 use crate::{
 	dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize},
 	monitor::{MonitorHandle as RootMonitorHandle, VideoMode as RootVideoMode}
@@ -91,5 +93,16 @@ impl VideoMode {
 	#[inline]
 	pub fn monitor(&self) -> RootMonitorHandle {
 		panic!("VideoMode is unsupported on Linux.")
+	}
+}
+
+pub fn from_point(display: &Display, x: f64, y: f64) -> Option<MonitorHandle> {
+	if let Some(monitor) = display.monitor_at_point(x as i32, y as i32) {
+		(0..display.n_monitors())
+			.map(|i| (i, display.monitor(i).unwrap()))
+			.find(|cur| cur.1.geometry() == monitor.geometry())
+			.map(|x| MonitorHandle::new(display, x.0))
+	} else {
+		None
 	}
 }

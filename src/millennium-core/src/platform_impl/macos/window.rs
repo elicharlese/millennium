@@ -1201,6 +1201,11 @@ impl UnownedWindow {
 	}
 
 	#[inline]
+	pub fn monitor_from_point(&self, x: f64, y: f64) -> Option<RootMonitorHandle> {
+		monitor::from_point(x, y).map(|inner| RootMonitorHandle { inner })
+	}
+
+	#[inline]
 	pub fn available_monitors(&self) -> VecDeque<MonitorHandle> {
 		monitor::available_monitors()
 	}

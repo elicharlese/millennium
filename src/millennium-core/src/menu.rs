@@ -67,9 +67,12 @@ pub struct MenuItemAttributes<'a> {
 impl<'a> MenuItemAttributes<'a> {
 	/// Creates a new custom menu item.
 	///
+	/// `title` can optionally contain an `&` before a character to assign this character as the mnemonic
+	/// for this menu item. To display an `&` symbol without assigning a mnemenonic, use `&&`.
+	///
 	/// ## Platform-specific
 	///
-	/// - **Linux:** `selected` render a regular item
+	/// - **macOS**: mnemonics are not supported, but a single `&` will be removed for consistency with other platforms.
 	pub fn new(title: &'a str) -> Self {
 		Self {
 			id: MenuId::new(title),
@@ -102,7 +105,9 @@ impl<'a> MenuItemAttributes<'a> {
 		self
 	}
 
-	/// Assign default checkbox style.
+	/// Assign default checkbox style. Default is `false`.
+	///
+	/// If `selected` is `false`, this renders a regular menu item.
 	pub fn with_selected(mut self, selected: bool) -> Self {
 		self.selected = selected;
 		self
@@ -128,6 +133,13 @@ impl ContextMenu {
 	}
 
 	/// Add a submenu.
+	///
+	/// `title` can optionally contain an `&` before a character to assign this character as the mnemonic
+	/// for this menu item. To display an `&` symbol without assigning a mnemenonic, use `&&`.
+	///
+	/// ## Platform-specific
+	///
+	/// - **macOS**: mnemonics are not supported, but a single `&` will be removed for consistency with other platforms.
 	pub fn add_submenu(&mut self, title: &str, enabled: bool, submenu: ContextMenu) {
 		self.0.menu_platform.add_submenu(title, enabled, submenu.0.menu_platform);
 	}
@@ -162,6 +174,13 @@ impl MenuBar {
 	}
 
 	/// Add a submenu.
+	///
+	/// `title` can optionally contain an `&` before a character to assign this character as the mnemonic
+	/// for this menu item. To display an `&` symbol without assigning a mnemenonic, use `&&`.
+	///
+	/// ## Platform-specific
+	///
+	/// - **macOS**: mnemonics are not supported, but a single `&` will be removed for consistency with other platforms.
 	pub fn add_submenu(&mut self, title: &str, enabled: bool, submenu: MenuBar) {
 		self.0.menu_platform.add_submenu(title, enabled, submenu.0.menu_platform);
 	}

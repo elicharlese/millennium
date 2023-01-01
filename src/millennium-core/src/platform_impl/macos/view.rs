@@ -452,15 +452,6 @@ extern "C" fn insert_text(this: &Object, _sel: Sel, string: id, _replacement_ran
 
 extern "C" fn do_command_by_selector(this: &Object, _sel: Sel, command: Sel) {
 	trace!("Triggered `doCommandBySelector`");
-
-	unsafe {
-		let responder: id = msg_send![this, nextResponder];
-		if !responder.is_null() {
-			let () = msg_send![responder, doCommandBySelector: command];
-		}
-	}
-
-	trace!("Completed `doCommandBySelector`");
 }
 
 // As defined in: https://www.unicode.org/Public/MAPPINGS/VENDORS/APPLE/CORPCHAR.TXT
@@ -549,11 +540,6 @@ extern "C" fn key_down(this: &mut Object, _sel: Sel, event: id) {
 			}
 		};
 		AppState::queue_event(EventWrapper::StaticEvent(window_event));
-
-		let responder: id = msg_send![this, nextResponder];
-		if !responder.is_null() {
-			let () = msg_send![responder, keyDown: event];
-		}
 	}
 	trace!("Completed `keyDown`");
 }

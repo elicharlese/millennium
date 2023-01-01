@@ -2155,6 +2155,7 @@ impl Allowlist for AllowlistConfig {
 			features.extend(self.protocol.to_features());
 			features.extend(self.process.to_features());
 			features.extend(self.clipboard.to_features());
+			features.extend(self.app.to_features());
 			features
 		}
 	}

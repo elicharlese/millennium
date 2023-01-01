@@ -21,13 +21,15 @@
 use std::ffi::c_void;
 
 use cocoa::{
+	appkit::CGPoint,
 	base::id,
 	foundation::{NSInteger, NSUInteger}
 };
 use core_foundation::{array::CFArrayRef, data::CFDataRef, dictionary::CFDictionaryRef, string::CFStringRef, uuid::CFUUIDRef};
 use core_graphics::{
 	base::CGError,
-	display::{CGDirectDisplayID, CGDisplayConfigRef}
+	display::{boolean_t, CGDirectDisplayID, CGDisplayConfigRef},
+	geometry::CGRect
 };
 pub const NSNotFound: NSInteger = NSInteger::max_value();
 
@@ -216,6 +218,7 @@ extern "C" {
 		blueBlend: f32,
 		synchronous: Boolean
 	) -> CGError;
+	pub fn CGRectContainsPoint(rect: CGRect, point: CGPoint) -> boolean_t;
 	pub fn CGReleaseDisplayFadeReservation(token: CGDisplayFadeReservationToken) -> CGError;
 	pub fn CGShieldingWindowLevel() -> CGWindowLevel;
 	pub fn CGDisplaySetDisplayMode(display: CGDirectDisplayID, mode: CGDisplayModeRef, options: CFDictionaryRef) -> CGError;

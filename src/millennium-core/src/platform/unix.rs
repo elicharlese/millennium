@@ -73,6 +73,11 @@ pub trait WindowBuilderExtUnix {
 	/// Default is `false`, but is always `true` if
 	/// [`WindowAttributes::transparent`](crate::window::WindowAttributes::transparent) is `true`.
 	fn with_app_paintable(self, app_paintable: bool) -> WindowBuilder;
+	/// Whether to enable processing the cursor moved event. The cursor move event is suited for native GUI frameworks
+	/// and games, but it can occasionally block GTK's own pipeline. Turning this off can help GTK look smoother.
+	///
+	/// Default is `true`.
+	fn with_cursor_moved_event(self, cursor_moved: bool) -> WindowBuilder;
 }
 
 impl WindowBuilderExtUnix for WindowBuilder {
@@ -103,6 +108,11 @@ impl WindowBuilderExtUnix for WindowBuilder {
 
 	fn with_app_paintable(mut self, app_paintable: bool) -> WindowBuilder {
 		self.platform_specific.app_paintable = app_paintable;
+		self
+	}
+
+	fn with_cursor_moved_event(mut self, cursor_moved: bool) -> WindowBuilder {
+		self.platform_specific.cursor_moved = cursor_moved;
 		self
 	}
 }

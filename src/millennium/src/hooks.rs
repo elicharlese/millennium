@@ -200,7 +200,13 @@ impl<R: Runtime> InvokeResolver<R> {
 	where
 		F: Future<Output = Result<JsonValue, InvokeError>> + Send + 'static
 	{
-		crate::async_runtime::spawn(async move { Self::return_result(self.window, task.await.into(), self.callback, self.error) });
+		crate::async_runtime::spawn(async move {
+			let response = match task.await {
+				Ok(ok) => InvokeResponse::Ok(ok),
+				Err(err) => InvokeResponse::Err(err)
+			};
+			Self::return_result(self.window, response, self.callback, self.error)
+		});
 	}
 
 	/// Reply to the invoke promise with a serializable value.

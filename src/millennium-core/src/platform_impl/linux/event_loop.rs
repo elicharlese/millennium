@@ -36,7 +36,7 @@ use raw_window_handle::{RawDisplayHandle, XlibDisplayHandle};
 
 use super::{
 	keyboard,
-	monitor::MonitorHandle,
+	monitor::{self, MonitorHandle},
 	window::{WindowId, WindowRequest}
 };
 use crate::{
@@ -67,6 +67,11 @@ pub struct EventLoopWindowTarget<T> {
 }
 
 impl<T> EventLoopWindowTarget<T> {
+	#[inline]
+	pub fn monitor_from_point(&self, x: f64, y: f64) -> Option<MonitorHandle> {
+		monitor::from_point(&self.display, x, y)
+	}
+
 	#[inline]
 	pub fn available_monitors(&self) -> VecDeque<MonitorHandle> {
 		let mut handles = VecDeque::new();
@@ -312,7 +317,7 @@ impl<T: 'static> EventLoop<T> {
 							window.input_shape_combine_region(None)
 						};
 					}
-					WindowRequest::WireUpEvents { transparent } => {
+					WindowRequest::WireUpEvents { transparent, cursor_moved } => {
 						window.add_events(
 							EventMask::POINTER_MOTION_MASK
 								| EventMask::BUTTON1_MOTION_MASK | EventMask::BUTTON_PRESS_MASK
@@ -321,28 +326,22 @@ impl<T: 'static> EventLoop<T> {
 						);
 
 						// Allow resizing unmaximized borderless window
-						window.connect_motion_notify_event(|window, event| {
-							if !window.is_decorated() && window.is_resizable() && !window.is_maximized() {
-								if let Some(window) = window.window() {
-									let (cx, cy) = event.root();
-									let edge = hit_test(&window, cx, cy);
-									window.set_cursor(
-										Cursor::from_name(
-											&window.display(),
-											match edge {
-												WindowEdge::North => "n-resize",
-												WindowEdge::South => "s-resize",
-												WindowEdge::East => "e-resize",
-												WindowEdge::West => "w-resize",
-												WindowEdge::NorthWest => "nw-resize",
-												WindowEdge::NorthEast => "ne-resize",
-												WindowEdge::SouthEast => "se-resize",
-												WindowEdge::SouthWest => "sw-resize",
-												_ => "default"
-											}
-										)
-										.as_ref()
-									);
+						window.connect_motion_notify_event(|window, motion| {
+							if cursor_moved {
+								if let Some(cursor) = motion.device() {
+									let scale_factor = window.scale_factor();
+									let (_, x, y) = cursor.window_at_position();
+									if let Err(e) = tx_clone.send(Event::WindowEvent {
+										window_id: RootWindowId(id),
+										event: WindowEvent::CursorMoved {
+											position: LogicalPosition::new(x, y).to_physical(scale_factor as f64),
+											device_id: DEVICE_ID,
+											// this field is depracted so it is fine to pass empty state
+											modifiers: ModifiersState::empty()
+										}
+									}) {
+										log::warn!("Failed to send cursor moved event to event channel: {}", e);
+									}
 								}
 							}
 							Inhibit(false)
