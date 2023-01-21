@@ -17,6 +17,7 @@
 use std::{cell::Cell, path::PathBuf, rc::Rc};
 
 use gtk::prelude::*;
+use millennium_core::dpi::LogicalPosition;
 use webkit2gtk::WebView;
 
 use crate::{application::window::Window, webview::FileDropEvent};
@@ -26,7 +27,7 @@ pub(crate) fn connect_drag_event(webview: Rc<WebView>, window: Rc<Window>, handl
 
 	let listener_ref = listener.clone();
 	let w = window.clone();
-	webview.connect_drag_data_received(move |_, _, _, _, data, info, _| {
+	webview.connect_drag_data_received(move |_, _, x, y, data, info, _| {
 		if info == 2 {
 			let uris = data
 				.uris()
@@ -38,7 +39,11 @@ pub(crate) fn connect_drag_event(webview: Rc<WebView>, window: Rc<Window>, handl
 				.collect::<Vec<PathBuf>>();
 
 			listener_ref.1.set(Some(uris.clone()));
-			listener_ref.0(&w, FileDropEvent::Hovered(uris));
+
+			let scale_factor = w.scale_factor();
+			let position = LogicalPosition::new(x, y).to_physical(scale_factor);
+
+			listener_ref.0(&w, FileDropEvent::Hovered { paths: uris, position });
 		} else {
 			// drag_data_received is called twice, so we can ignore this signal
 		}
@@ -46,9 +51,16 @@ pub(crate) fn connect_drag_event(webview: Rc<WebView>, window: Rc<Window>, handl
 
 	let listener_ref = listener.clone();
 	let w = window.clone();
-	webview.connect_drag_drop(move |_, _, _, _, _| {
+	webview.connect_drag_drop(move |_, _, x, y, _| {
 		let uris = listener_ref.1.take();
-		if let Some(uris) = uris { listener_ref.0(&w, FileDropEvent::Dropped(uris)) } else { false }
+		if let Some(uris) = uris {
+			let scale_factor = w.scale_factor();
+			let position = LogicalPosition::new(x, y).to_physical(scale_factor);
+
+			listener_ref.0(&w, FileDropEvent::Dropped { paths: uris, position })
+		} else {
+			false
+		}
 	});
 
 	let listener_ref = listener.clone();

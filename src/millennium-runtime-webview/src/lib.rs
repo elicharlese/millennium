@@ -918,8 +918,8 @@ fn decode_path(path: PathBuf) -> PathBuf {
 impl From<FileDropEventWrapper> for FileDropEvent {
 	fn from(event: FileDropEventWrapper) -> Self {
 		match event.0 {
-			MillenniumFileDropEvent::Hovered(paths) => FileDropEvent::Hovered(paths.into_iter().map(decode_path).collect()),
-			MillenniumFileDropEvent::Dropped(paths) => FileDropEvent::Dropped(paths.into_iter().map(decode_path).collect()),
+			MillenniumFileDropEvent::Hovered { paths, .. } => FileDropEvent::Hovered(paths.into_iter().map(decode_path).collect()),
+			MillenniumFileDropEvent::Dropped { paths, .. } => FileDropEvent::Dropped(paths.into_iter().map(decode_path).collect()),
 			// default to cancelled
 			// FIXME(maybe): Add `FileDropEvent::Unknown` event?
 			_ => FileDropEvent::Cancelled

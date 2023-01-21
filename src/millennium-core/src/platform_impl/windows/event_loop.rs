@@ -58,6 +58,7 @@ use windows::{
 use crate::{
 	accelerator::AcceleratorId,
 	dpi::{PhysicalPosition, PhysicalSize},
+	error::ExternalError,
 	event::{DeviceEvent, Event, Force, RawKeyEvent, Touch, TouchPhase, WindowEvent},
 	event_loop::{ControlFlow, DeviceEventFilter, EventLoopClosed, EventLoopWindowTarget as RootELW},
 	keyboard::{KeyCode, ModifiersState},
@@ -307,6 +308,11 @@ impl<T> EventLoopWindowTarget<T> {
 
 	pub fn set_device_event_filter(&self, filter: DeviceEventFilter) {
 		raw_input::register_all_mice_and_keyboards_for_raw_input(self.thread_msg_target, filter);
+	}
+
+	#[inline]
+	pub fn cursor_position(&self) -> Result<PhysicalPosition<f64>, ExternalError> {
+		util::cursor_position()
 	}
 }
 
@@ -1075,16 +1081,9 @@ unsafe fn public_window_callback_inner<T: 'static>(
 				let mut w = subclass_input.window_state.lock();
 				// See WindowFlags::MARKER_RETAIN_STATE_ON_SIZE docs for info on why this `if`
 				// check exists.
-				let window_flags = w.window_flags();
-				if !window_flags.contains(WindowFlags::MARKER_RETAIN_STATE_ON_SIZE) {
+				if !w.window_flags().contains(WindowFlags::MARKER_RETAIN_STATE_ON_SIZE) {
 					let maximized = wparam.0 == win32wm::SIZE_MAXIMIZED as _;
-					let minimized = wparam.0 == win32wm::SIZE_MINIMIZED as _;
-					let was_maximized = window_flags.contains(WindowFlags::MAXIMIZED);
-
-					w.set_window_flags_in_place(|f| {
-						f.set(WindowFlags::MAXIMIZED, maximized);
-						f.set(WindowFlags::MARKER_WAS_MAXIMIZED, minimized & was_maximized)
-					});
+					w.set_window_flags_in_place(|f| f.set(WindowFlags::MAXIMIZED, maximized));
 				}
 			}
 

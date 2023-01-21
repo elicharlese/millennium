@@ -31,7 +31,11 @@ use core_graphics::display::CGDisplay;
 use objc::runtime::{Class, Object, Sel, BOOL, YES};
 
 pub use self::{r#async::*, cursor::*};
-use crate::{dpi::LogicalPosition, platform_impl::platform::ffi};
+use crate::{
+	dpi::{LogicalPosition, PhysicalPosition},
+	error::ExternalError,
+	platform_impl::platform::ffi
+};
 
 // Replace with `!` once stable
 #[derive(Debug)]
@@ -123,6 +127,13 @@ pub fn bottom_left_to_top_left_for_cursor(point: NSPoint) -> f64 {
 /// macOS: bottom-left is (0, 0) and y increasing upwards
 pub fn window_position(position: LogicalPosition<f64>) -> NSPoint {
 	NSPoint::new(position.x, CGDisplay::main().pixels_high() as f64 - position.y)
+}
+
+pub fn cursor_position() -> Result<PhysicalPosition<f64>, ExternalError> {
+	unsafe {
+		let pt: NSPoint = msg_send![class!(NSEvent), mouseLocation];
+		Ok((pt.x, pt.y).into())
+	}
 }
 
 pub unsafe fn ns_string_id_ref(s: &str) -> IdRef {

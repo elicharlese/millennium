@@ -33,7 +33,7 @@ use super::{
 	event_loop::EventLoopWindowTarget,
 	menu,
 	monitor::{self, MonitorHandle},
-	Parent, PlatformSpecificWindowBuilderAttributes
+	util, Parent, PlatformSpecificWindowBuilderAttributes
 };
 use crate::{
 	dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize, Position, Size},
@@ -74,6 +74,8 @@ pub struct Window {
 	maximized: Rc<AtomicBool>,
 	minimized: Rc<AtomicBool>,
 	fullscreen: RefCell<Option<Fullscreen>>,
+	min_inner_size: RefCell<Option<Size>>,
+	max_inner_size: RefCell<Option<Size>>,
 	/// Draw event sender
 	draw_tx: crossbeam_channel::Sender<WindowId>
 }
@@ -115,15 +117,14 @@ impl Window {
 		window.set_deletable(attributes.closable);
 
 		// Set Min/Max Size
-		let geom_mask = (if attributes.min_inner_size.is_some() {
-			gdk::WindowHints::MIN_SIZE
-		} else {
-			gdk::WindowHints::empty()
-		}) | (if attributes.max_inner_size.is_some() {
-			gdk::WindowHints::MAX_SIZE
-		} else {
-			gdk::WindowHints::empty()
-		});
+		let geom_mask = attributes
+			.min_inner_size
+			.map(|_| gdk::WindowHints::MIN_SIZE)
+			.unwrap_or(gdk::WindowHints::empty())
+			| attributes
+				.max_inner_size
+				.map(|_| gdk::WindowHints::MAX_SIZE)
+				.unwrap_or(gdk::WindowHints::empty());
 		let (min_width, min_height) = attributes
 			.min_inner_size
 			.map(|size| size.to_logical::<f64>(win_scale_factor as f64).into())
@@ -211,6 +212,10 @@ impl Window {
 
 		if attributes.always_on_top {
 			window.set_keep_above(attributes.always_on_top);
+		}
+
+		if attributes.visible_on_all_workspaces {
+			window.stick();
 		}
 
 		if let Some(icon) = attributes.window_icon {
@@ -325,7 +330,9 @@ impl Window {
 			size,
 			maximized,
 			minimized,
-			fullscreen: RefCell::new(attributes.fullscreen)
+			fullscreen: RefCell::new(attributes.fullscreen),
+			min_inner_size: RefCell::new(attributes.min_inner_size),
+			max_inner_size: RefCell::new(attributes.max_inner_size)
 		};
 
 		win.set_skip_taskbar(pl_attribs.skip_taskbar);
@@ -388,27 +395,27 @@ impl Window {
 	}
 
 	pub fn set_min_inner_size<S: Into<Size>>(&self, min_size: Option<S>) {
-		if let Some(size) = min_size {
-			let (min_width, min_height) = size.into().to_logical::<i32>(self.scale_factor()).into();
+		*self.min_inner_size.borrow_mut() = min_size.map(Into::into);
 
-			if let Err(e) = self
-				.window_requests_tx
-				.send((self.window_id, WindowRequest::MinSize((min_width, min_height))))
-			{
-				log::warn!("Fail to send min size request: {}", e);
-			}
+		let scale_factor = self.scale_factor();
+
+		let min = self.min_inner_size.borrow().map(|s| s.to_logical::<i32>(scale_factor));
+		let max = self.max_inner_size.borrow().map(|s| s.to_logical::<i32>(scale_factor));
+
+		if let Err(e) = self.window_requests_tx.send((self.window_id, WindowRequest::SizeConstraint { min, max })) {
+			log::warn!("Fail to send min size request: {}", e);
 		}
 	}
 	pub fn set_max_inner_size<S: Into<Size>>(&self, max_size: Option<S>) {
-		if let Some(size) = max_size {
-			let (max_width, max_height) = size.into().to_logical::<i32>(self.scale_factor()).into();
+		*self.max_inner_size.borrow_mut() = max_size.map(Into::into);
 
-			if let Err(e) = self
-				.window_requests_tx
-				.send((self.window_id, WindowRequest::MaxSize((max_width, max_height))))
-			{
-				log::warn!("Fail to send max size request: {}", e);
-			}
+		let scale_factor = self.scale_factor();
+
+		let min = self.min_inner_size.borrow().map(|s| s.to_logical::<i32>(scale_factor));
+		let max = self.max_inner_size.borrow().map(|s| s.to_logical::<i32>(scale_factor));
+
+		if let Err(e) = self.window_requests_tx.send((self.window_id, WindowRequest::SizeConstraint { min, max })) {
+			log::warn!("Fail to send max size request: {}", e);
 		}
 	}
 
@@ -577,6 +584,15 @@ impl Window {
 		self.menu_bar.get_visible()
 	}
 
+	pub fn set_visible_on_all_workspaces(&self, visible: bool) {
+		if let Err(e) = self
+			.window_requests_tx
+			.send((self.window_id, WindowRequest::SetVisibleOnAllWorkspaces(visible)))
+		{
+			log::warn!("Fail to send visible on all workspaces request: {}", e);
+		}
+	}
+
 	pub fn set_cursor_icon(&self, cursor: CursorIcon) {
 		if let Err(e) = self.window_requests_tx.send((self.window_id, WindowRequest::CursorIcon(Some(cursor)))) {
 			log::warn!("Fail to send cursor icon request: {}", e);
@@ -614,6 +630,11 @@ impl Window {
 		if let Err(e) = self.window_requests_tx.send((self.window_id, WindowRequest::CursorIcon(cursor))) {
 			log::warn!("Fail to send cursor visibility request: {}", e);
 		}
+	}
+
+	#[inline]
+	pub fn cursor_position(&self) -> Result<PhysicalPosition<f64>, ExternalError> {
+		util::cursor_position()
 	}
 
 	pub fn current_monitor(&self) -> Option<RootMonitorHandle> {
@@ -714,8 +735,7 @@ pub enum WindowRequest {
 	Title(String),
 	Position((i32, i32)),
 	Size((i32, i32)),
-	MinSize((i32, i32)),
-	MaxSize((i32, i32)),
+	SizeConstraint { min: Option<LogicalSize<i32>>, max: Option<LogicalSize<i32>> },
 	Visible(bool),
 	Focus,
 	Resizable(bool),
@@ -736,7 +756,8 @@ pub enum WindowRequest {
 	WireUpEvents { transparent: bool, cursor_moved: bool },
 	Menu((Option<MenuItem>, Option<MenuId>)),
 	SetMenu((Option<menu::Menu>, AccelGroup, gtk::MenuBar)),
-	GlobalHotKey(u16)
+	GlobalHotKey(u16),
+	SetVisibleOnAllWorkspaces(bool)
 }
 
 pub fn hit_test(window: &gdk::Window, cx: f64, cy: f64) -> WindowEdge {

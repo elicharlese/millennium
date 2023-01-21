@@ -33,7 +33,7 @@ use std::{error, fmt, ops::Deref};
 use instant::Instant;
 use raw_window_handle::{HasRawDisplayHandle, RawDisplayHandle};
 
-use crate::{event::Event, monitor::MonitorHandle, platform_impl};
+use crate::{dpi::PhysicalPosition, error::ExternalError, event::Event, monitor::MonitorHandle, platform_impl};
 
 /// Provides a way to retrieve events from the system and from the windows that
 /// were registered to the events loop.
@@ -256,6 +256,16 @@ impl<T> EventLoopWindowTarget<T> {
 	pub fn set_device_event_filter(&self, filter: DeviceEventFilter) {
 		#[cfg(target_os = "windows")]
 		self.p.set_device_event_filter(filter);
+	}
+
+	/// Returns the current cursor position
+	///
+	/// ## Platform-specific
+	///
+	/// - **iOS / Android**: Unsupported.
+	#[inline]
+	pub fn cursor_position(&self) -> Result<PhysicalPosition<f64>, ExternalError> {
+		self.p.cursor_position()
 	}
 }
 

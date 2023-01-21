@@ -36,7 +36,8 @@ use crate::platform_impl::platform::{
 	monitor, view, MonitorHandle
 };
 use crate::{
-	dpi::LogicalSize,
+	dpi::{LogicalSize, PhysicalPosition},
+	error::ExternalError,
 	event::Event,
 	event_loop::{ControlFlow, EventLoopClosed, EventLoopWindowTarget as RootEventLoopWindowTarget},
 	monitor::MonitorHandle as RootMonitorHandle,
@@ -85,6 +86,10 @@ impl<T: 'static> EventLoopWindowTarget<T> {
 
 	pub fn raw_display_handle(&self) -> RawDisplayHandle {
 		RawDisplayHandle::UiKit(UiKitDisplayHandle::empty())
+	}
+
+	pub fn cursor_position(&self) -> Result<PhysicalPosition<f64>, ExternalError> {
+		Ok((0, 0).into())
 	}
 }
 
@@ -159,6 +164,7 @@ pub struct EventLoopProxy<T> {
 }
 
 unsafe impl<T: Send> Send for EventLoopProxy<T> {}
+unsafe impl<T: Send> Sync for EventLoopProxy<T> {}
 
 impl<T> Clone for EventLoopProxy<T> {
 	fn clone(&self) -> EventLoopProxy<T> {

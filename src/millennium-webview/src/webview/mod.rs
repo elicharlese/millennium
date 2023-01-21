@@ -28,7 +28,10 @@ use windows::{Win32::Foundation::HWND, Win32::UI::WindowsAndMessaging::DestroyWi
 #[cfg(target_os = "windows")]
 use crate::application::platform::windows::WindowExtWindows;
 use crate::{
-	application::{dpi::PhysicalSize, window::Window},
+	application::{
+		dpi::{PhysicalPosition, PhysicalSize},
+		window::Window
+	},
 	Result
 };
 
@@ -373,7 +376,9 @@ impl<'a> WebViewBuilder<'a> {
 	///   into the HTML `head` on custom protocol URLs with the `text/html` content type. **The CSP is modified to allow
 	///   these scripts via a SHA-256 nonce.**
 	pub fn with_initialization_script(mut self, js: &str) -> Self {
-		self.webview.initialization_scripts.push(js.to_string());
+		if !js.is_empty() {
+			self.webview.initialization_scripts.push(js.to_string());
+		}
 		self
 	}
 
@@ -817,9 +822,17 @@ impl WebView {
 pub enum FileDropEvent {
 	/// The file(s) have been dragged onto the window, but have not been dropped
 	/// yet.
-	Hovered(Vec<PathBuf>),
+	Hovered {
+		paths: Vec<PathBuf>,
+		/// The position of the mouse cursor.
+		position: PhysicalPosition<f64>
+	},
 	/// The file(s) have been dropped onto the window.
-	Dropped(Vec<PathBuf>),
+	Dropped {
+		paths: Vec<PathBuf>,
+		/// The position of the mouse cursor.
+		position: PhysicalPosition<f64>
+	},
 	/// The file drop was aborted.
 	Cancelled
 }

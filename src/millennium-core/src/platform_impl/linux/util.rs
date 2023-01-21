@@ -14,33 +14,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod app_paths;
-pub mod config;
-pub mod template;
-pub mod updater_signature;
-pub mod web_dev_server;
+use gdk::Display;
 
-use std::{
-	collections::HashMap,
-	path::{Path, PathBuf}
-};
+use crate::{dpi::PhysicalPosition, error::ExternalError};
 
-pub fn command_env(debug: bool) -> HashMap<&'static str, String> {
-	let mut map = HashMap::new();
-	map.insert("MILLENNIUM_PLATFORM_VERSION", os_info::get().version().to_string());
-
-	if debug {
-		map.insert("MILLENNIUM_DEBUG", "true".into());
-	}
-
-	map
-}
-
-pub fn resolve_millennium_path<P: AsRef<Path>>(path: P, crate_name: &str) -> PathBuf {
-	let path = path.as_ref();
-	if path.is_absolute() {
-		path.join(crate_name)
-	} else {
-		PathBuf::from("..").join(path).join(crate_name)
-	}
+#[inline]
+pub fn cursor_position() -> Result<PhysicalPosition<f64>, ExternalError> {
+	Display::default()
+		.and_then(|d| d.default_seat())
+		.and_then(|s| s.pointer())
+		.map(|p| p.position_double())
+		.map(|(_, x, y)| (x, y).into())
+		.ok_or(ExternalError::Os(os_error!(super::OsError)))
 }

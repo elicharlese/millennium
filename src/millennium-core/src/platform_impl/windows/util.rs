@@ -40,7 +40,12 @@ use windows::{
 	}
 };
 
-use crate::{dpi::PhysicalSize, window::CursorIcon};
+use super::OsError;
+use crate::{
+	dpi::{PhysicalPosition, PhysicalSize},
+	error::ExternalError,
+	window::CursorIcon
+};
 
 pub fn has_flag<T>(bitset: T, flag: T) -> bool
 where
@@ -213,6 +218,15 @@ pub fn is_maximized(window: HWND) -> bool {
 		GetWindowPlacement(window, &mut placement);
 	}
 	placement.showCmd == SW_MAXIMIZE
+}
+
+pub fn cursor_position() -> Result<PhysicalPosition<f64>, ExternalError> {
+	let mut pt = POINT { x: 0, y: 0 };
+	if !unsafe { GetCursorPos(&mut pt) }.as_bool() {
+		return Err(ExternalError::Os(os_error!(OsError::IoError(io::Error::last_os_error()))));
+	}
+
+	Ok((pt.x, pt.y).into())
 }
 
 impl CursorIcon {

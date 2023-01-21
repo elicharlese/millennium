@@ -412,7 +412,7 @@ impl Rust {
 		for path in watch_folders {
 			if !ignore_matcher.is_ignore(path, true) {
 				info!(action = "Watching"; "{} for changes...", path.display());
-				lookup(&path, |file_type, p| {
+				lookup(path, |file_type, p| {
 					if p != path {
 						debug!(action = "Watching"; "{} for changes...", p.display());
 						let _ = watcher
@@ -446,7 +446,7 @@ impl Rust {
 								}
 							}
 						} else {
-							info!("{} changed. Rebuilding application...", event_path.strip_prefix(&app_path).unwrap_or(&event_path).display());
+							info!("{} changed. Rebuilding application...", event_path.strip_prefix(app_path).unwrap_or(&event_path).display());
 
 							let mut p = process.lock().unwrap();
 							p.kill().with_context(|| "failed to kill app process")?;
@@ -661,7 +661,7 @@ impl RustAppSettings {
 
 		let target_triple = target.unwrap_or_else(|| {
 			cargo_config.build().target().map(|t| t.to_string()).unwrap_or_else(|| {
-				let output = Command::new("rustc").args(&["-vV"]).output().unwrap();
+				let output = Command::new("rustc").args(["-vV"]).output().unwrap();
 				let stdout = String::from_utf8_lossy(&output.stdout);
 				stdout
 					.split('\n')

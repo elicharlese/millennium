@@ -94,7 +94,7 @@ impl MenuItemAttributes {
 		self.gtk_item
 			.label()
 			.map(|gstr| gstr.as_str().to_owned())
-			.map(|label| from_gtk_mnemonic(&label))
+			.map(from_gtk_mnemonic)
 			.unwrap_or_default()
 	}
 	pub fn set_enabled(&mut self, is_enabled: bool) {
@@ -137,7 +137,7 @@ impl Menu {
 		selected: bool,
 		menu_type: MenuType
 	) -> CustomMenuItem {
-		let title = to_gtk_mnemonic(&title);
+		let title = to_gtk_mnemonic(title);
 		let gtk_item = if selected {
 			let item = CheckMenuItem::with_mnemonic(&title);
 			item.set_active(true);

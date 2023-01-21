@@ -389,6 +389,11 @@ impl Window {
 	}
 
 	#[inline]
+	pub fn cursor_position(&self) -> Result<PhysicalPosition<f64>, ExternalError> {
+		util::cursor_position()
+	}
+
+	#[inline]
 	pub fn scale_factor(&self) -> f64 {
 		self.window_state.lock().scale_factor
 	}
@@ -443,7 +448,10 @@ impl Window {
 		let window = self.window.clone();
 		let window_state = Arc::clone(&self.window_state);
 
+		let is_minimized = self.is_minimized();
+
 		self.thread_executor.execute_in_thread(move || {
+			WindowState::set_window_flags_in_place(&mut window_state.lock(), |f| f.set(WindowFlags::MINIMIZED, is_minimized));
 			WindowState::set_window_flags(window_state.lock(), window.0, |f| f.set(WindowFlags::MINIMIZED, minimized));
 		});
 	}
@@ -466,8 +474,7 @@ impl Window {
 
 	#[inline]
 	pub fn is_minimized(&self) -> bool {
-		let window_state = self.window_state.lock();
-		window_state.window_flags.contains(WindowFlags::MINIMIZED)
+		unsafe { IsIconic(self.hwnd()) }.as_bool()
 	}
 
 	#[inline]

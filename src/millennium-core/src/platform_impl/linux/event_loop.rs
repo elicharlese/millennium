@@ -37,11 +37,13 @@ use raw_window_handle::{RawDisplayHandle, XlibDisplayHandle};
 use super::{
 	keyboard,
 	monitor::{self, MonitorHandle},
+	util,
 	window::{WindowId, WindowRequest}
 };
 use crate::{
 	accelerator::AcceleratorId,
-	dpi::{LogicalPosition, LogicalSize},
+	dpi::{LogicalPosition, LogicalSize, PhysicalPosition},
+	error::ExternalError,
 	event::{ElementState, Event, MouseButton, MouseScrollDelta, StartCause, TouchPhase, WindowEvent},
 	event_loop::{ControlFlow, EventLoopClosed, EventLoopWindowTarget as RootELW},
 	keyboard::ModifiersState,
@@ -110,6 +112,11 @@ impl<T> EventLoopWindowTarget<T> {
 	pub fn is_wayland(&self) -> bool {
 		self.display.backend().is_wayland()
 	}
+
+	#[inline]
+	pub fn cursor_position(&self) -> Result<PhysicalPosition<f64>, ExternalError> {
+		util::cursor_position()
+	}
 }
 
 pub struct EventLoop<T: 'static> {
@@ -176,20 +183,18 @@ impl<T: 'static> EventLoop<T> {
 					WindowRequest::Title(title) => window.set_title(&title),
 					WindowRequest::Position((x, y)) => window.move_(x, y),
 					WindowRequest::Size((w, h)) => window.resize(w, h),
-					WindowRequest::MinSize((min_width, min_height)) => {
+					WindowRequest::SizeConstraint { min, max } => {
+						let geom_mask = min.map(|_| gdk::WindowHints::MIN_SIZE).unwrap_or(gdk::WindowHints::empty())
+							| max.map(|_| gdk::WindowHints::MAX_SIZE).unwrap_or(gdk::WindowHints::empty());
+
+						let (min_width, min_height) = min.map(Into::into).unwrap_or_default();
+						let (max_width, max_height) = max.map(Into::into).unwrap_or_default();
+
 						let picky_none: Option<&gtk::Window> = None;
 						window.set_geometry_hints(
 							picky_none,
-							Some(&gdk::Geometry::new(min_width, min_height, 0, 0, 0, 0, 0, 0, 0f64, 0f64, gdk::Gravity::Center)),
-							gdk::WindowHints::MIN_SIZE
-						)
-					}
-					WindowRequest::MaxSize((max_width, max_height)) => {
-						let picky_none: Option<&gtk::Window> = None;
-						window.set_geometry_hints(
-							picky_none,
-							Some(&gdk::Geometry::new(0, 0, max_width, max_height, 0, 0, 0, 0, 0f64, 0f64, gdk::Gravity::Center)),
-							gdk::WindowHints::MAX_SIZE
+							Some(&gdk::Geometry::new(min_width, min_height, max_width, max_height, 0, 0, 0, 0, 0f64, 0f64, gdk::Gravity::Center)),
+							geom_mask
 						)
 					}
 					WindowRequest::Visible(visible) => {
@@ -250,6 +255,13 @@ impl<T: 'static> EventLoop<T> {
 					WindowRequest::SetSkipTaskbar(skip) => {
 						window.set_skip_taskbar_hint(skip);
 						window.set_skip_pager_hint(skip)
+					}
+					WindowRequest::SetVisibleOnAllWorkspaces(visible) => {
+						if visible {
+							window.stick();
+						} else {
+							window.unstick();
+						}
 					}
 					WindowRequest::CursorIcon(cursor) => {
 						if let Some(gdk_window) = window.window() {
