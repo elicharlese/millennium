@@ -75,6 +75,19 @@ export interface MessageDialogOptions {
 	title?: string;
 	/** The type of the dialog. Defaults to `info`. */
 	type?: 'info' | 'warning' | 'error';
+	/** The label of the confirm button. */
+	okLabel?: string;
+}
+
+export interface ConfirmDialogOptions {
+	/** The title of the dialog. Defaults to the app name. */
+	title?: string;
+	/** The type of the dialog. Defaults to `info`. */
+	type?: 'info' | 'warning' | 'error';
+	/** The label of the confirm button. */
+	okLabel?: string;
+	/** The label of the cancel button. */
+	cancelLabel?: string;
 }
 
 /**
@@ -147,7 +160,8 @@ export async function message(message: string, options?: string | MessageDialogO
 			cmd: 'messageDialog',
 			message: message.toString(),
 			title: opts?.title?.toString(),
-			type: opts?.type
+			type: opts?.type,
+			buttonLabel: opts?.okLabel?.toString()
 		}
 	});
 }
@@ -164,11 +178,11 @@ export async function message(message: string, options?: string | MessageDialogO
  * ```
  *
  * @param {string} message The message to show.
- * @param {string | MessageDialogOptions | undefined} options The dialog's options. If a string, it represents the dialog title.
+ * @param {string | ConfirmDialogOptions | undefined} options The dialog's options. If a string, it represents the dialog title.
  *
  * @return {Promise<void>} A promise resolving to a boolean indicating whether `Yes` was clicked or not.
  */
-export async function ask(message: string, options?: string | MessageDialogOptions): Promise<boolean> {
+export async function ask(message: string, options?: string | ConfirmDialogOptions): Promise<boolean> {
 	const opts = typeof options === 'string' ? { title: options } : options;
 	return await invokeMillenniumCommand({
 		__millenniumModule: 'Dialog',
@@ -176,7 +190,11 @@ export async function ask(message: string, options?: string | MessageDialogOptio
 			cmd: 'askDialog',
 			message: message.toString(),
 			title: opts?.title?.toString(),
-			type: opts?.type
+			type: opts?.type,
+			buttonLabels: [
+				opts?.okLabel?.toString() ?? 'Yes',
+				opts?.cancelLabel?.toString() ?? 'No'
+			]
 		}
 	});
 }
@@ -193,11 +211,11 @@ export async function ask(message: string, options?: string | MessageDialogOptio
  * ```
  *
  * @param {string} message The message to show.
- * @param {string | MessageDialogOptions | undefined} options The dialog's options. If a string, it represents the dialog title.
+ * @param {string | ConfirmDialogOptions | undefined} options The dialog's options. If a string, it represents the dialog title.
  *
  * @return {Promise<void>} A promise resolving to a boolean indicating whether `Ok` was clicked or not.
  */
-export async function confirm(message: string, options?: string | MessageDialogOptions): Promise<boolean> {
+export async function confirm(message: string, options?: string | ConfirmDialogOptions): Promise<boolean> {
 	const opts = typeof options === 'string' ? { title: options } : options;
 	return await invokeMillenniumCommand({
 		__millenniumModule: 'Dialog',
@@ -205,7 +223,11 @@ export async function confirm(message: string, options?: string | MessageDialogO
 			cmd: 'confirmDialog',
 			message: message.toString(),
 			title: opts?.title?.toString(),
-			type: opts?.type
+			type: opts?.type,
+			buttonLabels: [
+				opts?.okLabel?.toString() ?? 'Ok',
+				opts?.cancelLabel?.toString() ?? 'Cancel'
+			]
 		}
 	});
 }

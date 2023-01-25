@@ -126,8 +126,8 @@ impl Scope {
 	/// Extend the allowed patterns with the given directory.
 	///
 	/// After this function has been called, the frontend will be able to use
-	/// the Millennium API to read the directory and all of its files and
-	/// subdirectories.
+	/// the Millennium API to read the directory and all of its files. If `recursive` is true, subdirectories will also
+	/// be accessible.
 	pub fn allow_directory<P: AsRef<Path>>(&self, path: P, recursive: bool) -> crate::Result<()> {
 		let path = path.as_ref();
 		{
@@ -195,12 +195,25 @@ impl Scope {
 
 		if let Ok(path) = path {
 			let path: PathBuf = path.components().collect();
+			let options = glob::MatchOptions {
+				// this is needed so `/dir/*` doesn't match files within subdirectories such as `/dir/subdir/file.txt`
+				require_literal_separator: true,
+				// dotfiles are not supposed to be exposed by default
+				#[cfg(unix)]
+				require_literal_leading_dot: true,
+				..Default::default()
+			};
 
-			let forbidden = self.forbidden_patterns.lock().unwrap().iter().any(|p| p.matches_path(&path));
+			let forbidden = self
+				.forbidden_patterns
+				.lock()
+				.unwrap()
+				.iter()
+				.any(|p| p.matches_path_with(&path, options));
 			if forbidden {
 				false
 			} else {
-				let allowed = self.allowed_patterns.lock().unwrap().iter().any(|p| p.matches_path(&path));
+				let allowed = self.allowed_patterns.lock().unwrap().iter().any(|p| p.matches_path_with(&path, options));
 				allowed
 			}
 		} else {
@@ -232,32 +245,95 @@ mod tests {
 	#[test]
 	fn path_is_escaped() {
 		let scope = new_scope();
-		scope.allow_directory("/home/pyke/**", false).unwrap();
-		assert!(scope.is_allowed("/home/pyke/**"));
-		assert!(scope.is_allowed("/home/pyke/**/file"));
-		assert!(!scope.is_allowed("/home/pyke/anyfile"));
+		#[cfg(unix)]
+		{
+			scope.allow_directory("/home/pyke/**", false).unwrap();
+			assert!(scope.is_allowed("/home/pyke/**"));
+			assert!(scope.is_allowed("/home/pyke/**/file"));
+			assert!(!scope.is_allowed("/home/pyke/anyfile"));
+		}
+		#[cfg(windows)]
+		{
+			scope.allow_directory("C:\\home\\pyke\\**", false).unwrap();
+			assert!(scope.is_allowed("C:\\home\\pyke\\**"));
+			assert!(scope.is_allowed("C:\\home\\pyke\\**\\file"));
+			assert!(!scope.is_allowed("C:\\home\\pyke\\anyfile"));
+		}
 
 		let scope = new_scope();
-		scope.allow_file("/home/pyke/**").unwrap();
-		assert!(scope.is_allowed("/home/pyke/**"));
-		assert!(!scope.is_allowed("/home/pyke/**/file"));
-		assert!(!scope.is_allowed("/home/pyke/anyfile"));
+		#[cfg(unix)]
+		{
+			scope.allow_file("/home/pyke/**").unwrap();
+			assert!(scope.is_allowed("/home/pyke/**"));
+			assert!(!scope.is_allowed("/home/pyke/**/file"));
+			assert!(!scope.is_allowed("/home/pyke/anyfile"));
+		}
+		#[cfg(windows)]
+		{
+			scope.allow_file("C:\\home\\pyke\\**").unwrap();
+			assert!(scope.is_allowed("C:\\home\\pyke\\**"));
+			assert!(!scope.is_allowed("C:\\home\\pyke\\**\\file"));
+			assert!(!scope.is_allowed("C:\\home\\pyke\\anyfile"));
+		}
 
 		let scope = new_scope();
-		scope.allow_directory("/home/pyke", true).unwrap();
-		scope.forbid_directory("/home/pyke/**", false).unwrap();
-		assert!(!scope.is_allowed("/home/pyke/**"));
-		assert!(!scope.is_allowed("/home/pyke/**/file"));
-		assert!(!scope.is_allowed("/home/pyke/**/inner/file"));
-		assert!(scope.is_allowed("/home/pyke/inner/folder/anyfile"));
-		assert!(scope.is_allowed("/home/pyke/anyfile"));
+		#[cfg(unix)]
+		{
+			scope.allow_directory("/home/pyke", true).unwrap();
+			scope.forbid_directory("/home/pyke/**", false).unwrap();
+			assert!(!scope.is_allowed("/home/pyke/**"));
+			assert!(!scope.is_allowed("/home/pyke/**/file"));
+			assert!(scope.is_allowed("/home/pyke/**/inner/file"));
+			assert!(scope.is_allowed("/home/pyke/inner/folder/anyfile"));
+			assert!(scope.is_allowed("/home/pyke/anyfile"));
+		}
+		#[cfg(windows)]
+		{
+			scope.allow_directory("C:\\home\\pyke", true).unwrap();
+			scope.forbid_directory("C:\\home\\pyke\\**", false).unwrap();
+			assert!(!scope.is_allowed("C:\\home\\pyke\\**"));
+			assert!(!scope.is_allowed("C:\\home\\pyke\\**\\file"));
+			assert!(scope.is_allowed("C:\\home\\pyke\\**\\inner\\file"));
+			assert!(scope.is_allowed("C:\\home\\pyke\\inner\\folder\\anyfile"));
+			assert!(scope.is_allowed("C:\\home\\pyke\\anyfile"));
+		}
 
 		let scope = new_scope();
-		scope.allow_directory("/home/pyke", true).unwrap();
-		scope.forbid_file("/home/pyke/**").unwrap();
-		assert!(!scope.is_allowed("/home/pyke/**"));
-		assert!(scope.is_allowed("/home/pyke/**/file"));
-		assert!(scope.is_allowed("/home/pyke/**/inner/file"));
-		assert!(scope.is_allowed("/home/pyke/anyfile"));
+		#[cfg(unix)]
+		{
+			scope.allow_directory("/home/pyke", true).unwrap();
+			scope.forbid_file("/home/pyke/**").unwrap();
+			assert!(!scope.is_allowed("/home/pyke/**"));
+			assert!(scope.is_allowed("/home/pyke/**/file"));
+			assert!(scope.is_allowed("/home/pyke/**/inner/file"));
+			assert!(scope.is_allowed("/home/pyke/anyfile"));
+		}
+		#[cfg(windows)]
+		{
+			scope.allow_directory("C:\\home\\pyke", true).unwrap();
+			scope.forbid_file("C:\\home\\pyke\\**").unwrap();
+			assert!(!scope.is_allowed("C:\\home\\pyke\\**"));
+			assert!(scope.is_allowed("C:\\home\\pyke\\**\\file"));
+			assert!(scope.is_allowed("C:\\home\\pyke\\**\\inner\\file"));
+			assert!(scope.is_allowed("C:\\home\\pyke\\anyfile"));
+		}
+
+		let scope = new_scope();
+		#[cfg(unix)]
+		{
+			scope.allow_directory("/home/pyke", false).unwrap();
+			assert!(scope.is_allowed("/home/pyke/**"));
+			assert!(!scope.is_allowed("/home/pyke/**/file"));
+			assert!(!scope.is_allowed("/home/pyke/**/inner/file"));
+			assert!(scope.is_allowed("/home/pyke/anyfile"));
+		}
+		#[cfg(windows)]
+		{
+			scope.allow_directory("C:\\home\\pyke", false).unwrap();
+			assert!(scope.is_allowed("C:\\home\\pyke\\**"));
+			assert!(!scope.is_allowed("C:\\home\\pyke\\**\\file"));
+			assert!(!scope.is_allowed("C:\\home\\pyke\\**\\inner\\file"));
+			assert!(scope.is_allowed("C:\\home\\pyke\\anyfile"));
+		}
 	}
 }

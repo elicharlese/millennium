@@ -50,11 +50,9 @@ impl Cmd {
 	}
 
 	#[module_command_handler(process_exit)]
-	fn exit<R: Runtime>(_context: InvokeContext<R>, exit_code: i32) -> super::Result<()> {
-		// would be great if we can have a handler inside Millennium
-		// who close all window and emit an event that user can catch
-		// if they want to process something before closing the app
-		std::process::exit(exit_code);
+	fn exit<R: Runtime>(context: InvokeContext<R>, exit_code: i32) -> super::Result<()> {
+		context.window.app_handle.exit(exit_code);
+		Ok(())
 	}
 }
 

@@ -33,7 +33,7 @@ features = [ "Win32_Foundation" ]
 
 [target."cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))".dependencies]
 gtk = { version = "0.15", features = [ "v3_20" ] }
-webkit2gtk = { version = "0.18.2", features = [ "v2_36" ] }
+webkit2gtk = { version = "0.18.2", features = [ "v2_22" ] }
 percent-encoding = "2.1"
 
 [target."cfg(any(target_os = \"macos\", target_os = \"ios\"))".dependencies]
@@ -51,5 +51,4 @@ macos-private-api = [
 objc-exception = [ "millennium-webview/objc-exception" ]
 global-shortcut = [ "millennium-runtime/global-shortcut" ]
 clipboard = [ "millennium-runtime/clipboard" ]
-linux-headers = [ "millennium-webview/linux-headers" ]
-
+linux-headers = [ "millennium-webview/linux-headers", "webkit2gtk/v2_36" ]

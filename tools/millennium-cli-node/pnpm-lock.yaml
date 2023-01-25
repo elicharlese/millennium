@@ -1,7 +1,7 @@
 lockfileVersion: 5.4
 
 specifiers:
-  '@napi-rs/cli': ^2.11.4
+  '@napi-rs/cli': ^2.14.4
   '@pyke/millennium-cli-darwin-arm64': 1.0.0-beta.3
   '@pyke/millennium-cli-darwin-x64': 1.0.0-beta.3
   '@pyke/millennium-cli-linux-arm-gnueabihf': 1.0.0-beta.3
@@ -12,7 +12,7 @@ specifiers:
   '@pyke/millennium-cli-win32-ia32-msvc': 1.0.0-beta.3
   '@pyke/millennium-cli-win32-x64-msvc': 1.0.0-beta.3
   cross-spawn: ^7.0.3
-  fs-extra: ^10.1.0
+  fs-extra: ^11.1.0
 
 optionalDependencies:
   '@pyke/millennium-cli-darwin-arm64': 1.0.0-beta.3
@@ -26,14 +26,14 @@ optionalDependencies:
   '@pyke/millennium-cli-win32-x64-msvc': 1.0.0-beta.3
 
 devDependencies:
-  '@napi-rs/cli': 2.11.4
+  '@napi-rs/cli': 2.14.4
   cross-spawn: 7.0.3
-  fs-extra: 10.1.0
+  fs-extra: 11.1.0
 
 packages:
 
-  /@napi-rs/cli/2.11.4:
-    resolution: {integrity: sha512-rjU651owB4GJetO3pnu3B8TyVM3Fis3AYb+U16bKxYyykp81S+dJlIgWc8Lc0t55PYbHlBM3hxdgy4pultxMAw==}
+  /@napi-rs/cli/2.14.4:
+    resolution: {integrity: sha512-JvnJWFGhqjDV+D5MD9HCPH7Bc8uxwyPbpA8jsS5mtAp9+3IhVxpqhQc+eqmJrDAPO9z3a8qAdNnBf9+ZI9bIQg==}
     engines: {node: '>= 10'}
     hasBin: true
     dev: true
@@ -119,9 +119,9 @@ packages:
       which: 2.0.2
     dev: true
 
-  /fs-extra/10.1.0:
-    resolution: {integrity: sha512-oRXApq54ETRj4eMiFzGnHWGy+zo5raudjuxN0b8H7s/RU2oW0Wvsx9O0ACRN/kRq9E8Vu/ReskGB5o3ji+FzHQ==}
-    engines: {node: '>=12'}
+  /fs-extra/11.1.0:
+    resolution: {integrity: sha512-0rcTq621PD5jM/e0a3EJoGC/1TC5ZBCERW82LQuwfGnCa1V8w7dpYH1yNu+SLb6E5dkeCBzKEyLGlFrnr+dUyw==}
+    engines: {node: '>=14.14'}
     dependencies:
       graceful-fs: 4.2.10
       jsonfile: 6.1.0

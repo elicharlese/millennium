@@ -20,6 +20,7 @@ use std::{
 	str::FromStr
 };
 
+use base64::Engine;
 #[cfg(feature = "shell-scope")]
 use millennium_utils::config::{ShellAllowedArg, ShellAllowedArgs, ShellAllowlistScope};
 use millennium_utils::{
@@ -65,7 +66,7 @@ fn map_core_assets(options: &AssetOptions, target: Target) -> impl Fn(&AssetKey,
 						let mut hasher = Sha256::new();
 						hasher.update(&script);
 						let hash = hasher.finalize();
-						scripts.push(format!("'sha256-{}'", base64::encode(hash)));
+						scripts.push(format!("'sha256-{}'", base64::engine::general_purpose::STANDARD.encode(hash)));
 					}
 					csp_hashes.inline_scripts.entry(key.clone().into()).or_default().append(&mut scripts);
 				}
@@ -79,7 +80,9 @@ fn map_core_assets(options: &AssetOptions, target: Target) -> impl Fn(&AssetKey,
 					let mut hasher = Sha256::new();
 					hasher.update(millennium_utils::pattern::isolation::IFRAME_STYLE);
 					let hash = hasher.finalize();
-					csp_hashes.styles.push(format!("'sha256-{}'", base64::encode(hash)));
+					csp_hashes
+						.styles
+						.push(format!("'sha256-{}'", base64::engine::general_purpose::STANDARD.encode(hash)));
 				}
 			}
 
@@ -350,7 +353,7 @@ pub fn context_codegen(data: ContextData) -> Result<TokenStream, EmbeddedAssetsE
 		let shell_scope_open = match &config.millennium.allowlist.shell.open {
 			ShellAllowlistOpen::Flag(false) => quote!(::std::option::Option::None),
 			ShellAllowlistOpen::Flag(true) => {
-				quote!(::std::option::Option::Some(#root::regex::Regex::new("^https?://").unwrap()))
+				quote!(::std::option::Option::Some(#root::regex::Regex::new(r#"^((mailto:\w+)|(tel:\w+)|(https?://\w+)).+"#).unwrap()))
 			}
 			ShellAllowlistOpen::Validate(regex) => match Regex::new(regex) {
 				Ok(_) => quote!(::std::option::Option::Some(#root::regex::Regex::new(#regex).unwrap())),

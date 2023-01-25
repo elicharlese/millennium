@@ -366,6 +366,11 @@ class WindowManager extends WebviewWindowHandle {
 		return await this._manage('isFullscreen');
 	}
 
+	/** Gets the window's current minimized state. */
+	public async isMinimized(): Promise<boolean> {
+		return await this._manage('isMinimized');
+	}
+
 	/** Gets the window's current maximized state. */
 	public async isMaximized(): Promise<boolean> {
 		return await this._manage('isMaximized');
@@ -384,6 +389,11 @@ class WindowManager extends WebviewWindowHandle {
 	/** Gets the window's current visibility state. */
 	public async isVisible(): Promise<boolean> {
 		return await this._manage('isVisible');
+	}
+
+	/** Gets the window's current title. */
+	public async title(): Promise<boolean> {
+		return await this._manage('title');
 	}
 
 	/**
@@ -482,6 +492,11 @@ class WindowManager extends WebviewWindowHandle {
 	/** Sets whether or not the window should be always on top of other windows. */
 	async setAlwaysOnTop(alwaysOnTop: boolean): Promise<void> {
 		return await this._manage('setAlwaysOnTop', alwaysOnTop);
+	}
+
+	/** Prevents the window contents from being captured by other apps. */
+	async setContentProtected(protected_: boolean): Promise<void> {
+		return await this._manage('setContentProtected', protected_);
 	}
 
 	/** Sets the (inner!) size of the window. */
@@ -755,6 +770,8 @@ export interface WindowOptions {
 	visibile?: boolean;
 	decorations?: boolean;
 	alwaysOnTop?: boolean;
+	/** Prevents the window contents from being captured by other apps. */
+	contentProtected?: boolean
 	skipTaskbar?: boolean;
 	fileDropEnabled?: boolean;
 	/**
@@ -778,6 +795,8 @@ export interface WindowOptions {
 	tabbingIdentifier?: string;
 	/** Overrides the webview user agent. */
 	userAgent?: string;
+	/** Additional arguments for the webview. */
+	additionalBrowserArguments?: string;
 }
 
 function mapMonitor(m: Monitor | null): Monitor | null {

@@ -92,13 +92,13 @@ interprocess = "1.1"
 encoding_rs = "0.8"
 
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))".dependencies]
-rfd = { version = "0.10", optional = true }
+rfd = { version = "0.10", optional = true, features = [ "gtk3", "common-controls-v6" ] }
 notify-rust = { version = "4.5", default-features = false, features = [ "d" ], optional = true }
 
 [target."cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))".dependencies]
 gtk = { version = "0.15", features = [ "v3_20" ] }
 glib = "0.15"
-webkit2gtk = { version = "0.18.2", features = [ "v2_36" ] }
+webkit2gtk = { version = "0.18.2", features = [ "v2_22" ] }
 
 [target."cfg(target_os = \"macos\")".dependencies]
 embed_plist = "1.2"
@@ -135,7 +135,7 @@ default = [ "millennium_webview", "compression", "objc-exception" ]
 compression = [ "millennium-macros/compression", "millennium-utils/compression" ]
 millennium_webview = [ "millennium-runtime-webview" ]
 objc-exception = [ "millennium-runtime-webview/objc-exception" ]
-linux-protocol-headers = [ "millennium-runtime-webview/linux-headers" ]
+linux-protocol-headers = [ "millennium-runtime-webview/linux-headers", "webkit2gtk/v2_36" ]
 isolation = [ "millennium-utils/isolation", "millennium-macros/isolation" ]
 custom-protocol = [ "millennium-macros/custom-protocol" ]
 updater = [ "minisign-verify", "time", "base64", "http-api", "dialog-ask", "fs-extract-api" ]
@@ -236,6 +236,7 @@ window-all = [
 	"window-close",
 	"window-set-decorations",
 	"window-set-always-on-top",
+	"window-set-content-protected",
 	"window-set-size",
 	"window-set-min-size",
 	"window-set-max-size",
@@ -266,6 +267,7 @@ window-hide = [ ]
 window-close = [ ]
 window-set-decorations = [ ]
 window-set-always-on-top = [ ]
+window-set-content-protected = [ ]
 window-set-size = [ ]
 window-set-min-size = [ ]
 window-set-max-size = [ ]

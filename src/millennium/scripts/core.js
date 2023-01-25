@@ -108,7 +108,7 @@
 			let { target } = /** @type {any} */(e);
 			while (target != null) {
 				if (target.matches('a')) {
-					if (target.href && target.href.startsWith('http')) {
+					if (target.href && (['http://', 'https://', 'mailto:', 'tel:'].some(v => target.href.startsWith(v))) && target.target === '_blank') {
 						window.__MILLENNIUM_INVOKE__('millennium', {
 							__millenniumModule: 'Shell',
 							message: {
@@ -148,15 +148,6 @@
 						}
 					}
 				}
-			});
-		}
-	});
-
-	listen('millennium://window-created', function (event) {
-		if (event.payload) {
-			var windowLabel = event.payload.label
-			window.__MILLENNIUM_METADATA__.__windows.push({
-				label: windowLabel
 			});
 		}
 	});

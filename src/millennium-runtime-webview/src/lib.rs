@@ -43,7 +43,8 @@ use millennium_runtime::{
 		dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize, Position, Size},
 		CursorIcon, DetachedWindow, FileDropEvent, JsEventListenerKey, PendingWindow, WindowEvent
 	},
-	Dispatch, Error, EventLoopProxy, ExitRequestedEventAction, Icon, Result, RunEvent, RunIteration, Runtime, RuntimeHandle, UserAttentionType, UserEvent
+	DeviceEventFilter, Dispatch, Error, EventLoopProxy, ExitRequestedEventAction, Icon, Result, RunEvent, RunIteration, Runtime, RuntimeHandle,
+	UserAttentionType, UserEvent
 };
 #[cfg(target_os = "macos")]
 use millennium_runtime::{menu::NativeImage, ActivationPolicy};
@@ -52,23 +53,21 @@ use millennium_runtime::{SystemTray, SystemTrayEvent};
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use millennium_utils::TitleBarStyle;
 use millennium_utils::{config::WindowConfig, Theme};
-pub use millennium_webview;
-#[cfg(target_os = "macos")]
-use millennium_webview::application::platform::macos::EventLoopWindowTargetExtMacOS;
-#[cfg(target_os = "macos")]
-use millennium_webview::application::platform::macos::WindowBuilderExtMacOS;
 #[cfg(target_os = "macos")]
 pub use millennium_webview::application::platform::macos::{
 	ActivationPolicy as MillenniumActivationPolicy, CustomMenuItemExtMacOS, EventLoopExtMacOS, NativeImage as MillenniumNativeImage, WindowExtMacOS
 };
+#[cfg(target_os = "macos")]
+use millennium_webview::application::platform::macos::{EventLoopWindowTargetExtMacOS, WindowBuilderExtMacOS};
 #[cfg(target_os = "linux")]
 use millennium_webview::application::platform::unix::{WindowBuilderExtUnix, WindowExtUnix};
-#[cfg(windows)]
-use millennium_webview::application::platform::windows::{WindowBuilderExtWindows, WindowExtWindows};
 pub use millennium_webview::application::window::{Window, WindowBuilder as MillenniumWindowBuilder, WindowId};
 #[cfg(windows)]
 #[allow(unused)]
-use millennium_webview::webview::WebviewExtWindows;
+use millennium_webview::{
+	application::platform::windows::{WindowBuilderExtWindows, WindowExtWindows},
+	webview::{WebViewBuilderExtWindows, WebviewExtWindows}
+};
 use millennium_webview::{
 	application::{
 		dpi::{
@@ -76,7 +75,9 @@ use millennium_webview::{
 			PhysicalSize as MillenniumPhysicalSize, Position as MillenniumPosition, Size as MillenniumSize
 		},
 		event::{Event, StartCause, WindowEvent as MillenniumWindowEvent},
-		event_loop::{ControlFlow, EventLoop, EventLoopProxy as MillenniumEventLoopProxy, EventLoopWindowTarget},
+		event_loop::{
+			ControlFlow, DeviceEventFilter as MillenniumDeviceEventFilter, EventLoop, EventLoopProxy as MillenniumEventLoopProxy, EventLoopWindowTarget
+		},
 		menu::{
 			AboutMetadata as MillenniumAboutMetadata, CustomMenuItem as MillenniumCustomMenuItem, MenuBar, MenuId as MillenniumMenuId,
 			MenuItem as MillenniumMenuItem, MenuItemAttributes as MillenniumMenuItemAttributes, MenuType
@@ -88,7 +89,7 @@ use millennium_webview::{
 		}
 	},
 	http::{Request as MillenniumRequest, Response as MillenniumResponse},
-	webview::{FileDropEvent as MillenniumFileDropEvent, WebContext, WebView, WebViewBuilder}
+	webview::{FileDropEvent as MillenniumFileDropEvent, Url, WebContext, WebView, WebViewBuilder}
 };
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle};
 use uuid::Uuid;
@@ -336,6 +337,18 @@ impl From<MenuItem> for MenuItemWrapper {
 			MenuItem::Zoom => Self(MillenniumMenuItem::Zoom),
 			MenuItem::Separator => Self(MillenniumMenuItem::Separator),
 			_ => unimplemented!()
+		}
+	}
+}
+
+pub struct DeviceEventFilterWrapper(pub MillenniumDeviceEventFilter);
+
+impl From<DeviceEventFilter> for DeviceEventFilterWrapper {
+	fn from(item: DeviceEventFilter) -> Self {
+		match item {
+			DeviceEventFilter::Always => Self(MillenniumDeviceEventFilter::Always),
+			DeviceEventFilter::Never => Self(MillenniumDeviceEventFilter::Never),
+			DeviceEventFilter::Unfocused => Self(MillenniumDeviceEventFilter::Unfocused)
 		}
 	}
 }
@@ -667,6 +680,7 @@ impl WindowBuilder for WindowBuilderWrapper {
 			.decorations(config.decorations)
 			.maximized(config.maximized)
 			.always_on_top(config.always_on_top)
+			.content_protected(config.content_protected)
 			.skip_taskbar(config.skip_taskbar)
 			.theme(config.theme);
 
@@ -786,6 +800,11 @@ impl WindowBuilder for WindowBuilderWrapper {
 
 	fn always_on_top(mut self, always_on_top: bool) -> Self {
 		self.inner = self.inner.with_always_on_top(always_on_top);
+		self
+	}
+
+	fn content_protected(mut self, protected: bool) -> Self {
+		self.inner = self.inner.with_content_protection(protected);
 		self
 	}
 
@@ -955,16 +974,19 @@ pub enum WindowMessage {
 	#[cfg(any(debug_assertions, feature = "devtools"))]
 	IsDevToolsOpen(Sender<bool>),
 	// Getters
+	Url(Sender<Url>),
 	ScaleFactor(Sender<f64>),
 	InnerPosition(Sender<Result<PhysicalPosition<i32>>>),
 	OuterPosition(Sender<Result<PhysicalPosition<i32>>>),
 	InnerSize(Sender<PhysicalSize<u32>>),
 	OuterSize(Sender<PhysicalSize<u32>>),
 	IsFullscreen(Sender<bool>),
+	IsMinimized(Sender<bool>),
 	IsMaximized(Sender<bool>),
 	IsDecorated(Sender<bool>),
 	IsResizable(Sender<bool>),
 	IsVisible(Sender<bool>),
+	Title(Sender<String>),
 	IsMenuVisible(Sender<bool>),
 	CurrentMonitor(Sender<Option<MonitorHandle>>),
 	PrimaryMonitor(Sender<Option<MonitorHandle>>),
@@ -989,6 +1011,7 @@ pub enum WindowMessage {
 	Close,
 	SetDecorations(bool),
 	SetAlwaysOnTop(bool),
+	SetContentProtected(bool),
 	SetSize(Size),
 	SetMinSize(Option<Size>),
 	SetMaxSize(Option<Size>),
@@ -1130,6 +1153,10 @@ impl<T: UserEvent> Dispatch<T> for MillenniumDispatcher<T> {
 
 	// Getters
 
+	fn url(&self) -> Result<Url> {
+		window_getter!(self, WindowMessage::Url)
+	}
+
 	fn scale_factor(&self) -> Result<f64> {
 		window_getter!(self, WindowMessage::ScaleFactor)
 	}
@@ -1154,6 +1181,10 @@ impl<T: UserEvent> Dispatch<T> for MillenniumDispatcher<T> {
 		window_getter!(self, WindowMessage::IsFullscreen)
 	}
 
+	fn is_minimized(&self) -> Result<bool> {
+		window_getter!(self, WindowMessage::IsMinimized)
+	}
+
 	fn is_maximized(&self) -> Result<bool> {
 		window_getter!(self, WindowMessage::IsMaximized)
 	}
@@ -1170,6 +1201,10 @@ impl<T: UserEvent> Dispatch<T> for MillenniumDispatcher<T> {
 
 	fn is_visible(&self) -> Result<bool> {
 		window_getter!(self, WindowMessage::IsVisible)
+	}
+
+	fn title(&self) -> Result<String> {
+		window_getter!(self, WindowMessage::Title)
 	}
 
 	fn is_menu_visible(&self) -> Result<bool> {
@@ -1282,6 +1317,10 @@ impl<T: UserEvent> Dispatch<T> for MillenniumDispatcher<T> {
 
 	fn set_always_on_top(&self, always_on_top: bool) -> Result<()> {
 		send_user_message(&self.context, Message::Window(self.window_id, WindowMessage::SetAlwaysOnTop(always_on_top)))
+	}
+
+	fn set_content_protected(&self, protected: bool) -> Result<()> {
+		send_user_message(&self.context, Message::Window(self.window_id, WindowMessage::SetContentProtected(protected)))
 	}
 
 	fn set_size(&self, size: Size) -> Result<()> {
@@ -1741,6 +1780,10 @@ impl<T: UserEvent> Runtime<T> for MillenniumWebview<T> {
 		self.event_loop.hide_application();
 	}
 
+	fn set_device_event_filter(&mut self, filter: DeviceEventFilter) {
+		self.event_loop.set_device_event_filter(DeviceEventFilterWrapper::from(filter).0);
+	}
+
 	#[cfg(desktop)]
 	fn run_iteration<F: FnMut(RunEvent<T>) + 'static>(&mut self, mut callback: F) -> RunIteration {
 		use millennium_webview::application::platform::run_return::EventLoopExtRunReturn;
@@ -2009,6 +2052,11 @@ fn handle_user_message<T: UserEvent>(
 							}
 						}
 						// Getters
+						WindowMessage::Url(tx) => {
+							if let WindowHandle::Webview { inner: w, .. } = &window {
+								tx.send(w.url()).unwrap();
+							}
+						}
 						WindowMessage::ScaleFactor(tx) => tx.send(window.scale_factor()).unwrap(),
 						WindowMessage::InnerPosition(tx) => tx
 							.send(
@@ -2029,10 +2077,12 @@ fn handle_user_message<T: UserEvent>(
 						WindowMessage::InnerSize(tx) => tx.send(PhysicalSizeWrapper(window.inner_size()).into()).unwrap(),
 						WindowMessage::OuterSize(tx) => tx.send(PhysicalSizeWrapper(window.outer_size()).into()).unwrap(),
 						WindowMessage::IsFullscreen(tx) => tx.send(window.fullscreen().is_some()).unwrap(),
+						WindowMessage::IsMinimized(tx) => tx.send(window.is_minimized()).unwrap(),
 						WindowMessage::IsMaximized(tx) => tx.send(window.is_maximized()).unwrap(),
 						WindowMessage::IsDecorated(tx) => tx.send(window.is_decorated()).unwrap(),
 						WindowMessage::IsResizable(tx) => tx.send(window.is_resizable()).unwrap(),
 						WindowMessage::IsVisible(tx) => tx.send(window.is_visible()).unwrap(),
+						WindowMessage::Title(tx) => tx.send(window.title()).unwrap(),
 						WindowMessage::IsMenuVisible(tx) => tx.send(window.is_menu_visible()).unwrap(),
 						WindowMessage::CurrentMonitor(tx) => tx.send(window.current_monitor()).unwrap(),
 						WindowMessage::PrimaryMonitor(tx) => tx.send(window.primary_monitor()).unwrap(),
@@ -2063,6 +2113,7 @@ fn handle_user_message<T: UserEvent>(
 						WindowMessage::Close => panic!("cannot handle `WindowMessage::Close` on the main thread"),
 						WindowMessage::SetDecorations(decorations) => window.set_decorations(decorations),
 						WindowMessage::SetAlwaysOnTop(always_on_top) => window.set_always_on_top(always_on_top),
+						WindowMessage::SetContentProtected(protected) => window.set_content_protection(protected),
 						WindowMessage::SetSize(size) => {
 							window.set_inner_size(SizeWrapper::from(size).0);
 						}
@@ -2436,6 +2487,19 @@ fn handle_event_loop<T: UserEvent>(
 				}
 
 				match event {
+					#[cfg(windows)]
+					MillenniumWindowEvent::ThemeChanged(theme) => {
+						if let Some(window) = windows.borrow().get(&window_id) {
+							if let Some(WindowHandle::Webview { inner, .. }) = &window.inner {
+								let theme = match theme {
+									MillenniumTheme::Dark => millennium_webview::webview::Theme::Dark,
+									MillenniumTheme::Light => millennium_webview::webview::Theme::Light,
+									_ => millennium_webview::webview::Theme::Light
+								};
+								inner.set_theme(theme);
+							}
+						}
+					}
 					MillenniumWindowEvent::CloseRequested => {
 						on_close_requested(callback, window_id, windows.clone());
 					}
@@ -2593,6 +2657,9 @@ fn create_webview<T: UserEvent>(
 		window_builder.inner = window_builder.inner.with_drag_and_drop(webview_attributes.file_drop_handler_enabled);
 	}
 
+	#[cfg(windows)]
+	let window_theme = window_builder.inner.window.preferred_theme;
+
 	#[cfg(target_os = "macos")]
 	{
 		if window_builder.tabbing_identifier.is_none() || window_builder.inner.window.transparent || !window_builder.inner.window.decorations {
@@ -2625,8 +2692,23 @@ fn create_webview<T: UserEvent>(
 	if webview_attributes.file_drop_handler_enabled {
 		webview_builder = webview_builder.with_file_drop_handler(create_file_drop_handler(window_event_listeners.clone()));
 	}
+	if let Some(navigation_handler) = pending.navigation_handler {
+		webview_builder = webview_builder.with_navigation_handler(move |url| Url::parse(&url).map(&navigation_handler).unwrap_or(true));
+	}
 	if let Some(user_agent) = webview_attributes.user_agent {
 		webview_builder = webview_builder.with_user_agent(&user_agent);
+	}
+	#[cfg(windows)]
+	if let Some(additional_browser_args) = webview_attributes.additional_browser_args {
+		webview_builder = webview_builder.with_additional_browser_args(&additional_browser_args);
+	}
+	#[cfg(windows)]
+	if let Some(theme) = window_theme {
+		webview_builder = webview_builder.with_theme(match theme {
+			MillenniumTheme::Dark => millennium_webview::webview::Theme::Dark,
+			MillenniumTheme::Light => millennium_webview::webview::Theme::Light,
+			_ => millennium_webview::webview::Theme::Light
+		});
 	}
 	if let Some(handler) = ipc_handler {
 		webview_builder = webview_builder.with_ipc_handler(create_ipc_handler(context, label.clone(), menu_ids, js_event_listeners, handler));

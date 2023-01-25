@@ -437,9 +437,9 @@ fn crate_version(millennium_dir: &Path, manifest: Option<&CargoManifest>, lock: 
 		}
 	};
 
-	let crate_version = found_crate_versions.into_iter().map(|v| semver::Version::parse(&v).unwrap()).max();
+	let crate_version = found_crate_versions.into_iter().map(|v| semver::Version::parse(&v).ok()).max();
 	let suffix = match (crate_version, crate_latest_version(name)) {
-		(Some(version), Some(target_version)) => {
+		(Some(Some(version)), Some(target_version)) => {
 			let target_version = semver::Version::parse(&target_version).unwrap();
 			if version < target_version {
 				Some(format!(" (outdated, latest: {target_version})"))

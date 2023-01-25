@@ -181,14 +181,18 @@ macro_rules! message_dialog_builder {
 
 /// Options for action buttons on message dialogs.
 #[non_exhaustive]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MessageDialogButtons {
 	/// A single "OK" button.
 	Ok,
 	/// "OK" and "Cancel" buttons.
 	OkCancel,
 	/// "Yes" and "No" buttons.
-	YesNo
+	YesNo,
+	/// OK button with customized text.
+	OkWithLabel(String),
+	/// Ok and Cancel buttons with customized text.
+	OkCancelWithLabels(String, String)
 }
 
 impl From<MessageDialogButtons> for rfd::MessageButtons {
@@ -196,7 +200,9 @@ impl From<MessageDialogButtons> for rfd::MessageButtons {
 		match kind {
 			MessageDialogButtons::Ok => rfd::MessageButtons::Ok,
 			MessageDialogButtons::OkCancel => rfd::MessageButtons::OkCancel,
-			MessageDialogButtons::YesNo => rfd::MessageButtons::YesNo
+			MessageDialogButtons::YesNo => rfd::MessageButtons::YesNo,
+			MessageDialogButtons::OkWithLabel(ok_text) => Self::OkCustom(ok_text),
+			MessageDialogButtons::OkCancelWithLabels(ok_text, cancel_text) => Self::OkCancelCustom(ok_text, cancel_text)
 		}
 	}
 }

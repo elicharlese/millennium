@@ -15,6 +15,7 @@
 // limitations under the License.
 
 #![cfg_attr(doc_cfg, feature(doc_cfg))]
+#![allow(clippy::tabs_in_doc_comments)]
 
 use std::path::{Path, PathBuf};
 
@@ -118,7 +119,11 @@ pub struct WindowsAttributes {
 	/// Files (x86)\Windows Kits\10\bin\10.0.22000.0\x64`.
 	///
 	/// If left unset, the SDK path will be inferred from the registry.
-	sdk_dir: Option<PathBuf>
+	sdk_dir: Option<PathBuf>,
+	/// A string containing an [application manifest] to be included with the application on Windows.
+	///
+	/// [application manifest]: https://learn.microsoft.com/en-us/windows/win32/sbscs/application-manifests
+	app_manifest: Option<String>
 }
 
 impl WindowsAttributes {
@@ -141,6 +146,45 @@ impl WindowsAttributes {
 	#[must_use]
 	pub fn sdk_dir<P: AsRef<Path>>(mut self, sdk_dir: P) -> Self {
 		self.sdk_dir = Some(sdk_dir.as_ref().into());
+		self
+	}
+
+	/// Sets the Windows app [manifest].
+	///
+	/// # Example
+	///
+	/// The following manifest will mark the executable as requesting administrator privileges, and thus a Windows UAC
+	/// dialog will appear upon execution.
+	///
+	/// Note that you can move the manifest contents to a separate file and use `include_str!("manifest.xml")`
+	/// instead of including an inline string.
+	///
+	/// ```rust,no_run
+	/// let mut windows = millennium_build::WindowsAttributes::new();
+	/// windows = windows.app_manifest(
+	/// 	r#"<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+	/// 		<trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+	///    			<security>
+	///        			<requestedPrivileges>
+	///            			<requestedExecutionLevel level="requireAdministrator" uiAccess="false" />
+	///        			</requestedPrivileges>
+	///    			</security>
+	/// 		</trustInfo>
+	/// 	</assembly>"#
+	/// );
+	/// tauri_build::try_build(tauri_build::Attributes::new().windows_attributes(windows))
+	/// 	.expect("failed to run build script");
+	/// ```
+	///
+	/// Defaults to:
+	/// ```ignore
+	#[doc = include_str!("default-manifest.xml")]
+	/// ```
+	///
+	/// [manifest]: https://learn.microsoft.com/en-us/windows/win32/sbscs/application-manifests
+	#[must_use]
+	pub fn app_manifest<S: AsRef<str>>(mut self, manifest: S) -> Self {
+		self.app_manifest = Some(manifest.as_ref().to_string());
 		self
 	}
 }
@@ -334,24 +378,11 @@ pub fn try_build(attributes: Attributes) -> Result<()> {
 
 		if window_icon_path.exists() {
 			let mut res = WindowsResource::new();
-			res.set_manifest(
-				r#"
-					<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
-						<dependency>
-							<dependentAssembly>
-								<assemblyIdentity
-									type="win32"
-									name="Microsoft.Windows.Common-Controls"
-									version="6.0.0.0"
-									processorArchitecture="*"
-									publicKeyToken="6595b64144ccf1df"
-									language="*"
-								/>
-							</dependentAssembly>
-						</dependency>
-					</assembly>
-				"#
-			);
+			if let Some(manifest) = attributes.windows_attributes.app_manifest {
+				res.set_manifest(&manifest);
+			} else {
+				res.set_manifest(include_str!("default-manifest.xml"));
+			}
 			if let Some(sdk_dir) = &attributes.windows_attributes.sdk_dir {
 				if let Some(sdk_dir_str) = sdk_dir.to_str() {
 					res.set_toolkit_path(sdk_dir_str);

@@ -23,6 +23,7 @@ use std::{
 
 use millennium_utils::{config::WindowConfig, Theme};
 use serde::{Deserialize, Deserializer, Serialize};
+use url::Url;
 
 use crate::{
 	http::{Request as HttpRequest, Response as HttpResponse},
@@ -247,7 +248,10 @@ pub struct PendingWindow<T: UserEvent, R: Runtime<T>> {
 	pub menu_ids: Arc<Mutex<HashMap<MenuHash, MenuId>>>,
 
 	/// A HashMap mapping JS event names with associated listener ids.
-	pub js_event_listeners: Arc<Mutex<HashMap<JsEventListenerKey, HashSet<u64>>>>
+	pub js_event_listeners: Arc<Mutex<HashMap<JsEventListenerKey, HashSet<u64>>>>,
+
+	/// A handler to decide if an incoming URL is allowed to navigate.
+	pub navigation_handler: Option<Box<dyn Fn(Url) -> bool + Send>>
 }
 
 pub fn is_label_valid(label: &str) -> bool {
@@ -283,7 +287,8 @@ impl<T: UserEvent, R: Runtime<T>> PendingWindow<T, R> {
 				ipc_handler: None,
 				url: "millennium://localhost".to_string(),
 				menu_ids: Arc::new(Mutex::new(menu_ids)),
-				js_event_listeners: Default::default()
+				js_event_listeners: Default::default(),
+				navigation_handler: Default::default()
 			})
 		}
 	}
@@ -308,7 +313,8 @@ impl<T: UserEvent, R: Runtime<T>> PendingWindow<T, R> {
 				ipc_handler: None,
 				url: "millennium://localhost".to_string(),
 				menu_ids: Arc::new(Mutex::new(menu_ids)),
-				js_event_listeners: Default::default()
+				js_event_listeners: Default::default(),
+				navigation_handler: Default::default()
 			})
 		}
 	}

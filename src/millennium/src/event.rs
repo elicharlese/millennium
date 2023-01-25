@@ -313,10 +313,8 @@ pub fn listen_js(listeners_object_name: String, event: String, event_id: u64, wi
 				windowLabel: {window_label},
 				handler: {handler}
 			}};
-			if ({event} == 'millennium://window-created')
-				eventListeners.splice(eventListeners.length - 1, 0, listener)
-			else
-				eventListeners.push(listener);
+
+			eventListeners.push(listener);
 		}})();",
 		listeners = listeners_object_name,
 		event = event,

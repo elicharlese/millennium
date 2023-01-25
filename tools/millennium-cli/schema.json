@@ -106,6 +106,7 @@
             "print": false,
             "requestUserAttention": false,
             "setAlwaysOnTop": false,
+            "setContentProtected": false,
             "setCursorGrab": false,
             "setCursorIcon": false,
             "setCursorPosition": false,
@@ -388,6 +389,7 @@
             "print": false,
             "requestUserAttention": false,
             "setAlwaysOnTop": false,
+            "setContentProtected": false,
             "setCursorGrab": false,
             "setCursorIcon": false,
             "setCursorPosition": false,
@@ -1502,6 +1504,7 @@
               "print": false,
               "requestUserAttention": false,
               "setAlwaysOnTop": false,
+              "setContentProtected": false,
               "setCursorGrab": false,
               "setCursorIcon": false,
               "setCursorPosition": false,
@@ -1966,7 +1969,7 @@
       "description": "Defines the `shell > open` api scope.",
       "anyOf": [
         {
-          "description": "If the shell open API should be enabled.\n\nIf enabled, the default validation regex (`^https?://`) is used.",
+          "description": "If the shell open API should be enabled.\n\nIf enabled, the default validation regex (`^((mailto:\\w+)|(tel:\\w+)|(https?://\\w+)).+`) is used.",
           "type": "boolean"
         },
         {
@@ -2288,6 +2291,11 @@
           "default": false,
           "type": "boolean"
         },
+        "setContentProtected": {
+          "description": "Allows preventing the window contents from being captured by other apps.",
+          "default": false,
+          "type": "boolean"
+        },
         "setCursorGrab": {
           "description": "Allows grabbing the cursor.",
           "default": false,
@@ -2400,6 +2408,13 @@
           "default": false,
           "type": "boolean"
         },
+        "additionalBrowserArgs": {
+          "description": "Defines additional WebView2 arguments on Windows. By default, Millennium passes `--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection`. Setting this will overwrite the default arguments, so you must also provide the disabled features if you wish.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "alwaysOnTop": {
           "description": "Whether the window should always be on top of other windows.",
           "default": false,
@@ -2407,6 +2422,11 @@
         },
         "center": {
           "description": "Whether or not the window starts centered or not.",
+          "default": false,
+          "type": "boolean"
+        },
+        "contentProtected": {
+          "description": "Prevents the window contents from being captured by other apps.",
           "default": false,
           "type": "boolean"
         },

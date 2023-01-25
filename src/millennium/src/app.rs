@@ -58,7 +58,7 @@ use crate::{
 	scope::FsScope,
 	sealed::{ManagerBase, RuntimeOrDispatch},
 	utils::{assets::Assets, config::Config, resources::resource_relpath, Env},
-	Context, EventLoopMessage, Invoke, InvokeError, InvokeResponse, Manager, Runtime, Scopes, StateManager, Theme, Window
+	Context, DeviceEventFilter, EventLoopMessage, Invoke, InvokeError, InvokeResponse, Manager, Runtime, Scopes, StateManager, Theme, Window
 };
 
 pub(crate) type GlobalMenuEventListener<R> = Box<dyn Fn(WindowMenuEvent<R>) + Send + Sync>;
@@ -734,6 +734,29 @@ impl<R: Runtime> App<R> {
 		self.runtime.as_mut().unwrap().set_activation_policy(activation_policy);
 	}
 
+	/// Change the device event filter mode.
+	///
+	/// Since the DeviceEvent capture can lead to high CPU usage for unfocused windows, Millennium Core
+	/// will ignore them by default for unfocused windows on Windows. This method allows changing
+	/// the filter to explicitly capture them again.
+	///
+	/// ## Platform-specific
+	///
+	/// - **Linux / macOS / iOS / Android**: Unsupported.
+	///
+	/// # Examples
+	/// ```no_run
+	/// let mut app = millennium::Builder::default()
+	/// 	// on an actual app, remove the string argument
+	/// 	.build(millennium::generate_context!("test/fixture/Millennium.toml"))
+	/// 	.expect("error while building Millennium application");
+	/// app.set_device_event_filter(millennium::DeviceEventFilter::Always);
+	/// app.run(|_app_handle, _event| {});
+	/// ```
+	pub fn set_device_event_filter(&mut self, filter: DeviceEventFilter) {
+		self.runtime.as_mut().unwrap().set_device_event_filter(filter);
+	}
+
 	/// Gets the argument matches of the CLI definition configured in the Millennium config file.
 	///
 	/// # Examples
@@ -916,7 +939,10 @@ pub struct Builder<R: Runtime> {
 
 	/// The updater configuration.
 	#[cfg(updater)]
-	updater_settings: UpdaterSettings
+	updater_settings: UpdaterSettings,
+
+	/// The device event filter.
+	device_event_filter: DeviceEventFilter
 }
 
 impl<R: Runtime> Builder<R> {
@@ -944,7 +970,8 @@ impl<R: Runtime> Builder<R> {
 			#[cfg(all(desktop, feature = "system-tray"))]
 			system_tray_event_listeners: Vec::new(),
 			#[cfg(updater)]
-			updater_settings: Default::default()
+			updater_settings: Default::default(),
+			device_event_filter: Default::default()
 		}
 	}
 
@@ -1219,6 +1246,20 @@ impl<R: Runtime> Builder<R> {
 		self
 	}
 
+	/// Enable or disable the default menu on macOS. Enabled by default.
+	///
+	/// # Examples
+	/// ```
+	/// use millennium::{CustomMenuItem, Menu, MenuEntry, MenuItem, Submenu};
+	///
+	/// millennium::Builder::default().enable_macos_default_menu(false);
+	/// ```
+	#[must_use]
+	pub fn enable_macos_default_menu(mut self, enable: bool) -> Self {
+		self.enable_macos_default_menu = enable;
+		self
+	}
+
 	/// Registers a menu event handler for all windows.
 	///
 	/// # Examples
@@ -1357,6 +1398,25 @@ impl<R: Runtime> Builder<R> {
 		self
 	}
 
+	/// Change the device event filter mode.
+	///
+	/// Since the DeviceEvent capture can lead to high CPU usage for unfocused windows, Millennium Core
+	/// will ignore them by default for unfocused windows on Windows. This method allows changing
+	/// the filter to explicitly capture them again.
+	///
+	/// ## Platform-specific
+	///
+	/// - **Linux / macOS / iOS / Android**: Unsupported.
+	///
+	/// # Examples
+	/// ```no_run
+	/// millennium::Builder::default().device_event_filter(tauri::DeviceEventFilter::Always);
+	/// ```
+	pub fn set_device_event_filter(mut self, filter: DeviceEventFilter) -> Self {
+		self.device_event_filter = filter;
+		self
+	}
+
 	/// Builds the application.
 	#[allow(clippy::type_complexity)]
 	pub fn build<A: Assets>(mut self, context: Context<A>) -> crate::Result<App<R>> {
@@ -1389,6 +1449,9 @@ impl<R: Runtime> Builder<R> {
 			if let Some(user_agent) = &config.user_agent {
 				webview_attributes = webview_attributes.user_agent(&user_agent.to_string());
 			}
+			if let Some(args) = &config.additional_browser_args {
+				webview_attributes = webview_attributes.additional_browser_args(&args.to_string());
+			}
 			if !config.file_drop_enabled {
 				webview_attributes = webview_attributes.disable_file_drop_handler();
 			}
@@ -1397,9 +1460,11 @@ impl<R: Runtime> Builder<R> {
 		}
 
 		#[cfg(any(windows, target_os = "linux"))]
-		let runtime = if self.runtime_any_thread { R::new_any_thread()? } else { R::new()? };
+		let mut runtime = if self.runtime_any_thread { R::new_any_thread()? } else { R::new()? };
 		#[cfg(not(any(windows, target_os = "linux")))]
-		let runtime = R::new()?;
+		let mut runtime = R::new()?;
+
+		runtime.set_device_event_filter(self.device_event_filter);
 
 		let runtime_handle = runtime.handle();
 		#[cfg(all(desktop, feature = "global-shortcut"))]

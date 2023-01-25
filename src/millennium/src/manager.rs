@@ -1132,6 +1132,11 @@ impl<R: Runtime> WindowManager<R> {
 			.try_for_each(|window| window.emit_internal(event, source_window_label, payload.clone()))
 	}
 
+	pub fn eval_script_all<S: Into<String>>(&self, script: S) -> crate::Result<()> {
+		let script = script.into();
+		self.windows_lock().values().try_for_each(|window| window.eval(&script))
+	}
+
 	pub fn labels(&self) -> HashSet<String> {
 		self.windows_lock().keys().cloned().collect()
 	}
@@ -1224,7 +1229,7 @@ fn on_window_event<R: Runtime>(window: &Window<R>, manager: &WindowManager<R>, e
 			let windows = windows_map.values();
 			for window in windows {
 				window.eval(&format!(
-					r#"window.__MILLENNIUM_METADATA__.__windows = window.__MILLENNIUM_METADATA__.__windows.filter(w => w.label !== "{label}");"#
+					r#"(function() {{ const metadata = window.__MILLENNIUM_METADATA__; if (metadata != null) {{ __windows = window.__MILLENNIUM_METADATA__.__windows.filter(w => w.label !== "{label}"); }} }})()"#
 				))?;
 			}
 		}

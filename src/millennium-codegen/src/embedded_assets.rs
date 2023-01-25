@@ -21,6 +21,7 @@ use std::{
 	path::{Path, PathBuf}
 };
 
+use base64::Engine;
 #[cfg(feature = "compression")]
 use brotli::enc::backward_references::BrotliEncoderParams;
 use millennium_utils::{
@@ -179,7 +180,8 @@ impl CspHashes {
 				let mut hasher = Sha256::new();
 				hasher.update(&std::fs::read(path).map_err(|error| EmbeddedAssetsError::AssetRead { path: path.to_path_buf(), error })?);
 				let hash = hasher.finalize();
-				self.scripts.push(format!("'sha256-{}'", base64::encode(hash)))
+				self.scripts
+					.push(format!("'sha256-{}'", base64::engine::general_purpose::STANDARD.encode(hash)))
 			}
 		}
 

@@ -539,13 +539,13 @@ impl AboutMetadata {
 		self
 	}
 
-	/// Defines the application version.
+	/// Defines the application's website link.
 	pub fn website(mut self, website: impl Into<String>) -> Self {
 		self.website.replace(website.into());
 		self
 	}
 
-	/// Defines the application version.
+	/// Defines the application's website link label.
 	pub fn website_label(mut self, website_label: impl Into<String>) -> Self {
 		self.website_label.replace(website_label.into());
 		self

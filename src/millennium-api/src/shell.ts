@@ -41,7 +41,7 @@
  * ### Restricting access to the [[open | `open`]] API
  *
  * On the allowlist, `open: true` means that the [[open]] API can be used with any URL,
- * as the argument is validated with the `^https?://` regex.
+ * as the argument is validated with the `^((mailto:\w+)|(tel:\w+)|(https?://\w+)).+` regex.
  * You can change that regex by changing the boolean value to a string, e.g. `open: ^https://github.com/`.
  *
  * ### Restricting access to the [[Command | `Command`]] APIs
@@ -84,6 +84,8 @@
  *
  * @module
  */
+
+import { LiteralUnion } from 'type-fest';
 
 import { invokeMillenniumCommand } from './_internal';
 import { isLinux, isMacOS, isWindows } from './platform';
@@ -377,12 +379,12 @@ type CommandEvent =
  * ```
  *
  * @param path The path or URL to open. This value is matched against the string regex defined under
- * `millennium > allowlist > shell > open` in the Millennium config, which defaults to `^https?://`.
+ * `millennium > allowlist > shell > open` in the Millennium config, which defaults to `^((mailto:\w+)|(tel:\w+)|(https?://\w+)).+`.
  * @param openWith The app to open the file or URL with. Defaults to the system default application for the specified path type.
  */
 export async function open(
 	path: string,
-	openWith?:
+	openWith?: LiteralUnion<
 		| 'firefox'
 		| 'google chrome'
 		| 'chromium'
@@ -393,7 +395,9 @@ export async function open(
 		| 'gio'
 		| 'gnome-open'
 		| 'kde-open'
-		| 'wslview'
+		| 'wslview',
+		string
+	>
 ): Promise<void> {
 	return await invokeMillenniumCommand({
 		__millenniumModule: 'Shell',
