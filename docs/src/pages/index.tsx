@@ -1,19 +1,19 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import Layout from '@theme/Layout';
 import Link from '@docusaurus/Link';
-import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import useBaseUrl from '@docusaurus/useBaseUrl';
-import { ColorModeProvider, useColorMode } from '@docusaurus/theme-common';
-import { ResponsiveBar } from '@nivo/bar';
+import { useColorMode } from '@docusaurus/theme-common';
+// @ts-ignore
+import { ColorModeProvider } from '@docusaurus/theme-common/internal';
 
 function Homepage() {
 	const { colorMode } = useColorMode();
-	return <div id="tailwind z-20">
-		<div className="absolute z-0 top-0 inset-x-0 flex justify-center overflow-hidden pointer-events-none" style={{ userSelect: 'none' }}>
-			<div className="w-[108rem] flex-none flex justify-end">
+	return <div id={`tailwind z-20 ${colorMode}`}>
+		<div className='absolute z-0 top-0 inset-x-0 flex justify-center overflow-hidden pointer-events-none' style={{ userSelect: 'none' }}>
+			<div className='w-[108rem] flex-none flex justify-end'>
 				{colorMode === 'dark'
-					? <img src={useBaseUrl('/img/tailwind-bg-dark.png')} alt="" className="w-[90rem] flex-none max-w-none" />
-					: <img src={useBaseUrl('/img/tailwind-bg-light.png')} alt="" className="w-[71.75rem] flex-none max-w-none" />
+					? <img src={useBaseUrl('/img/tailwind-bg-dark.png')} alt='' className='w-[90rem] flex-none max-w-none' />
+					: <img src={useBaseUrl('/img/tailwind-bg-light.png')} alt='' className='w-[71.75rem] flex-none max-w-none' />
 				}
 			</div>
 		</div>
@@ -30,7 +30,7 @@ function Homepage() {
 									Learn more
 								</Link>
 								<Link href='/docs/main/your-first-app/prerequisites' className='w-fit bg-blue-500 hover:bg-blue-700 m-3 hover:text-blue-300 hover:no-underline shadow-xl text-white font-bold text-2xl py-4 px-8 rounded-full'>
-									Get Started
+									Get started
 								</Link>
 							</div>
 							<pre className='w-fit my-8'>npm init millennium my-app</pre>
@@ -41,62 +41,21 @@ function Homepage() {
 		</div>
 		<div className='py-16 overflow-hidden diagonal-box'>
 			<div className='diagonal-content max-w-2xl mx-auto px-4 md:px-6 lg:px-8 lg:max-w-screen-xl'>
-				<div className='max-w-screen-xl pt-6 md:px-6 lg:px-8'>
+				<div className='max-w-screen-xl pt-6 md:px-6 lg:px-8 flex flex-col'>
 					<div className='max-w-4xl mx-auto text-center'>
 						<h2 className='text-3xl leading-9 font-extrabold md:text-4xl md:leading-10'>Light as a feather</h2>
 						<p className='mt-4 max-w-2xl text-xl leading-7 lg:mx-auto dark:text-gray-400'>
-							Millennium utilizes the webview framework that comes included with operating systems for ultra-lightweight binaries.
+							Millennium utilizes the webview framework that already comes pre-installed with modern operating systems for ultra-lightweight binaries.
+						</p>
+						<p className='mt-4 max-w-2xl text-xl leading-7 lg:mx-auto dark:text-gray-400'>
+							Millennium utilizes the webview framework that already comes pre-installed with modern operating systems for ultra-lightweight binaries.
 						</p>
 					</div>
-					<div className='py-8 w-full mx-auto md:px-6 lg:max-w-screen-lg lg:px-8' style={{ height: '550px', maxWidth: '500px', userSelect: 'none' }}>
-						<ResponsiveBar
-							data={[
-								{ framework: 'NW.js', binary: 223.82 },
-								{ framework: 'Electron', binary: 185.95 },
-								{ framework: 'Millennium', binary: 1.91 },
-							]}
-							keys={[ 'binary' ]}
-							valueFormat={v => `${v} MB`}
-							indexBy='framework'
-							isInteractive={false}
-							borderRadius={6}
-							motionConfig='gentle'
-							margin={{ top: 50, right: 20, bottom: 50, left: 50 }}
-							padding={0.3}
-							valueScale={{ type: 'linear' }}
-							indexScale={{ type: 'band', round: true }}
-							colors={[ '#d45d59', '#6dd678', '#5e9ddb' ]}
-							colorBy='indexValue'
-							labelTextColor={colorMode === 'dark' ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.65)'}
-							theme={{
-								labels: {
-									text: {
-										textShadow: '0px 0px 3px rgba(0,0,0,0.25)',
-										transform: 'translateY(-10px)'
-									}
-								},
-								axis: {
-									ticks: {
-										text: {
-											fill: colorMode === 'dark' ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.65)',
-											fontWeight: '600',
-											fontSize: '14px'
-										}
-									},
-									legend: {
-										text: {
-											fill: colorMode === 'dark' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.6)',
-											fontSize: '13px'
-										}
-									}
-								},
-								grid: {
-									line: {
-										stroke: colorMode === 'dark' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)',
-									}
-								}
-							}}
-						/>
+					<div className='py-8 flex flex-col justify-items-center w-full mx-auto md:px-6 lg:max-w-screen-lg lg:px-8'>
+						<img className='shadow-2xl rounded-2xl' src={useBaseUrl('/img/binary-chart.png')} />
+						<p className='text-med text-center mt-4 dark:text-gray-500 light:text-gray-400'>
+							Comparison of hello world binary size.
+						</p>
 					</div>
 				</div>
 			</div>
@@ -105,10 +64,8 @@ function Homepage() {
 }
 
 export default function Home(): JSX.Element {
-	const { siteConfig } = useDocusaurusContext();
-
 	return (
-		<Layout title={`Hello from ${siteConfig.title}`} description="Millennium is a cross-platform application framework written in Rust. With Millennium, you can create apps with a consistent UI that works across all desktop platforms with HTML, CSS, and JavaScript.">
+		<Layout title='Home' description='Millennium is a cross-platform application framework written in Rust. With Millennium, you can create apps with a consistent UI that works across all desktop platforms with HTML, CSS, and JavaScript.'>
 			<ColorModeProvider>
 				<Homepage />
 			</ColorModeProvider>

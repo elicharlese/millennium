@@ -99,22 +99,33 @@ const config = {
 						label: 'Docs'
 					},
 					{
+						type: 'dropdown',
+						label: 'API',
+						items: [
+							{
+								href: 'https://docs.rs/millennium',
+								label: 'Rust'
+							}
+						],
+						position: 'left'
+					},
+					{
 						to: '/blog',
 						label: 'Blog',
 						position: 'left'
 					},
 
 					{
-						href: 'https://discord.gg/CETPevXFgD',
-						position: 'right',
-						className: 'header-discord-link',
-						alt: 'Discord server'
-					},
-					{
 						href: 'https://github.com/pykeio/millennium',
 						position: 'right',
 						className: 'header-github-link',
 						alt: 'GitHub repository'
+					},
+					{
+						href: 'https://discord.gg/BAkXJ6VjCz',
+						position: 'right',
+						className: 'header-discord-link',
+						alt: 'Discord server'
 					}
 				]
 			},
@@ -147,11 +158,7 @@ const config = {
 							},
 							{
 								label: 'Discord',
-								href: 'https://discord.gg/CETPevXFgD',
-							},
-							{
-								label: 'Twitter',
-								href: 'https://twitter.com/pyke_io',
+								href: 'https://discord.gg/BAkXJ6VjCz',
 							},
 						],
 					},

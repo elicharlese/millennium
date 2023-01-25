@@ -1,4 +1,4 @@
-module.exports = /** @type {import('@types/tailwindcss/tailwind-config').TailwindConfig} */({
+module.exports = /** @type {import('tailwindcss/types/config').Config} */({
 	content: [ './src/**/*.{js,jsx,ts,tsx,mdx,md,html,css}' ],
 	variants: true,
 	corePlugins: {},
