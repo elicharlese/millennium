@@ -20,8 +20,8 @@ use windows::Win32::{
 	Foundation::{self as win32f, HWND, POINTL},
 	System::{
 		Com::{IDataObject, DVASPECT_CONTENT, FORMATETC, TYMED_HGLOBAL},
-		Ole::{IDropTarget, IDropTarget_Impl, DROPEFFECT_COPY, DROPEFFECT_NONE},
-		SystemServices::CF_HDROP
+		Ole::{IDropTarget, IDropTarget_Impl, CF_HDROP, DROPEFFECT, DROPEFFECT_COPY, DROPEFFECT_NONE},
+		SystemServices::MODIFIERKEYS_FLAGS
 	},
 	UI::Shell::{DragFinish, DragQueryFileW, HDROP}
 };
@@ -34,7 +34,7 @@ use crate::{event::Event, window::WindowId as SuperWindowId};
 pub struct FileDropHandler {
 	window: HWND,
 	send_event: Box<dyn Fn(Event<'static, ()>)>,
-	cursor_effect: UnsafeCell<u32>,
+	cursor_effect: UnsafeCell<DROPEFFECT>,
 	hovered_is_valid: UnsafeCell<bool> // If the currently hovered item is not valid there must not be any `HoveredFileCancelled` emitted
 }
 
@@ -43,7 +43,7 @@ impl FileDropHandler {
 		Self {
 			window,
 			send_event,
-			cursor_effect: DROPEFFECT_NONE.0.into(),
+			cursor_effect: DROPEFFECT_NONE.into(),
 			hovered_is_valid: false.into()
 		}
 	}
@@ -53,9 +53,9 @@ impl FileDropHandler {
 		F: Fn(PathBuf)
 	{
 		let drop_format = FORMATETC {
-			cfFormat: CF_HDROP.0 as u16,
+			cfFormat: CF_HDROP.0,
 			ptd: ptr::null_mut(),
-			dwAspect: DVASPECT_CONTENT.0 as u32,
+			dwAspect: DVASPECT_CONTENT.0,
 			lindex: -1,
 			tymed: TYMED_HGLOBAL.0 as u32
 		};
@@ -68,12 +68,12 @@ impl FileDropHandler {
 				// The second parameter (0xFFFFFFFF) instructs the function to return the item
 				// count
 				let mut lpsz_file = [];
-				let item_count = DragQueryFileW(hdrop, 0xFFFFFFFF, &mut lpsz_file);
+				let item_count = DragQueryFileW(hdrop, 0xFFFFFFFF, Some(&mut lpsz_file));
 				for i in 0..item_count {
 					// Get the length of the path string NOT including the terminating null
 					// character. Previously, this was using a fixed size array of MAX_PATH length,
 					// but the Windows API allows longer paths under certain circumstances.
-					let character_count = DragQueryFileW(hdrop, i, &mut lpsz_file) as usize;
+					let character_count = DragQueryFileW(hdrop, i, Some(&mut lpsz_file)) as usize;
 					let str_len = character_count + 1;
 
 					// Fill path_buf with the null-terminated file name
@@ -106,7 +106,13 @@ impl FileDropHandler {
 
 #[allow(non_snake_case)]
 impl IDropTarget_Impl for FileDropHandler {
-	fn DragEnter(&self, pDataObj: &Option<IDataObject>, _grfKeyState: u32, _pt: &POINTL, pdwEffect: *mut u32) -> windows::core::Result<()> {
+	fn DragEnter(
+		&self,
+		pDataObj: &Option<IDataObject>,
+		_grfKeyState: MODIFIERKEYS_FLAGS,
+		_pt: &POINTL,
+		pdwEffect: *mut DROPEFFECT
+	) -> windows::core::Result<()> {
 		use crate::event::WindowEvent::HoveredFile;
 		unsafe {
 			let hdrop = Self::iterate_filenames(pDataObj, |filename| {
@@ -118,13 +124,13 @@ impl IDropTarget_Impl for FileDropHandler {
 			let hovered_is_valid = hdrop.is_some();
 			let cursor_effect = if hovered_is_valid { DROPEFFECT_COPY } else { DROPEFFECT_NONE };
 			*self.hovered_is_valid.get() = hovered_is_valid;
-			*self.cursor_effect.get() = cursor_effect.0;
-			*pdwEffect = cursor_effect.0;
+			*self.cursor_effect.get() = cursor_effect;
+			*pdwEffect = cursor_effect;
 		}
 		Ok(())
 	}
 
-	fn DragOver(&self, _grfKeyState: u32, _pt: &POINTL, pdwEffect: *mut u32) -> windows::core::Result<()> {
+	fn DragOver(&self, _grfKeyState: MODIFIERKEYS_FLAGS, _pt: &POINTL, pdwEffect: *mut DROPEFFECT) -> windows::core::Result<()> {
 		unsafe {
 			*pdwEffect = *self.cursor_effect.get();
 		}
@@ -142,7 +148,7 @@ impl IDropTarget_Impl for FileDropHandler {
 		Ok(())
 	}
 
-	fn Drop(&self, pDataObj: &Option<IDataObject>, _grfKeyState: u32, _pt: &POINTL, _pdwEffect: *mut u32) -> windows::core::Result<()> {
+	fn Drop(&self, pDataObj: &Option<IDataObject>, _grfKeyState: MODIFIERKEYS_FLAGS, _pt: &POINTL, _pdwEffect: *mut DROPEFFECT) -> windows::core::Result<()> {
 		use crate::event::WindowEvent::DroppedFile;
 		unsafe {
 			let hdrop = Self::iterate_filenames(pDataObj, |filename| {

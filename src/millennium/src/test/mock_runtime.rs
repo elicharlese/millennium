@@ -563,6 +563,10 @@ impl TrayHandle for MockTrayHandler {
 		Ok(())
 	}
 
+	fn set_tooltip(&self, tooltip: &str) -> Result<()> {
+		Ok(())
+	}
+
 	fn destroy(&self) -> Result<()> {
 		Ok(())
 	}

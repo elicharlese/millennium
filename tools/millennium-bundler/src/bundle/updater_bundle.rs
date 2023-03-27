@@ -29,8 +29,6 @@ use super::common;
 use super::linux::appimage;
 #[cfg(target_os = "macos")]
 use super::macos::app;
-#[cfg(target_os = "windows")]
-use super::windows::msi;
 use crate::{bundle::Bundle, Settings};
 
 // Build update
@@ -124,50 +122,76 @@ fn bundle_update(settings: &Settings, bundles: &[Bundle]) -> crate::Result<Vec<P
 // No assets are replaced
 #[cfg(target_os = "windows")]
 fn bundle_update(settings: &Settings, bundles: &[Bundle]) -> crate::Result<Vec<PathBuf>> {
-	use crate::bundle::settings::WebviewInstallMode;
+	use crate::{
+		bundle::{
+			settings::WebviewInstallMode,
+			windows::{msi, nsis}
+		},
+		PackageType
+	};
 
-	// find our .msi or rebuild
-	let bundle_paths =
-		if matches!(settings.windows().webview_install_mode, WebviewInstallMode::OfflineInstaller { .. } | WebviewInstallMode::EmbedBootstrapper { .. }) {
-			msi::bundle_project(settings, true)?
+	// find our installers or rebuild
+	let mut bundle_paths = Vec::new();
+	let mut rebuild_installers = || -> crate::Result<()> {
+		for bundle in bundles {
+			match bundle.package_type {
+				PackageType::WindowsMsi => bundle_paths.extend(msi::bundle_project(settings, true)?),
+				PackageType::Nsis => bundle_paths.extend(nsis::bundle_project(settings, true)?),
+				_ => {}
+			};
+		}
+		Ok(())
+	};
+
+	if matches!(settings.windows().webview_install_mode, WebviewInstallMode::OfflineInstaller { .. } | WebviewInstallMode::EmbedBootstrapper { .. }) {
+		rebuild_installers()?;
+	} else {
+		let paths = bundles
+			.iter()
+			.filter(|bundle| matches!(bundle.package_type, PackageType::WindowsMsi | PackageType::Nsis))
+			.flat_map(|bundle| bundle.bundle_paths.clone())
+			.collect::<Vec<_>>();
+
+		// we expect our installer files to be in `bundle_paths`
+		if paths.is_empty() {
+			rebuild_installers()?;
 		} else {
-			let paths = bundles
-				.iter()
-				.find(|bundle| bundle.package_type == crate::PackageType::WindowsMsi)
-				.map(|bundle| bundle.bundle_paths.clone())
-				.unwrap_or_default();
+			bundle_paths.extend(paths);
+		}
+	};
 
-			// we expect our .msi files to be in `bundle_paths`
-			if paths.is_empty() { msi::bundle_project(settings, false)? } else { paths }
-		};
-
-	let mut msi_archived_paths = Vec::new();
-
+	let mut installers_archived_paths = Vec::new();
 	for source_path in bundle_paths {
 		// add .zip to our path
-		let msi_archived_path = source_path
-			.components()
-			.fold(PathBuf::new(), |mut p, c| {
-				if let std::path::Component::Normal(name) = c {
-					if name == msi::MSI_UPDATER_FOLDER_NAME {
-						p.push(msi::MSI_FOLDER_NAME);
-						return p;
+		let (archived_path, bundle_name) = source_path.components().fold((PathBuf::new(), String::new()), |(mut p, mut b), c| {
+			if let std::path::Component::Normal(name) = c {
+				if let Some(name) = name.to_str() {
+					// installers bundled for updater should be put in a directory named `${bundle_name}-updater`
+					if name == msi::UPDATER_OUTPUT_FOLDER_NAME || name == nsis::UPDATER_OUTPUT_FOLDER_NAME {
+						b = name.strip_suffix("-updater").unwrap().to_string();
+						p.push(&b);
+						return (p, b);
+					}
+
+					if name == msi::OUTPUT_FOLDER_NAME || name == nsis::OUTPUT_FOLDER_NAME {
+						b = name.to_string();
 					}
 				}
-				p.push(c);
-				p
-			})
-			.with_extension("msi.zip");
+			}
+			p.push(c);
+			(p, b)
+		});
+		let archived_path = archived_path.with_extension(format!("{}.zip", bundle_name));
 
-		info!(action = "Bundling"; "{}", msi_archived_path.display());
+		info!(action = "Bundling"; "{}", archived_path.display());
 
 		// Create our gzip file
-		create_zip(&source_path, &msi_archived_path).with_context(|| "Failed to zip update MSI")?;
+		create_zip(&source_path, &archived_path).with_context(|| "Failed to zip update bundle")?;
 
-		msi_archived_paths.push(msi_archived_path);
+		installers_archived_paths.push(archived_path);
 	}
 
-	Ok(msi_archived_paths)
+	Ok(installers_archived_paths)
 }
 
 #[cfg(target_os = "windows")]

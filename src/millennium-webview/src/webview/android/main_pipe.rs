@@ -26,7 +26,7 @@ use millennium_core::platform::android::ndk_glue::{
 };
 use once_cell::sync::Lazy;
 
-use super::{create_headers_map, find_my_class};
+use super::{create_headers_map, find_class};
 use crate::{webview::Rgba, Error};
 
 static CHANNEL: Lazy<(Sender<WebViewMessage>, Receiver<WebViewMessage>)> = Lazy::new(|| bounded(8));
@@ -44,7 +44,7 @@ pub struct MainPipe<'a> {
 }
 
 impl MainPipe<'_> {
-	pub fn send(message: WebViewMessage) {
+	pub(crate) fn send(message: WebViewMessage) {
 		let size = std::mem::size_of::<bool>();
 		if let Ok(()) = CHANNEL.0.send(message) {
 			unsafe { libc::write(MAIN_PIPE[1], &true as *const _ as *const _, size) };
@@ -62,11 +62,12 @@ impl MainPipe<'_> {
 						devtools,
 						transparent,
 						background_color,
-						headers
+						headers,
+						on_webview_created
 					} = attrs;
 
 					// Create webview
-					let rust_webview_class = find_my_class(env, activity, format!("{}/RustWebView", PACKAGE.get().unwrap()))?;
+					let rust_webview_class = find_class(env, activity, format!("{}/RustWebView", PACKAGE.get().unwrap()))?;
 					let webview = env.new_object(rust_webview_class, "(Landroid/content/Context;)V", &[activity.into()])?;
 
 					// Enable Javascript
@@ -91,21 +92,28 @@ impl MainPipe<'_> {
 					}
 
 					// Create and set webview client
-					let rust_webview_client_class = find_my_class(env, activity, format!("{}/RustWebViewClient", PACKAGE.get().unwrap()))?;
-					let webview_client = env.new_object(rust_webview_client_class, "()V", &[])?;
+					let rust_webview_client_class = find_class(env, activity, format!("{}/RustWebViewClient", PACKAGE.get().unwrap()))?;
+					let webview_client = env.new_object(rust_webview_client_class, "(Landroid/content/Context;)V", &[activity.into()])?;
 					env.call_method(webview, "setWebViewClient", "(Landroid/webkit/WebViewClient;)V", &[webview_client.into()])?;
 
 					// set webchrome client
 					env.call_method(webview, "setWebChromeClient", "(Landroid/webkit/WebChromeClient;)V", &[self.webchrome_client.as_obj().into()])?;
 
 					// Add javascript interface (IPC)
-					let ipc_class = find_my_class(env, activity, format!("{}/Ipc", PACKAGE.get().unwrap()))?;
+					let ipc_class = find_class(env, activity, format!("{}/Ipc", PACKAGE.get().unwrap()))?;
 					let ipc = env.new_object(ipc_class, "()V", &[])?;
 					let ipc_str = env.new_string("ipc")?;
 					env.call_method(webview, "addJavascriptInterface", "(Ljava/lang/Object;Ljava/lang/String;)V", &[ipc.into(), ipc_str.into()])?;
 
 					// Set content view
 					env.call_method(activity, "setContentView", "(Landroid/view/View;)V", &[webview.into()])?;
+
+					if let Some(on_webview_created) = on_webview_created {
+						if let Err(e) = on_webview_created(super::Context { env, activity, webview }) {
+							log::warn!("failed to run webview created hook: {e}");
+						}
+					}
+
 					let webview = env.new_global_ref(webview)?;
 					self.webview = Some(webview);
 				}
@@ -150,8 +158,10 @@ impl MainPipe<'_> {
 					}
 				}
 				WebViewMessage::Jni(f) => {
-					if let Some(webview) = &self.webview {
-						f(env, activity, webview.as_obj());
+					if let Some(w) = &self.webview {
+						f(env, activity, w.as_obj());
+					} else {
+						f(env, activity, JObject::null());
 					}
 				}
 				WebViewMessage::LoadUrl(url, headers) => {
@@ -189,7 +199,7 @@ fn set_background_color<'a>(env: JNIEnv<'a>, webview: JObject<'a>, background_co
 	Ok(())
 }
 
-pub enum WebViewMessage {
+pub(crate) enum WebViewMessage {
 	CreateWebView(CreateWebViewAttributes),
 	Eval(String),
 	SetBackgroundColor(Rgba),
@@ -200,10 +210,11 @@ pub enum WebViewMessage {
 }
 
 #[derive(Debug)]
-pub struct CreateWebViewAttributes {
+pub(crate) struct CreateWebViewAttributes {
 	pub url: String,
 	pub devtools: bool,
 	pub transparent: bool,
 	pub background_color: Option<Rgba>,
-	pub headers: Option<http::HeaderMap>
+	pub headers: Option<http::HeaderMap>,
+	pub on_webview_created: Option<Box<dyn Fn(super::Context) -> std::result::Result<(), tao::platform::android::ndk_glue::jni::errors::Error> + Send>>
 }

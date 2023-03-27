@@ -15,4 +15,6 @@
 // limitations under the License.
 
 pub mod msi;
+pub mod nsis;
 pub mod sign;
+mod util;

@@ -166,7 +166,7 @@ pub enum Cmd {
 		#[serde(rename = "type")]
 		level: Option<MessageDialogType>,
 		#[serde(rename = "buttonLabel")]
-		button_label: Option<String>
+		button_label: Option<(String, String)>
 	},
 	#[cmd(dialog_confirm, "dialog > confirm")]
 	ConfirmDialog {
@@ -175,7 +175,7 @@ pub enum Cmd {
 		#[serde(rename = "type")]
 		level: Option<MessageDialogType>,
 		#[serde(rename = "buttonLabel")]
-		button_label: Option<String>
+		button_label: Option<(String, String)>
 	}
 }
 

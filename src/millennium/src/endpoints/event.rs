@@ -30,6 +30,7 @@ use crate::{
 	Manager, Runtime
 };
 
+#[derive(Debug)]
 pub struct EventId(String);
 
 impl<'de> Deserialize<'de> for EventId {
@@ -46,6 +47,7 @@ impl<'de> Deserialize<'de> for EventId {
 	}
 }
 
+#[derive(Debug)]
 pub struct WindowLabel(String);
 
 impl<'de> Deserialize<'de> for WindowLabel {
@@ -119,6 +121,7 @@ impl Cmd {
 		Ok(())
 	}
 
+	#[tracing::instrument(skip(context, payload))]
 	fn emit<R: Runtime>(context: InvokeContext<R>, event: EventId, window_label: Option<WindowLabel>, payload: Option<JsonValue>) -> super::Result<()> {
 		// dispatch the event to Rust listeners
 		context.window.trigger(
@@ -127,8 +130,7 @@ impl Cmd {
 			payload.as_ref().and_then(|p| {
 				serde_json::to_string(&p)
 					.map_err(|e| {
-						#[cfg(debug_assertions)]
-						eprintln!("{e}");
+						tracing::error!("{e}");
 						e
 					})
 					.ok()

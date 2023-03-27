@@ -14,13 +14,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod wix;
-
 use std::{self, path::PathBuf};
 
 use log::warn;
-pub use wix::{MSI_FOLDER_NAME, MSI_UPDATER_FOLDER_NAME};
 
+mod wix;
+pub use self::wix::{OUTPUT_FOLDER_NAME, UPDATER_OUTPUT_FOLDER_NAME};
 use crate::Settings;
 
 const WIX_REQUIRED_FILES: &[&str] = &[

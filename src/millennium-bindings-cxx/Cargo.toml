@@ -17,5 +17,5 @@ exclude = [
 ]
 
 [dependencies]
-regex = "1.5"
+regex = "1.7"
 millennium = { version = "1.0.0-beta.3", path = "../millennium" }

@@ -104,6 +104,16 @@ pub fn wix_settings(config: WixConfig) -> millennium_bundler::WixSettings {
 	}
 }
 
+pub fn nsis_settings(config: NsisConfig) -> millennium_bundler::NsisSettings {
+	millennium_bundler::NsisSettings {
+		license: config.license,
+		header_image: config.header_image,
+		sidebar_image: config.sidebar_image,
+		installer_icon: config.installer_icon,
+		install_mode: config.install_mode
+	}
+}
+
 fn config_handle() -> &'static ConfigHandle {
 	static CONFING_HANDLE: Lazy<ConfigHandle> = Lazy::new(Default::default);
 	&CONFING_HANDLE

@@ -17,36 +17,35 @@
 use std::{
 	collections::{BTreeMap, HashMap},
 	fs::{create_dir_all, read_to_string, remove_dir_all, rename, write, File},
-	io::{Cursor, Read, Write},
+	io::Write,
 	path::{Path, PathBuf},
 	process::Command
 };
 
-use anyhow::{bail, Context};
+use anyhow::Context;
 use handlebars::{to_json, Handlebars};
 use log::info;
 use millennium_utils::{config::WebviewInstallMode, resources::resource_relpath};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use sha2::Digest;
 use uuid::Uuid;
-use zip::ZipArchive;
 
-use super::super::sign::{sign, SignParams};
 use crate::bundle::{
 	common::CommandExt,
 	path_utils::{copy_file, FileOpts},
-	settings::Settings
+	settings::Settings,
+	windows::util::{
+		download, download_and_verify, extract_zip, try_sign, validate_version, HashAlgorithm, WEBVIEW2_BOOTSTRAPPER_URL, WEBVIEW2_X64_INSTALLER_GUID,
+		WEBVIEW2_X86_INSTALLER_GUID
+	}
 };
+
+pub const OUTPUT_FOLDER_NAME: &str = "msi";
+pub const UPDATER_OUTPUT_FOLDER_NAME: &str = "msi-updater";
 
 // URLS for the WIX toolchain.  Can be used for crossplatform compilation.
 pub const WIX_URL: &str = "https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip";
 pub const WIX_SHA256: &str = "2c1888d5d1dba377fc7fa14444cf556963747ff9a0a289a3599cf09da03b9e2e";
-pub const MSI_FOLDER_NAME: &str = "msi";
-pub const MSI_UPDATER_FOLDER_NAME: &str = "msi-updater";
-const WEBVIEW2_BOOTSTRAPPER_URL: &str = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
-const WEBVIEW2_X86_INSTALLER_GUID: &str = "a17bde80-b5ab-47b5-8bbb-1cbe93fc6ec9";
-const WEBVIEW2_X64_INSTALLER_GUID: &str = "aa5fd9b3-dc11-4cbc-8343-a50f57b311e1";
 
 // For Cross Platform Complilation.
 
@@ -185,26 +184,6 @@ fn copy_icon(settings: &Settings, filename: &str, path: &Path) -> crate::Result<
 	Ok(icon_target_path)
 }
 
-fn download(url: &str) -> crate::Result<Vec<u8>> {
-	info!(action = "Downloading"; "{}", url);
-	let response = attohttpc::get(url).send()?;
-	response.bytes().map_err(Into::into)
-}
-
-/// Function used to download Wix and VC_REDIST. Checks SHA256 to verify the download.
-fn download_and_verify(url: &str, hash: &str) -> crate::Result<Vec<u8>> {
-	let data = download(url)?;
-	info!("Validating hash");
-
-	let mut hasher = sha2::Sha256::new();
-	hasher.update(&data);
-
-	let url_hash = hasher.finalize().to_vec();
-	let expected_hash = hex::decode(hash)?;
-
-	if expected_hash == url_hash { Ok(data) } else { Err(crate::Error::HashError) }
-}
-
 /// The app installer output path.
 fn app_installer_output_path(settings: &Settings, language: &str, updater: bool) -> crate::Result<PathBuf> {
 	let arch = match settings.binary_arch() {
@@ -217,34 +196,9 @@ fn app_installer_output_path(settings: &Settings, language: &str, updater: bool)
 
 	Ok(settings.project_out_directory().to_path_buf().join(format!(
 		"bundle/{}/{}.msi",
-		if updater { MSI_UPDATER_FOLDER_NAME } else { MSI_FOLDER_NAME },
+		if updater { UPDATER_OUTPUT_FOLDER_NAME } else { OUTPUT_FOLDER_NAME },
 		package_base_name
 	)))
-}
-
-/// Extracts the zips from Wix and VC_REDIST into a useable path.
-fn extract_zip(data: &[u8], path: &Path) -> crate::Result<()> {
-	let cursor = Cursor::new(data);
-
-	let mut zipa = ZipArchive::new(cursor)?;
-
-	for i in 0..zipa.len() {
-		let mut file = zipa.by_index(i)?;
-		let dest_path = path.join(file.name());
-		let parent = dest_path.parent().expect("Failed to get parent");
-
-		if !parent.exists() {
-			create_dir_all(parent)?;
-		}
-
-		let mut buff: Vec<u8> = Vec::new();
-		file.read_to_end(&mut buff)?;
-		let mut fileout = File::create(dest_path).expect("Failed to open file");
-
-		fileout.write_all(&buff)?;
-	}
-
-	Ok(())
 }
 
 /// Generates the UUID for the Wix template.
@@ -262,7 +216,7 @@ fn generate_guid(key: &[u8]) -> Uuid {
 pub fn get_and_extract_wix(path: &Path) -> crate::Result<()> {
 	info!("Verifying WiX package");
 
-	let data = download_and_verify(WIX_URL, WIX_SHA256)?;
+	let data = download_and_verify(WIX_URL, WIX_SHA256, HashAlgorithm::Sha256)?;
 
 	info!("Extracting WiX");
 
@@ -349,24 +303,6 @@ fn run_light(wix_toolset_path: &Path, build_path: &Path, arguments: Vec<String>,
 //   Ok(())
 // }
 
-fn validate_version(version: &str) -> anyhow::Result<()> {
-	let version = semver::Version::parse(version).context("invalid app version")?;
-	if version.major > 255 {
-		bail!("app version major number cannot be greater than 255");
-	}
-	if version.minor > 255 {
-		bail!("app version minor number cannot be greater than 255");
-	}
-	if version.patch > 65535 {
-		bail!("app version patch number cannot be greater than 65535");
-	}
-	if !(version.pre.is_empty() && version.build.is_empty()) {
-		bail!("app version cannot have build metadata or pre-release identifier");
-	}
-
-	Ok(())
-}
-
 // Entry point for bundling and creating the MSI installer. For now the only supported platform is Windows x64.
 pub fn build_wix_app_installer(settings: &Settings, wix_toolset_path: &Path, updater: bool) -> crate::Result<Vec<PathBuf>> {
 	let arch = match settings.binary_arch() {
@@ -386,29 +322,8 @@ pub fn build_wix_app_installer(settings: &Settings, wix_toolset_path: &Path, upd
 		.find(|bin| bin.main())
 		.ok_or_else(|| anyhow::anyhow!("Failed to get main binary"))?;
 	let app_exe_source = settings.binary_path(main_binary);
-	let try_sign = |file_path: &PathBuf| -> crate::Result<()> {
-		if let Some(certificate_thumbprint) = &settings.windows().certificate_thumbprint {
-			info!(action = "Signing"; "{}", file_path.display());
-			sign(
-				file_path,
-				&SignParams {
-					product_name: settings.product_name().into(),
-					digest_algorithm: settings
-						.windows()
-						.digest_algorithm
-						.as_ref()
-						.map(|algorithm| algorithm.to_string())
-						.unwrap_or_else(|| "sha256".to_string()),
-					certificate_thumbprint: certificate_thumbprint.to_string(),
-					timestamp_url: settings.windows().timestamp_url.as_ref().map(|url| url.to_string()),
-					tsp: settings.windows().tsp
-				}
-			)?;
-		}
-		Ok(())
-	};
 
-	try_sign(&app_exe_source)?;
+	try_sign(&app_exe_source, &settings)?;
 
 	let output_path = settings.project_out_directory().join("wix").join(arch);
 	if output_path.exists() {
@@ -459,10 +374,12 @@ pub fn build_wix_app_installer(settings: &Settings, wix_toolset_path: &Path, upd
 		}
 		WebviewInstallMode::OfflineInstaller { silent: _ } => {
 			let guid = if arch == "x64" { WEBVIEW2_X64_INSTALLER_GUID } else { WEBVIEW2_X86_INSTALLER_GUID };
-			let mut offline_installer_path = dirs_next::cache_dir().unwrap();
-			offline_installer_path.push("millennium");
-			offline_installer_path.push(guid);
-			offline_installer_path.push(arch);
+			let offline_installer_path = dirs_next::cache_dir()
+				.unwrap()
+				.join("millennium")
+				.join("Webview2OfflineInstaller")
+				.join(guid)
+				.join(arch);
 			create_dir_all(&offline_installer_path)?;
 			let webview2_installer_path = offline_installer_path.join("MicrosoftEdgeWebView2RuntimeInstaller.exe");
 			if !webview2_installer_path.exists() {
@@ -727,7 +644,7 @@ pub fn build_wix_app_installer(settings: &Settings, wix_toolset_path: &Path, upd
 
 		run_light(wix_toolset_path, &output_path, arguments, &fragment_extensions, &msi_output_path)?;
 		rename(&msi_output_path, &msi_path)?;
-		try_sign(&msi_path)?;
+		try_sign(&msi_path, &settings)?;
 		output_paths.push(msi_path);
 	}
 

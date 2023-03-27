@@ -426,7 +426,7 @@ impl Accelerator {
 		};
 
 		Some(ACCEL {
-			fVirt: virt_key as u8,
+			fVirt: virt_key,
 			key: raw_key,
 			cmd: menu_id
 		})

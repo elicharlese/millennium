@@ -65,7 +65,8 @@ pub struct SystemTray {
 	pub menu_on_left_click: bool,
 	#[cfg(target_os = "macos")]
 	pub title: Option<String>,
-	pub on_event: Option<Box<TrayEventHandler>>
+	pub on_event: Option<Box<TrayEventHandler>>,
+	pub tooltip: Option<String>
 }
 
 #[cfg(all(desktop, feature = "system-tray"))]
@@ -96,7 +97,8 @@ impl Clone for SystemTray {
 			#[cfg(target_os = "macos")]
 			menu_on_left_click: self.menu_on_left_click,
 			#[cfg(target_os = "macos")]
-			title: self.title.clone()
+			title: self.title.clone(),
+			tooltip: self.tooltip.clone()
 		}
 	}
 }
@@ -114,7 +116,8 @@ impl Default for SystemTray {
 			menu_on_left_click: false,
 			#[cfg(target_os = "macos")]
 			title: None,
-			on_event: None
+			on_event: None,
+			tooltip: None
 		}
 	}
 }
@@ -164,6 +167,17 @@ impl SystemTray {
 	#[must_use]
 	pub fn with_title(mut self, title: &str) -> Self {
 		self.title = Some(title.to_owned());
+		self
+	}
+
+	/// Sets the tray icon tooltip.
+	///
+	/// ## Platform-specific
+	///
+	/// - **Linux**: Unsupported.
+	#[must_use]
+	pub fn with_tooltip(mut self, tooltip: &str) -> Self {
+		self.tooltip = Some(tooltip.to_owned());
 		self
 	}
 

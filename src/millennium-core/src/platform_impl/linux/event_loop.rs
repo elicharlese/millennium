@@ -90,11 +90,11 @@ impl<T> EventLoopWindowTarget<T> {
 
 	#[inline]
 	pub fn primary_monitor(&self) -> Option<RootMonitorHandle> {
-		let screen = self.display.default_screen();
-		#[allow(deprecated)] // Gtk3 Window only accepts Gdkscreen
-		let number = screen.primary_monitor();
-		let handle = MonitorHandle::new(&self.display, number);
-		Some(RootMonitorHandle { inner: handle })
+		let monitor = self.display.primary_monitor();
+		monitor.and_then(|monitor| {
+			let handle = MonitorHandle { monitor };
+			Some(RootMonitorHandle { inner: handle })
+		})
 	}
 
 	pub fn raw_display_handle(&self) -> RawDisplayHandle {
@@ -119,7 +119,7 @@ impl<T> EventLoopWindowTarget<T> {
 
 	#[inline]
 	pub fn cursor_position(&self) -> Result<PhysicalPosition<f64>, ExternalError> {
-		util::cursor_position()
+		util::cursor_position(self.is_wayland())
 	}
 }
 
@@ -257,9 +257,16 @@ impl<T: 'static> EventLoop<T> {
 						Some(f) => {
 							if let Fullscreen::Borderless(m) = f {
 								if let Some(monitor) = m {
-									let number = monitor.inner.number;
-									let screen = window.display().default_screen();
-									window.fullscreen_on_monitor(&screen, number);
+									let display = window.display();
+									let monitor = monitor.inner;
+									let monitors = display.n_monitors();
+									for i in 0..monitors {
+										let m = display.monitor(i).unwrap();
+										if m == monitor.monitor {
+											let screen = display.default_screen();
+											window.fullscreen_on_monitor(&screen, i);
+										}
+									}
 								} else {
 									window.fullscreen();
 								}
@@ -297,7 +304,7 @@ impl<T: 'static> EventLoop<T> {
 										match cr {
 											CursorIcon::Crosshair => "crosshair",
 											CursorIcon::Hand => "pointer",
-											CursorIcon::Arrow => "crosshair",
+											CursorIcon::Arrow => "arrow",
 											CursorIcon::Move => "move",
 											CursorIcon::Text => "text",
 											CursorIcon::Wait => "wait",
@@ -340,14 +347,14 @@ impl<T: 'static> EventLoop<T> {
 					}
 					WindowRequest::CursorPosition((x, y)) => {
 						if let Some(cursor) = window.display().default_seat().and_then(|seat| seat.pointer()) {
-							if let Some(screen) = window.screen() {
+							if let Some(screen) = GtkWindowExt::screen(&window) {
 								cursor.warp(&screen, x, y);
 							}
 						}
 					}
 					WindowRequest::CursorIgnoreEvents(ignore) => {
 						if ignore {
-							let empty_region = Region::create_rectangle(&RectangleInt { x: 0, y: 0, width: 1, height: 1 });
+							let empty_region = Region::create_rectangle(&RectangleInt::new(0, 0, 1, 1));
 							window.window().unwrap().input_shape_combine_region(&empty_region, 0, 0);
 						} else {
 							window.input_shape_combine_region(None)

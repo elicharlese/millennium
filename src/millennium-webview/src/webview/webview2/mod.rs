@@ -114,7 +114,7 @@ impl InnerWebView {
 					// Get user's system language
 					let lcid = Globalization::GetUserDefaultUILanguage();
 					let mut lang = [0; MAX_LOCALE_NAME as usize];
-					Globalization::LCIDToLocaleName(lcid as u32, &mut lang, Globalization::LOCALE_ALLOW_NEUTRAL_NAMES);
+					Globalization::LCIDToLocaleName(lcid as u32, Some(&mut lang), Globalization::LOCALE_ALLOW_NEUTRAL_NAMES);
 
 					options
 						.SetLanguage(PCWSTR::from_raw(lang.as_ptr()))
@@ -227,10 +227,9 @@ impl InnerWebView {
 			settings
 				.SetIsZoomControlEnabled(attributes.zoom_hotkeys_enabled)
 				.map_err(webview2_com::Error::WindowsError)?;
-			settings.SetAreDevToolsEnabled(false).map_err(webview2_com::Error::WindowsError)?;
-			if attributes.devtools {
-				settings.SetAreDevToolsEnabled(true).map_err(webview2_com::Error::WindowsError)?;
-			}
+			settings
+				.SetAreDevToolsEnabled(attributes.devtools)
+				.map_err(webview2_com::Error::WindowsError)?;
 			if !pl_attrs.browser_accelerator_keys {
 				if let Ok(settings3) = settings.cast::<ICoreWebView2Settings3>() {
 					settings3
@@ -240,7 +239,14 @@ impl InnerWebView {
 			}
 
 			let settings5 = settings.cast::<ICoreWebView2Settings5>()?;
-			let _ = settings5.SetIsPinchZoomEnabled(attributes.zoom_hotkeys_enabled);
+			settings5
+				.SetIsPinchZoomEnabled(attributes.zoom_hotkeys_enabled)
+				.map_err(webview2_com::Error::WindowsError)?;
+
+			let settings6 = settings.cast::<ICoreWebView2Settings6>()?;
+			settings6
+				.SetIsSwipeNavigationEnabled(attributes.swipe_navigation_gestures)
+				.map_err(webview2_com::Error::WindowsError)?;
 
 			let mut rect = RECT::default();
 			win32wm::GetClientRect(hwnd, &mut rect);
@@ -508,7 +514,9 @@ impl InnerWebView {
 									loop {
 										let mut cb_read = 0;
 										let content: IStream = content.cast()?;
-										content.Read(buffer.as_mut_ptr() as *mut _, buffer.len() as u32, &mut cb_read).ok()?;
+										content
+											.Read(buffer.as_mut_ptr() as *mut _, buffer.len() as u32, Some(&mut cb_read))
+											.ok()?;
 
 										if cb_read == 0 {
 											break;
@@ -552,7 +560,7 @@ impl InnerWebView {
 												stream.SetSize(content.len() as u64)?;
 												let mut cb_write = MaybeUninit::uninit();
 												if stream
-													.Write(content.as_ptr() as *const _, content.len() as u32, cb_write.as_mut_ptr())
+													.Write(content.as_ptr() as *const _, content.len() as u32, Some(cb_write.as_mut_ptr()))
 													.is_ok() && cb_write.assume_init() as usize == content.len()
 												{
 													body_sent = Some(stream);
@@ -637,9 +645,10 @@ impl InnerWebView {
 				if let Some(headers) = attributes.headers {
 					load_url_with_headers(&webview, env, &url_string, headers);
 				} else {
-					let url = PCWSTR::from_raw(encode_wide(url_string).as_ptr());
 					unsafe {
-						webview.Navigate(url).map_err(webview2_com::Error::WindowsError)?;
+						webview
+							.Navigate(PCWSTR::from_raw(encode_wide(url_string).as_ptr()))
+							.map_err(webview2_com::Error::WindowsError)?;
 					}
 				}
 			}
@@ -663,14 +672,6 @@ impl InnerWebView {
 						right: client_rect.right - client_rect.left,
 						bottom: client_rect.bottom - client_rect.top
 					});
-
-					if wparam == WPARAM(win32wm::SIZE_MINIMIZED as _) {
-						let _ = (*controller).SetIsVisible(false);
-					}
-
-					if wparam == WPARAM(win32wm::SIZE_RESTORED as _) || wparam == WPARAM(win32wm::SIZE_MAXIMIZED as _) {
-						let _ = (*controller).SetIsVisible(true);
-					}
 				}
 
 				win32wm::WM_SETFOCUS | win32wm::WM_ENTERSIZEMOVE => {
@@ -717,12 +718,20 @@ impl InnerWebView {
 		)
 	}
 
-	fn execute_script(webview: &ICoreWebView2, js: String) -> windows::core::Result<()> {
-		unsafe { webview.ExecuteScript(PCWSTR::from_raw(encode_wide(js).as_ptr()), &ExecuteScriptCompletedHandler::create(Box::new(|_, _| (Ok(()))))) }
+	fn execute_script(webview: &ICoreWebView2, js: String, callback: impl FnOnce(String) + Send + 'static) -> windows::core::Result<()> {
+		unsafe {
+			webview.ExecuteScript(
+				PCWSTR::from_raw(encode_wide(js).as_ptr()),
+				&ExecuteScriptCompletedHandler::create(Box::new(|_, return_str| {
+					callback(return_str);
+					Ok(())
+				}))
+			)
+		}
 	}
 
 	pub fn print(&self) {
-		let _ = self.eval("window.print()");
+		let _ = self.eval("window.print()", None::<Box<dyn FnOnce(String) + Send + 'static>>);
 	}
 
 	pub fn url(&self) -> Url {
@@ -733,8 +742,13 @@ impl InnerWebView {
 		Url::parse(&uri).unwrap()
 	}
 
-	pub fn eval(&self, js: &str) -> Result<()> {
-		Self::execute_script(&self.webview, js.to_string()).map_err(|err| Error::WebView2Error(webview2_com::Error::WindowsError(err)))
+	pub fn eval(&self, js: &str, callback: Option<impl FnOnce(String) + Send + 'static>) -> Result<()> {
+		match callback {
+			Some(callback) => {
+				Self::execute_script(&self.webview, js.to_string(), callback).map_err(|err| Error::WebView2Error(webview2_com::Error::WindowsError(err)))
+			}
+			None => Self::execute_script(&self.webview, js.to_string(), |_| ()).map_err(|err| Error::WebView2Error(webview2_com::Error::WindowsError(err)))
+		}
 	}
 
 	#[cfg(any(debug_assertions, feature = "devtools"))]

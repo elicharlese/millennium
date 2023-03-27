@@ -16,7 +16,7 @@
 
 use std::{
 	collections::{BTreeSet, VecDeque},
-	io, mem, ptr
+	io, mem
 };
 
 use windows::{
@@ -104,7 +104,7 @@ unsafe extern "system" fn monitor_enum_proc(hmonitor: HMONITOR, _hdc: HDC, _plac
 pub fn available_monitors() -> VecDeque<MonitorHandle> {
 	let mut monitors: VecDeque<MonitorHandle> = VecDeque::new();
 	unsafe {
-		EnumDisplayMonitors(HDC::default(), ptr::null_mut(), Some(monitor_enum_proc), LPARAM(&mut monitors as *mut _ as _));
+		EnumDisplayMonitors(HDC::default(), None, Some(monitor_enum_proc), LPARAM(&mut monitors as *mut _ as _));
 	}
 	monitors
 }
@@ -210,8 +210,8 @@ impl MonitorHandle {
 				}
 				i += 1;
 
-				const REQUIRED_FIELDS: u32 = (DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFREQUENCY) as u32;
-				assert!(mode.dmFields & REQUIRED_FIELDS == REQUIRED_FIELDS);
+				let required_fields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFREQUENCY;
+				assert!(mode.dmFields & required_fields == required_fields);
 
 				modes.insert(RootVideoMode {
 					video_mode: VideoMode {

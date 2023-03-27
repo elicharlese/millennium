@@ -188,6 +188,6 @@ fn is_high_contrast() -> bool {
 		lpszDefaultScheme: PSTR::null()
 	};
 
-	let ok = unsafe { SystemParametersInfoA(SPI_GETHIGHCONTRAST, std::mem::size_of_val(&hc) as _, &mut hc as *mut _ as _, Default::default()) };
+	let ok = unsafe { SystemParametersInfoA(SPI_GETHIGHCONTRAST, std::mem::size_of_val(&hc) as _, Some(&mut hc as *mut _ as _), Default::default()) };
 	ok.as_bool() && (HCF_HIGHCONTRASTON & hc.dwFlags.0) != 0
 }

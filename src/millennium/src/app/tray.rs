@@ -23,7 +23,6 @@ use std::{
 
 use millennium_macros::default_runtime;
 use millennium_runtime::TrayId;
-use millennium_utils::debug_eprintln;
 use rand::distributions::{Alphanumeric, DistString};
 
 pub use crate::{
@@ -73,7 +72,8 @@ pub struct SystemTray {
 	#[cfg(target_os = "macos")]
 	icon_as_template_set: bool,
 	#[cfg(target_os = "macos")]
-	title: Option<String>
+	title: Option<String>,
+	tooltip: Option<String>
 }
 
 impl fmt::Debug for SystemTray {
@@ -105,7 +105,8 @@ impl Default for SystemTray {
 			#[cfg(target_os = "macos")]
 			menu_on_left_click_set: false,
 			#[cfg(target_os = "macos")]
-			title: None
+			title: None,
+			tooltip: None
 		}
 	}
 }
@@ -165,6 +166,7 @@ impl SystemTray {
 	/// });
 	/// ```
 	#[must_use]
+	#[tracing::instrument(skip_all)]
 	pub fn with_icon<I: TryInto<millennium_runtime::Icon>>(mut self, icon: I) -> Self
 	where
 		I::Error: std::error::Error
@@ -174,7 +176,7 @@ impl SystemTray {
 				self.icon.replace(icon);
 			}
 			Err(e) => {
-				debug_eprintln!("Failed to load tray icon: {}", e);
+				tracing::warn!("Failed to load tray icon: {}", e);
 			}
 		}
 		self
@@ -254,6 +256,27 @@ impl SystemTray {
 	#[must_use]
 	pub fn with_title(mut self, title: &str) -> Self {
 		self.title = Some(title.to_owned());
+		self
+	}
+
+	/// Sets the tray icon tooltip.
+	///
+	/// ## Platform-specific
+	///
+	/// - **Linux**: Unsupported
+	///
+	/// # Examples
+	///
+	/// ```
+	/// use millennium::SystemTray;
+	/// millennium::Builder::default().setup(|app| {
+	/// 	let tray_handle = SystemTray::new().with_tooltip("My App").build(app)?;
+	/// 	Ok(())
+	/// });
+	/// ```
+	#[must_use]
+	pub fn with_tooltip(mut self, tooltip: &str) -> Self {
+		self.tooltip = Some(tooltip.to_owned());
 		self
 	}
 
@@ -384,6 +407,10 @@ impl SystemTray {
 			if let Some(title) = self.title {
 				runtime_tray = runtime_tray.with_title(&title);
 			}
+		}
+
+		if let Some(tooltip) = self.tooltip {
+			runtime_tray = runtime_tray.with_tooltip(&tooltip);
 		}
 
 		let id = runtime_tray.id;
@@ -565,6 +592,15 @@ impl<R: Runtime> SystemTrayHandle<R> {
 	#[cfg(target_os = "macos")]
 	pub fn set_title(&self, title: &str) -> crate::Result<()> {
 		self.inner.set_title(title).map_err(Into::into)
+	}
+
+	/// Set the tooltip for this tray icon.
+	///
+	/// ## Platform-specific
+	///
+	/// - **Linux**: Unsupported
+	pub fn set_tooltip(&self, tooltip: &str) -> crate::Result<()> {
+		self.inner.set_tooltip(tooltip).map_err(Into::into)
 	}
 
 	/// Destroys this system tray.

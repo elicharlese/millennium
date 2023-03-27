@@ -23,8 +23,6 @@ use std::{
 };
 
 use millennium_macros::default_runtime;
-#[cfg(protocol_asset)]
-use millennium_utils::debug_eprintln;
 #[cfg(feature = "isolation")]
 use millennium_utils::pattern::isolation::RawIsolationPayload;
 use millennium_utils::{
@@ -85,6 +83,7 @@ struct CspHashStrings {
 /// Sets the CSP value to the asset HTML if needed (on Linux).
 /// Returns the CSP string for access on the response header (on Windows and
 /// macOS).
+#[tracing::instrument(skip(assets, manager, csp))]
 fn set_csp<R: Runtime>(asset: &mut String, assets: Arc<dyn Assets>, asset_path: &AssetKey, manager: &WindowManager<R>, csp: Csp) -> String {
 	let mut csp = csp.into();
 	let hash_strings = assets.csp_hashes(asset_path).fold(CspHashStrings::default(), |mut acc, hash| {
@@ -96,8 +95,7 @@ fn set_csp<R: Runtime>(asset: &mut String, assets: Arc<dyn Assets>, asset_path: 
 				acc.style.push(hash.into());
 			}
 			_csp_hash => {
-				#[cfg(debug_assertions)]
-				eprintln!("Unknown CspHash variant encountered: {_csp_hash:?}")
+				tracing::warn!("Unknown CspHash variant encountered: {_csp_hash:?}");
 			}
 		}
 
@@ -359,6 +357,7 @@ impl<R: Runtime> WindowManager<R> {
 		}
 	}
 
+	#[tracing::instrument(skip_all)]
 	fn prepare_pending_window(
 		&self,
 		mut pending: PendingWindow<EventLoopMessage, R>,
@@ -458,14 +457,12 @@ impl<R: Runtime> WindowManager<R> {
 				let path = percent_encoding::percent_decode(path.as_bytes()).decode_utf8_lossy().to_string();
 
 				if let Err(e) = SafePathBuf::new(path.clone().into()) {
-					#[cfg(debug_assertions)]
-					eprintln!("asset protocol path \"{path}\" is not valid: {e}");
+					tracing::warn!(err = e, "asset protocol path \"{path}\" is not valid");
 					return HttpResponseBuilder::new().status(403).body(Vec::new());
 				}
 
 				if !asset_scope.is_allowed(&path) {
-					#[cfg(debug_assertions)]
-					eprintln!("asset protocol not configured to allow the path: {path}");
+					tracing::warn!("asset protocol not configured to allow the path: {path}");
 					return HttpResponseBuilder::new().status(403).body(Vec::new());
 				}
 
@@ -491,7 +488,7 @@ impl<R: Runtime> WindowManager<R> {
 						let mut file = match tokio::fs::File::open(path_.clone()).await {
 							Ok(file) => file,
 							Err(e) => {
-								debug_eprintln!("Failed to open asset: {e}");
+								tracing::error!(err = e.to_string(), "Failed to open asset");
 								data.status_code = 404;
 								return data;
 							}
@@ -504,7 +501,7 @@ impl<R: Runtime> WindowManager<R> {
 								len
 							}
 							Err(e) => {
-								debug_eprintln!("Failed to read asset metadata: {e}");
+								tracing::error!(err = e.to_string(), "Failed to read asset metadata");
 								data.file.replace(file);
 								data.status_code = 404;
 								return data;
@@ -520,8 +517,8 @@ impl<R: Runtime> WindowManager<R> {
 							file_size
 						) {
 							Ok(r) => r,
-							Err(e) => {
-								debug_eprintln!("Failed to parse range {range}: {e:?}");
+							Err(_) => {
+								tracing::error!("Failed to parse range {range}");
 								data.file.replace(file);
 								data.status_code = 400;
 								return data;
@@ -552,7 +549,7 @@ impl<R: Runtime> WindowManager<R> {
 								.insert("Content-Range", format!("bytes {}-{}/{}", range.start, last_byte, file_size));
 
 							if let Err(e) = file.seek(std::io::SeekFrom::Start(range.start)).await {
-								debug_eprintln!("Failed to seek file to {}: {e}", range.start);
+								tracing::error!(err = e.to_string(), "Failed to seek file to {}", range.start);
 								data.file.replace(file);
 								data.status_code = 422;
 								return data;
@@ -564,7 +561,7 @@ impl<R: Runtime> WindowManager<R> {
 							data.file.replace(file);
 
 							if let Err(e) = r {
-								debug_eprintln!("Failed read file: {e}");
+								tracing::error!(err = e.to_string(), "Failed read file");
 								data.status_code = 422;
 								return data;
 							}
@@ -590,7 +587,7 @@ impl<R: Runtime> WindowManager<R> {
 							let (status, bytes) = crate::async_runtime::safe_block_on(async move {
 								let mut status = None;
 								if let Err(e) = file.rewind().await {
-									debug_eprintln!("Failed to rewind file: {}", e);
+									tracing::error!(err = e.to_string(), "Failed to rewind file");
 									status.replace(422);
 									(status, Vec::with_capacity(0))
 								} else {
@@ -598,7 +595,7 @@ impl<R: Runtime> WindowManager<R> {
 									let limit = std::cmp::min(metadata.len(), 8192) as usize + 1;
 									let mut bytes = Vec::with_capacity(limit);
 									if let Err(e) = file.take(8192).read_to_end(&mut bytes).await {
-										debug_eprintln!("Failed read file: {}", e);
+										tracing::error!(err = e.to_string(), "Failed read file");
 										status.replace(422);
 									}
 									(status, bytes)
@@ -620,8 +617,7 @@ impl<R: Runtime> WindowManager<R> {
 							response.mimetype(&mime_type).body(data)
 						}
 						Err(e) => {
-							#[cfg(debug_assertions)]
-							eprintln!("Failed to read file: {e}");
+							tracing::error!(err = e.to_string(), "Failed to read file");
 							response.status(404).body(Vec::new())
 						}
 					}
@@ -687,6 +683,7 @@ impl<R: Runtime> WindowManager<R> {
 		})
 	}
 
+	#[tracing::instrument]
 	pub fn get_asset(&self, mut path: String) -> Result<Asset, Box<dyn std::error::Error>> {
 		let assets = &self.inner.assets;
 		if path.ends_with('/') {
@@ -706,24 +703,21 @@ impl<R: Runtime> WindowManager<R> {
 		let asset_response = assets
 			.get(&path.as_str().into())
 			.or_else(|| {
-				#[cfg(debug_assertions)]
-				eprintln!("Asset `{path}` not found; fallback to {path}.html");
+				tracing::warn!("Asset `{path}` not found; fallback to {path}.html");
 				let fallback = format!("{}.html", path.as_str()).into();
 				let asset = assets.get(&fallback);
 				asset_path = fallback;
 				asset
 			})
 			.or_else(|| {
-				#[cfg(debug_assertions)]
-				eprintln!("Asset `{path}` not found; fallback to {path}/index.html");
+				tracing::warn!("Asset `{path}` not found; fallback to {path}/index.html");
 				let fallback = format!("{}/index.html", path.as_str()).into();
 				let asset = assets.get(&fallback);
 				asset_path = fallback;
 				asset
 			})
 			.or_else(|| {
-				#[cfg(debug_assertions)]
-				eprintln!("Asset `{path}` not found; fallback to index.html");
+				tracing::warn!("Asset `{path}` not found; fallback to index.html");
 				let fallback = AssetKey::from("index.html");
 				let asset = assets.get(&fallback);
 				asset_path = fallback;
@@ -755,8 +749,7 @@ impl<R: Runtime> WindowManager<R> {
 				})
 			}
 			Err(e) => {
-				#[cfg(debug_assertions)]
-				eprintln!("{e:?}"); // TODO log::error!
+				tracing::error!("{e:?}");
 				Err(Box::new(e))
 			}
 		}

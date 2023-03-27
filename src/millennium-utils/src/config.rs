@@ -89,6 +89,8 @@ pub enum BundleType {
 	AppImage,
 	/// Microsoft Installer bundle (.msi) for Windows.
 	Msi,
+	/// NSIS bundle (.exe) for Windows.
+	Nsis,
 	/// macOS application bundle (.app).
 	App,
 	/// Apple Disk Image (.dmg) for macOS.
@@ -106,6 +108,7 @@ impl Display for BundleType {
 				Self::Deb => "deb",
 				Self::AppImage => "appimage",
 				Self::Msi => "msi",
+				Self::Nsis => "nsis",
 				Self::App => "app",
 				Self::Dmg => "dmg",
 				Self::Updater => "updater"
@@ -133,6 +136,7 @@ impl<'de> Deserialize<'de> for BundleType {
 			"deb" => Ok(Self::Deb),
 			"appimage" => Ok(Self::AppImage),
 			"msi" => Ok(Self::Msi),
+			"nsis" => Ok(Self::Nsis),
 			"app" => Ok(Self::App),
 			"dmg" => Ok(Self::Dmg),
 			"updater" => Ok(Self::Updater),
@@ -432,6 +436,57 @@ pub struct WixConfig {
 	pub dialog_image_path: Option<PathBuf>
 }
 
+/// Configuration for the installer bundle using NSIS.
+#[derive(Debug, Default, PartialEq, Eq, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "schema", derive(JsonSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NsisConfig {
+	/// The path to the license file to render in the installer.
+	pub license: Option<PathBuf>,
+	/// The path to a bitmap file to display on the header of installers pages.
+	///
+	/// The recommended dimensions are 150px x 57px.
+	pub header_image: Option<PathBuf>,
+	/// The path to a bitmap file for the Welcome page and the Finish page.
+	///
+	/// The recommended dimensions are 164px x 314px.
+	pub sidebar_image: Option<PathBuf>,
+	/// The path to an icon file used as the installer icon.
+	pub installer_icon: Option<PathBuf>,
+	/// The installation mode.
+	#[serde(default)]
+	pub install_mode: NSISInstallerMode
+}
+
+/// Install modes for the NSIS installer.
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[cfg_attr(feature = "schema", derive(JsonSchema))]
+pub enum NSISInstallerMode {
+	/// Default mode for the installer. Installs the app in a directory that doesn't require Administrator access by
+	/// default.
+	///
+	/// Installer metadata will be saved under the `HKCU` registry path.
+	CurrentUser,
+	/// Install the app by default in the `Program Files` folder directory, which requires Administrator
+	/// access for the installation.
+	///
+	/// Installer metadata will be saved under the `HKLM` registry path.
+	PerMachine,
+	/// Combines both modes and allows the user to choose at install time whether to install for the current user or for
+	/// the entire machine. Note that this mode will require Administrator access even if the user wishes to install
+	/// for the current user only.
+	///
+	/// Installer metadata will be saved under the `HKLM` or `HKCU` registry path based on the user's choice.
+	Both
+}
+
+impl Default for NSISInstallerMode {
+	fn default() -> Self {
+		Self::CurrentUser
+	}
+}
+
 /// Install modes for the WebView2 runtime.
 ///
 /// Note that, for the updater bundle, [`Self::DownloadBootstrapper`] is always used.
@@ -525,7 +580,9 @@ pub struct WindowsConfig {
 	#[serde(default = "default_allow_downgrades", alias = "allow-downgrades")]
 	pub allow_downgrades: bool,
 	/// Configuration for the MSI generated with WiX.
-	pub wix: Option<WixConfig>
+	pub wix: Option<WixConfig>,
+	/// Configuration for the NSIS installer.
+	pub nsis: Option<NsisConfig>
 }
 
 impl Default for WindowsConfig {
@@ -538,7 +595,8 @@ impl Default for WindowsConfig {
 			webview_install_mode: Default::default(),
 			webview_fixed_runtime_path: None,
 			allow_downgrades: default_allow_downgrades(),
-			wix: None
+			wix: None,
+			nsis: None
 		}
 	}
 }
@@ -556,8 +614,8 @@ pub struct BundleConfig {
 	/// Whether Millennium should handle bundling your application or just output the executable.
 	#[serde(default)]
 	pub active: bool,
-	/// The bundle targets to build. Currently supports `["deb", "appimage", "msi", "app", "dmg", "updater"]` or "all"
-	/// to build all targets.
+	/// The bundle targets to build. Currently supports `["deb", "appimage", "msi", "nsis", "app", "dmg", "updater"]` or
+	/// "all" to build all targets.
 	#[serde(default)]
 	pub targets: BundleTarget,
 	/// The application identifier in reverse domain name notation (e.g. `io.pyke.example`).
@@ -2304,7 +2362,7 @@ pub enum WindowsUpdateInstallMode {
 	/// Shows a basic UI during the installation process.
 	BasicUi,
 	/// Quiet mode installs the update silently without any user interaction.
-	/// The app requires admin privileges if the installer does.
+	/// The app requires admin privileges if the installer does (WiX).
 	Quiet,
 	/// Specifies unattended mode, which means the installation only shows a progress bar without any user interaction.
 	Passive
@@ -2371,6 +2429,9 @@ impl<'de> Deserialize<'de> for WindowsUpdateInstallMode {
 #[cfg_attr(feature = "schema", derive(JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpdaterWindowsConfig {
+	/// Additional arguments given to the NSIS or WiX installer.
+	#[serde(default, alias = "installer-args")]
+	pub installer_args: Vec<String>,
 	/// The installation mode for the update on Windows. Defaults to `passive`.
 	#[serde(default, alias = "install-mode")]
 	pub install_mode: WindowsUpdateInstallMode
@@ -3273,7 +3334,8 @@ mod build {
 	impl ToTokens for UpdaterWindowsConfig {
 		fn to_tokens(&self, tokens: &mut TokenStream) {
 			let install_mode = &self.install_mode;
-			literal_struct!(tokens, UpdaterWindowsConfig, install_mode);
+			let installer_args = vec_lit(&self.installer_args, str_lit);
+			literal_struct!(tokens, UpdaterWindowsConfig, install_mode, installer_args);
 		}
 	}
 

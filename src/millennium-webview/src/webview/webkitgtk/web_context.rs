@@ -288,7 +288,7 @@ where
 			{
 				use http::{header::HeaderName, HeaderValue};
 
-				if let Some(mut headers) = request.http_headers() {
+				if let Some(headers) = request.http_headers() {
 					if let Some(map) = http_request.headers_mut() {
 						headers.foreach(move |k, v| {
 							if let Ok(name) = HeaderName::from_bytes(k.as_bytes()) {
@@ -333,7 +333,7 @@ where
 						for (name, value) in http_response.headers().into_iter() {
 							headers.append(name.as_str(), value.to_str().unwrap_or(""));
 						}
-						response.set_http_headers(&mut headers);
+						response.set_http_headers(&headers);
 
 						request.finish_with_response(&response);
 					}

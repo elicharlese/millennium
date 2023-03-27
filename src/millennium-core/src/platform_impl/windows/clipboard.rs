@@ -23,7 +23,7 @@ use windows::{
 		System::{
 			DataExchange::{CloseClipboard, EmptyClipboard, GetClipboardData, OpenClipboard, RegisterClipboardFormatW, SetClipboardData},
 			Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE},
-			SystemServices::CF_UNICODETEXT
+			Ole::CF_UNICODETEXT
 		}
 	}
 };
@@ -43,7 +43,7 @@ impl Clipboard {
 
 	pub(crate) fn read_text(&self) -> Option<String> {
 		with_clipboard(|| unsafe {
-			let handle = GetClipboardData(CF_UNICODETEXT.0).unwrap_or_default();
+			let handle = GetClipboardData(CF_UNICODETEXT.0 as _).unwrap_or_default();
 			if handle.is_invalid() {
 				None
 			} else {
@@ -94,7 +94,7 @@ fn get_format_id(format: FormatId) -> Option<u32> {
 		return Some(*id);
 	}
 	match format {
-		ClipboardFormat::TEXT => Some(CF_UNICODETEXT.0),
+		ClipboardFormat::TEXT => Some(CF_UNICODETEXT.0 as _),
 		other => register_identifier(other)
 	}
 }

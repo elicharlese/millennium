@@ -46,7 +46,7 @@ use crate::{
 
 pub struct WindowDelegateState {
 	ns_window: IdRef, // never changes
-	ns_view: IdRef,   // never changes
+	ns_view: IdRef,
 
 	window: Weak<UnownedWindow>,
 
@@ -86,6 +86,10 @@ impl WindowDelegateState {
 		delegate_state
 	}
 
+	fn ns_view(&self) -> id {
+		unsafe { (*self.ns_window).contentView() }
+	}
+
 	fn with_window<F, T>(&mut self, callback: F) -> Option<T>
 	where
 		F: FnOnce(&UnownedWindow) -> T
@@ -117,7 +121,7 @@ impl WindowDelegateState {
 	}
 
 	pub fn emit_resize_event(&mut self) {
-		let rect = unsafe { NSView::frame(*self.ns_view) };
+		let rect = unsafe { NSView::frame(self.ns_view()) };
 		let scale_factor = self.get_scale_factor();
 		let logical_size = LogicalSize::new(rect.size.width as f64, rect.size.height as f64);
 		let size = logical_size.to_physical(scale_factor);
@@ -142,7 +146,7 @@ impl WindowDelegateState {
 	}
 
 	fn view_size(&self) -> LogicalSize<f64> {
-		let ns_size = unsafe { NSView::frame(*self.ns_view).size };
+		let ns_size = unsafe { NSView::frame(self.ns_view()).size };
 		LogicalSize::new(ns_size.width as f64, ns_size.height as f64)
 	}
 }

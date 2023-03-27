@@ -21,6 +21,7 @@ use std::{
 };
 
 use anyhow::{bail, Context};
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine};
 use clap::{ArgAction, Parser};
 use log::{error, info, warn};
 use millennium_bundler::bundle::{bundle_project, Bundle, PackageType};
@@ -259,7 +260,7 @@ pub fn command(mut options: Options) -> Result<()> {
 				Err(anyhow::anyhow!("A public key was provided, but no private key. Make sure to also set the `MILLENNIUM_PRIVATE_KEY` environment variable."))
 			}?;
 
-			let pubkey = base64::decode(&config_.millennium.updater.pubkey)?;
+			let pubkey = BASE64_STANDARD.decode(&config_.millennium.updater.pubkey)?;
 			let pub_key_decoded = String::from_utf8_lossy(&pubkey);
 			let public_key = minisign::PublicKeyBox::from_string(&pub_key_decoded)?.into_public_key()?;
 
@@ -327,7 +328,10 @@ fn print_signed_updater_archive(output_paths: &[PathBuf]) -> crate::Result<()> {
 	let msg = format!("{} {} at:", output_paths.len(), pluralised);
 	info!("{}", msg);
 	for path in output_paths {
+		#[cfg(unix)]
 		info!("        {}", path.display());
+		#[cfg(windows)]
+		info!("        {}", path.display().to_string().replacen(r"\\?\", "", 1));
 	}
 	Ok(())
 }

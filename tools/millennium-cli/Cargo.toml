@@ -34,15 +34,15 @@ serde_json = "1.0"
 notify = "5.0"
 notify-debouncer-mini = "0.2"
 shared_child = "1.0"
-toml_edit = "0.13"
-json-patch = "0.2"
+toml_edit = "0.19"
+json-patch = "0.3"
 millennium-utils = { version = "1.0.0-beta.3", path = "../../src/millennium-utils", features = [ "isolation", "schema" ] }
-toml = "0.5"
+toml = "0.7"
 jsonschema = "0.16"
 handlebars = "4.2"
 include_dir = "0.7"
 minisign = "0.7"
-base64 = "0.13.0"
+base64 = "0.21"
 ureq = "2.5"
 os_info = "3.5"
 semver = "1.0"
@@ -54,10 +54,10 @@ url = { version = "2.3", features = [ "serde" ] }
 os_pipe = "1"
 ignore = "0.4"
 ctrlc = "3.2"
-inquire = "0.5"
+inquire = "0.6"
 phf = { version = "0.11", features = ["macros"] }
-log = { version = "0.4.17", features = [ "kv_unstable", "kv_unstable_std" ] }
-env_logger = "0.9.1"
+log = { version = "0.4", features = [ "kv_unstable", "kv_unstable_std" ] }
+env_logger = "0.10"
 icns = { package = "tauri-icns", version = "0.1" }
 image = { version = "0.24", default-features = false, features = [ "ico" ] }
 axum = { version = "0.5", features = [ "ws"] }

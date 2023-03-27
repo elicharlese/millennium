@@ -162,10 +162,10 @@ impl<'a, R: std::fmt::Debug + Read + Seek> std::fmt::Debug for Extract<'a, R> {
 
 impl<'a, R: Read + Seek> Extract<'a, R> {
 	/// Create archive from reader.
+	#[tracing::instrument(skip_all)]
 	pub fn from_cursor(mut reader: R, archive_format: ArchiveFormat) -> Extract<'a, R> {
 		if reader.rewind().is_err() {
-			#[cfg(debug_assertions)]
-			eprintln!("Could not seek to start of the file");
+			tracing::warn!("Could not seek to start of the file");
 		}
 		let compression = if let ArchiveFormat::Tar(compression) = archive_format { compression } else { None };
 		Extract {

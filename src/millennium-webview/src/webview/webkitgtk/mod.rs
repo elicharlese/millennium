@@ -27,6 +27,7 @@ use gdk::{Cursor, EventMask, WindowEdge};
 use gio::Cancellable;
 use glib::signal::Inhibit;
 use gtk::prelude::*;
+use javascriptcore::ValueExt;
 use url::Url;
 use webkit2gtk::{
 	traits::*, LoadEvent, NavigationPolicyDecision, PolicyDecisionType, URIRequest, UserContentInjectedFrames, UserScript, UserScriptInjectionTime, WebView,
@@ -253,11 +254,16 @@ impl InnerWebView {
 		}
 		webview.grab_focus();
 
+		if let Some(context) = WebViewExt::context(&*webview) {
+			use webkit2gtk::WebContextExt;
+			context.set_use_system_appearance_for_scrollbars(false);
+		}
+
 		// Enable webgl, webaudio, canvas features as default.
 		if let Some(settings) = WebViewExt::settings(&*webview) {
 			settings.set_enable_webgl(true);
 			settings.set_enable_webaudio(true);
-			// settings.set_enable_accelerated_2d_canvas(true);
+			settings.set_enable_back_forward_navigation_gestures(attributes.back_forward_navigation_gestures);
 
 			// Enable clipboard
 			if attributes.clipboard {
@@ -364,7 +370,7 @@ impl InnerWebView {
 	}
 
 	pub fn print(&self) {
-		let _ = self.eval("window.print()");
+		let _ = self.eval("window.print()", None::<Box<dyn FnOnce(String) + Send + 'static>>);
 	}
 
 	pub fn url(&self) -> Url {
@@ -372,12 +378,30 @@ impl InnerWebView {
 		Url::parse(uri.as_str()).unwrap()
 	}
 
-	pub fn eval(&self, js: &str) -> Result<()> {
+	pub fn eval(&self, js: &str, callback: Option<impl FnOnce(String) + Send + 'static>) -> Result<()> {
 		if let Some(pending_scripts) = &mut *self.pending_scripts.lock().unwrap() {
 			pending_scripts.push(js.into());
 		} else {
 			let cancellable: Option<&Cancellable> = None;
-			self.webview.run_javascript(js, cancellable, |_| ());
+
+			match callback {
+				Some(callback) => {
+					self.webview.run_javascript(js, cancellable, |result| {
+						let mut result_str = String::new();
+
+						if let Ok(js_result) = result {
+							if let Some(js_value) = js_result.js_value() {
+								if let Some(json_str) = js_value.to_json(0) {
+									result_str = json_str.to_string();
+								}
+							}
+						}
+
+						callback(result_str);
+					});
+				}
+				None => self.webview.run_javascript(js, cancellable, |_| ())
+			};
 		}
 		Ok(())
 	}

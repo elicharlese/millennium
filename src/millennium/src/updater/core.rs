@@ -32,7 +32,7 @@ use std::{
 	process::{exit, Command}
 };
 
-use base64::decode;
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine};
 use http::{
 	header::{HeaderName, HeaderValue},
 	HeaderMap, StatusCode
@@ -580,12 +580,7 @@ impl<R: Runtime> Update<R> {
 			// we run the setup, appimage re-install or overwrite the
 			// macos .app
 			#[cfg(target_os = "windows")]
-			copy_files_and_run(
-				archive_buffer,
-				&self.extract_path,
-				self.with_elevated_task,
-				self.app.config().millennium.updater.windows.install_mode.clone().msiexec_args()
-			)?;
+			copy_files_and_run(archive_buffer, &self.extract_path, self.with_elevated_task, &self.app.config())?;
 			#[cfg(not(target_os = "windows"))]
 			copy_files_and_run(archive_buffer, &self.extract_path)?;
 		}
@@ -662,7 +657,9 @@ fn copy_files_and_run<R: Read + Seek>(archive_buffer: R, extract_path: &Path) ->
 
 // ### Expected structure:
 // ├── [AppName]_[version]_x64.msi.zip
-// │   └──[AppName]_[version]_x64.msi
+// │   └──[AppName]_[version]_x64.msi        # Application MSI
+// ├── [AppName]_[version]_x64-setup.exe.zip
+// │   └──[AppName]_[version]_x64-setup.exe  # NSIS installer
 // └── ...
 
 // ## MSI
@@ -674,7 +671,7 @@ fn copy_files_and_run<R: Read + Seek>(archive_buffer: R, extract_path: &Path) ->
 // Update server can provide a custom EXE (installer) who can run any task.
 #[cfg(target_os = "windows")]
 #[allow(clippy::unnecessary_wraps)]
-fn copy_files_and_run<R: Read + Seek>(archive_buffer: R, _extract_path: &Path, with_elevated_task: bool, msiexec_args: &[&str]) -> Result {
+fn copy_files_and_run<R: Read + Seek>(archive_buffer: R, _extract_path: &Path, with_elevated_task: bool, config: &crate::Config) -> Result {
 	// FIXME: We need to create a memory buffer with the MSI and then run it.
 	//        (instead of extracting the MSI to a temp path)
 	//
@@ -693,16 +690,18 @@ fn copy_files_and_run<R: Read + Seek>(archive_buffer: R, _extract_path: &Path, w
 	extractor.extract_into(&tmp_dir)?;
 
 	let paths = read_dir(&tmp_dir)?;
-	// This consumes the TempDir without deleting directory on the filesystem,
-	// meaning that the directory will no longer be automatically deleted.
-
 	for path in paths {
 		let found_path = path?.path();
 		// we support 2 type of files exe & msi for now
 		// If it's an `exe` we expect an installer not a runtime.
 		if found_path.extension() == Some(OsStr::new("exe")) {
 			// Run the EXE
-			Command::new(found_path).spawn().expect("installer failed to start");
+			let mut installer = Command::new(found_path);
+			if crate::utils::config::WindowsUpdateInstallMode::Quiet == config.millennium.updater.windows.install_mode {
+				installer.arg("/S");
+			}
+			installer.args(&config.millennium.updater.windows.installer_args);
+			installer.spawn().expect("installer failed to start");
 
 			exit(0);
 		} else if found_path.extension() == Some(OsStr::new("msi")) {
@@ -748,6 +747,18 @@ fn copy_files_and_run<R: Read + Seek>(archive_buffer: R, _extract_path: &Path, w
 			msi_path_arg.push("\"\"\"");
 			msi_path_arg.push(&found_path);
 			msi_path_arg.push("\"\"\"");
+
+			let mut msiexec_args = config
+				.millennium
+				.updater
+				.windows
+				.install_mode
+				.clone()
+				.msiexec_args()
+				.iter()
+				.map(|p| p.to_string())
+				.collect::<Vec<String>>();
+			msiexec_args.extend(config.millennium.updater.windows.installer_args.clone());
 
 			// run the installer and relaunch the application
 			let system_root = std::env::var("SYSTEMROOT");
@@ -895,7 +906,7 @@ pub fn extract_path_from_executable(env: &Env, executable_path: &Path) -> PathBu
 
 // Convert base64 to string and prevent failing
 fn base64_to_string(base64_string: &str) -> Result<String> {
-	let decoded_string = &decode(base64_string)?;
+	let decoded_string = &BASE64_STANDARD.decode(base64_string)?;
 	let result = from_utf8(decoded_string)
 		.map_err(|_| Error::SignatureUtf8(base64_string.into()))?
 		.to_string();

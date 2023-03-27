@@ -1419,6 +1419,7 @@ impl<R: Runtime> Builder<R> {
 
 	/// Builds the application.
 	#[allow(clippy::type_complexity)]
+	#[tracing::instrument(skip_all)]
 	pub fn build<A: Assets>(mut self, context: Context<A>) -> crate::Result<App<R>> {
 		#[cfg(target_os = "macos")]
 		if self.menu.is_none() && self.enable_macos_default_menu {
@@ -1510,7 +1511,7 @@ impl<R: Runtime> Builder<R> {
 					std::env::set_var("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER", resource_dir.join(path));
 				} else {
 					#[cfg(debug_assertions)]
-					eprintln!("failed to resolve resource directory; fallback to the installed Webview2 runtime.");
+					tracing::error!("failed to resolve resource directory; fallback to the installed Webview2 runtime.");
 				}
 			}
 		}

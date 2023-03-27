@@ -96,6 +96,7 @@ pub enum Cmd {
 impl Cmd {
 	#[module_command_handler(shell_script)]
 	#[allow(unused_variables)]
+	#[tracing::instrument(skip(context, on_event_fn, options))]
 	fn execute<R: Runtime>(
 		context: InvokeContext<R>,
 		program: String,
@@ -137,8 +138,7 @@ impl Cmd {
 			match context.window.state::<Scopes>().shell.prepare(&program, args) {
 				Ok(cmd) => cmd,
 				Err(e) => {
-					#[cfg(debug_assertions)]
-					eprintln!("{e}");
+					tracing::warn!("{e}");
 					return Err(crate::Error::ProgramNotAllowed(PathBuf::from(program)).into_anyhow());
 				}
 			}

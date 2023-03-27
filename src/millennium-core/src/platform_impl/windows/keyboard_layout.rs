@@ -26,8 +26,7 @@ use windows::Win32::{
 	System::SystemServices::{LANG_JAPANESE, LANG_KOREAN},
 	UI::{
 		Input::KeyboardAndMouse::{self as win32km, *},
-		TextServices::HKL,
-		WindowsAndMessaging::*
+		TextServices::HKL
 	}
 };
 

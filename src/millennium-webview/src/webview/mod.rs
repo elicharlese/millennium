@@ -39,7 +39,7 @@ mod web_context;
 
 #[cfg(target_os = "android")]
 pub mod prelude {
-	pub use super::android::{binding::*, setup};
+	pub use super::android::{binding::*, dispatch, find_class, setup, Context};
 }
 #[cfg(target_os = "android")]
 pub(crate) mod android;
@@ -124,7 +124,7 @@ pub struct WebViewAttributes {
 	/// Register custom file loading protocols with pairs of scheme uri string
 	/// and a handling closure.
 	///
-	/// The closure takes a [Response] and returns a [Request].
+	/// The closure takes a [Request] and returns a [Response].
 	///
 	/// # Warning
 	/// Pages loaded from custom protocol will have different Origin on
@@ -298,11 +298,19 @@ impl Default for PlatformSpecificWebViewAttributes {
 	target_os = "netbsd",
 	target_os = "openbsd",
 	target_os = "macos",
-	target_os = "android",
 	target_os = "ios"
 ))]
 #[derive(Default)]
 pub(crate) struct PlatformSpecificWebViewAttributes;
+
+#[cfg(target_os = "android")]
+#[derive(Default)]
+pub(crate) struct PlatformSpecificWebViewAttributes {
+	on_webview_created:
+		Option<Box<dyn Fn(prelude::Context) -> std::result::Result<(), millennium_core::platform::android::ndk_glue::jni::errors::Error> + Send>>,
+	with_asset_loader: bool,
+	asset_loader_domain: Option<String>
+}
 
 pub type Rgba = (u8, u8, u8, u8);
 
@@ -400,10 +408,11 @@ impl<'a> WebViewBuilder<'a> {
 	/// `Access-Control-Allow-Origin: *`.
 	/// - Windows: `https://<scheme_name>.<path>` (so it will be `https://millennium.examples` in `custom_protocol`
 	///   example)
-	/// - Android: Custom protocols on Android are fixed to `https://millennium.pyke/` due to its design and our approach
-	///   to using it. On Android, we only handle the scheme name and ignore the closure. So, when you load a URL like `millennium://assets/index.html`,
-	///   it will become `https://millennium.pyke/assets/index.html`. Android has `assets` and `resource` path finder to
-	///   locate your files in those directories. For more information, see [loading in-app content](https://developer.android.com/guide/webapps/load-local-content).
+	/// - Android: For loading content from the `assets` folder (which is copied into the Android APK), use the function
+	///   [`with_asset_loader`] in [`WebViewBuilderExtAndroid`] instead. This function on Android can only be used to
+	///   serve assets you can embed in the binary or are elsewhere in Android (provided the app has appropriate
+	///   access), but not from the `assets` folder which lives within the APK. For the cases where this can be used, it
+	///   works the same as in macOS and Linux.
 	/// - iOS: Same as macOS. To get the path to your assets, you can call [`CFBundle::resources_path`](https://docs.rs/core-foundation/latest/core_foundation/bundle/struct.CFBundle.html#method.resources_path).
 	///   So, a URL like `millennium://assets/index.html` would get the HTML file in the assets directory.
 	///
@@ -664,6 +673,71 @@ impl WebViewBuilderExtWindows for WebViewBuilder<'_> {
 	}
 }
 
+#[cfg(target_os = "ios")]
+pub trait WebviewExtIOS {
+	/// Returns the WKWebView handle.
+	fn webview(&self) -> cocoa::base::id;
+	/// Returns the WKWebView manager ([userContentController]) handle.
+	/// [userContentController]: https://developer.apple.com/documentation/webkit/wkscriptmessagehandler/1396222-usercontentcontroller
+	fn manager(&self) -> cocoa::base::id;
+}
+
+#[cfg(target_os = "ios")]
+impl WebviewExtIOS for WebView {
+	fn webview(&self) -> cocoa::base::id {
+		self.webview.webview
+	}
+
+	fn manager(&self) -> cocoa::base::id {
+		self.webview.manager
+	}
+}
+
+#[cfg(target_os = "android")]
+pub trait WebViewBuilderExtAndroid {
+	fn on_webview_created<
+		F: Fn(prelude::Context<'_>) -> std::result::Result<(), millennium_core::platform::android::ndk_glue::jni::errors::Error> + Send + 'static
+	>(
+		self,
+		f: F
+	) -> Self;
+
+	/// Uses [`WebviewAssetLoader`](https://developer.android.com/reference/kotlin/androidx/webkit/WebViewAssetLoader)
+	/// to load assets frm Android's `assets` folder when using `with_url` as `<protocol>://assets/` (e.g.
+	/// `millennium://assets/index.html`). Note that this registers a custom protocol with the provided string, similar
+	/// to [`with_custom_protocol`], but also sets the `WebViewAssetLoader` with the necessary domain (which is fixed as
+	/// `<protocol>.assets`). This cannot be used in conjunction with `with_custom_protocol` for Android, as it changes
+	/// the way in which requests are handled.
+	#[cfg(feature = "protocol")]
+	fn with_asset_loader(self, protocol: String) -> Self;
+}
+
+#[cfg(target_os = "android")]
+impl WebViewBuilderExtAndroid for WebViewBuilder<'_> {
+	fn on_webview_created<
+		F: Fn(prelude::Context<'_>) -> std::result::Result<(), millennium_core::platform::android::ndk_glue::jni::errors::Error> + Send + 'static
+	>(
+		mut self,
+		f: F
+	) -> Self {
+		self.paltform_specific.on_webview_created = Some(Box::new(f));
+		self
+	}
+
+	#[cfg(feature = "protocol")]
+	fn with_asset_loader(mut self, protocol: String) -> Self {
+		// register custom protocol with empty Response return,
+		// this is necessary due to the need of fixing a domain
+		// in WebViewAssetLoader.
+		self.webview
+			.custom_protocols
+			.push((protocol.clone(), Box::new(|_| Ok(Response::builder().body(Vec::new().into())?))));
+		self.platform_specific.with_asset_loader = true;
+		self.platform_specific.asset_loader_domain = Some(format!("{}.assets", protocol));
+		self
+	}
+}
+
 /// The fundamental type to present a [`WebView`].
 ///
 /// [`WebViewBuilder`] / [`WebView`] are the basic building blocks to constrcut
@@ -732,7 +806,23 @@ impl WebView {
 	///
 	/// [`EventLoopProxy`]: crate::application::event_loop::EventLoopProxy
 	pub fn evaluate_script(&self, js: &str) -> Result<()> {
-		self.webview.eval(js)
+		self.webview.eval(js, None::<Box<dyn Fn(String) + Send + 'static>>)
+	}
+
+	/// Evaluate and run JavaScript code with a callback function. The evaluation result will be serialized into a JSON
+	/// string and passed to the callback function. This must be called on the same thread that created the [`WebView`].
+	/// You can use [`EventLoopProxy`] and a custom event to send scripts from other threads.
+	///
+	/// [`EventLoopProxy`]: crate::application::event_loop::EventLoopProxy
+	///
+	/// Exceptions are ignored due to a limitation on Windows. You may catch exceptions yourself and return them as a
+	/// string as a workaround.
+	///
+	/// ## Platform-specific
+	///
+	/// - **Android**: Not yet implemented.
+	pub fn evaluate_script_with_callback(&self, js: &str, callback: impl Fn(String) + Send + 'static) -> Result<()> {
+		self.webview.eval(js, Some(callback))
 	}
 
 	/// Launch print modal for the webview content.

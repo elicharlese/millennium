@@ -147,6 +147,7 @@
             "allowDowngrades": true,
             "certificateThumbprint": null,
             "digestAlgorithm": null,
+            "nsis": null,
             "timestampUrl": null,
             "tsp": false,
             "webviewFixedRuntimePath": null,
@@ -170,7 +171,8 @@
           "dialog": true,
           "pubkey": "",
           "windows": {
-            "installMode": "passive"
+            "installMode": "passive",
+            "installerArgs": []
           }
         },
         "windows": []
@@ -701,7 +703,7 @@
           ]
         },
         "targets": {
-          "description": "The bundle targets to build. Currently supports `[\"deb\", \"appimage\", \"msi\", \"app\", \"dmg\", \"updater\"]` or \"all\" to build all targets.",
+          "description": "The bundle targets to build. Currently supports `[\"deb\", \"appimage\", \"msi\", \"nsis\", \"app\", \"dmg\", \"updater\"]` or \"all\" to build all targets.",
           "default": "all",
           "allOf": [
             {
@@ -715,6 +717,7 @@
             "allowDowngrades": true,
             "certificateThumbprint": null,
             "digestAlgorithm": null,
+            "nsis": null,
             "timestampUrl": null,
             "tsp": false,
             "webviewFixedRuntimePath": null,
@@ -781,6 +784,13 @@
           "type": "string",
           "enum": [
             "msi"
+          ]
+        },
+        {
+          "description": "NSIS bundle (.exe) for Windows.",
+          "type": "string",
+          "enum": [
+            "nsis"
           ]
         },
         {
@@ -1553,6 +1563,7 @@
               "allowDowngrades": true,
               "certificateThumbprint": null,
               "digestAlgorithm": null,
+              "nsis": null,
               "timestampUrl": null,
               "tsp": false,
               "webviewFixedRuntimePath": null,
@@ -1626,7 +1637,8 @@
             "dialog": true,
             "pubkey": "",
             "windows": {
-              "installMode": "passive"
+              "installMode": "passive",
+              "installerArgs": []
             }
           },
           "allOf": [
@@ -1646,6 +1658,32 @@
       },
       "additionalProperties": false
     },
+    "NSISInstallerMode": {
+      "description": "Install modes for the NSIS installer.",
+      "oneOf": [
+        {
+          "description": "Default mode for the installer. Installs the app in a directory that doesn't require Administrator access by default.\n\nInstaller metadata will be saved under the `HKCU` registry path.",
+          "type": "string",
+          "enum": [
+            "currentUser"
+          ]
+        },
+        {
+          "description": "Install the app by default in the `Program Files` folder directory, which requires Administrator access for the installation.\n\nInstaller metadata will be saved under the `HKLM` registry path.",
+          "type": "string",
+          "enum": [
+            "perMachine"
+          ]
+        },
+        {
+          "description": "Combines both modes and allows the user to choose at install time whether to install for the current user or for the entire machine. Note that this mode will require Administrator access even if the user wishes to install for the current user only.\n\nInstaller metadata will be saved under the `HKLM` or `HKCU` registry path based on the user's choice.",
+          "type": "string",
+          "enum": [
+            "both"
+          ]
+        }
+      ]
+    },
     "NotificationAllowlistConfig": {
       "description": "Allowlist for the notification APIs.",
       "type": "object",
@@ -1654,6 +1692,50 @@
           "description": "Use this flag to enable all notification API features.",
           "default": false,
           "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "NsisConfig": {
+      "description": "Configuration for the installer bundle using NSIS.",
+      "type": "object",
+      "properties": {
+        "headerImage": {
+          "description": "The path to a bitmap file to display on the header of installers pages.\n\nThe recommended dimensions are 150px x 57px.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "installMode": {
+          "description": "The installation mode.",
+          "default": "currentUser",
+          "allOf": [
+            {
+              "$ref": "#/definitions/NSISInstallerMode"
+            }
+          ]
+        },
+        "installerIcon": {
+          "description": "The path to an icon file used as the installer icon.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "license": {
+          "description": "The path to the license file to render in the installer.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sidebarImage": {
+          "description": "The path to a bitmap file for the Welcome page and the Finish page.\n\nThe recommended dimensions are 164px x 314px.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false
@@ -2100,7 +2182,8 @@
         "windows": {
           "description": "The Windows configuration for the updater.",
           "default": {
-            "installMode": "passive"
+            "installMode": "passive",
+            "installerArgs": []
           },
           "allOf": [
             {
@@ -2128,6 +2211,14 @@
               "$ref": "#/definitions/WindowsUpdateInstallMode"
             }
           ]
+        },
+        "installerArgs": {
+          "description": "Additional arguments given to the NSIS or WiX installer.",
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "additionalProperties": false
@@ -2633,6 +2724,17 @@
             "null"
           ]
         },
+        "nsis": {
+          "description": "Configuration for the NSIS installer.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/NsisConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "timestampUrl": {
           "description": "Server to use during timestamping.",
           "type": [
@@ -2689,7 +2791,7 @@
           ]
         },
         {
-          "description": "Quiet mode installs the update silently without any user interaction. The app requires admin privileges if the installer does.",
+          "description": "Quiet mode installs the update silently without any user interaction. The app requires admin privileges if the installer does (WiX).",
           "type": "string",
           "enum": [
             "quiet"

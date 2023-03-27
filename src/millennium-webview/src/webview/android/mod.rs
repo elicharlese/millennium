@@ -42,6 +42,12 @@ pub(crate) mod binding;
 mod main_pipe;
 use self::main_pipe::{CreateWebViewAttributes, MainPipe, WebViewMessage, MAIN_PIPE};
 
+pub struct Context<'a> {
+	pub env: JNIEnv<'a>,
+	pub activity: JObject<'a>,
+	pub webview: JObject<'a>
+}
+
 #[macro_export]
 macro_rules! android_binding {
 	($domain:ident, $package:ident, $main: ident) => {
@@ -54,6 +60,8 @@ macro_rules! android_binding {
 		};
 		core_android_binding!($domain, $package, setup, $main);
 		android_fn!($domain, $package, RustWebViewClient, handleRequest, [JObject], jobject);
+		android_fn!($domain, $package, RustWebViewClient, withAssetLoader, [], jboolean);
+		android_fn!($domain, $package, RustWebViewClient, assetLoaderDomain, [], jstring);
 		android_fn!($domain, $package, Ipc, ipc, [JString]);
 		android_fn!($domain, $package, RustWebChromeClient, handleReceivedTitle, [JObject, JString]);
 	};
@@ -62,6 +70,8 @@ macro_rules! android_binding {
 pub static IPC: OnceCell<UnsafeIpc> = OnceCell::new();
 pub static REQUEST_HANDLER: OnceCell<UnsafeRequestHandler> = OnceCell::new();
 pub static TITLE_CHANGE_HANDLER: OnceCell<UnsafeTitleHandler> = OnceCell::new();
+pub static WITH_ASSET_LOADER: OnceCell<bool> = OnceCell::new();
+pub static ASSET_LOADER_DOMAIN: OnceCell<String> = OnceCell::new();
 
 pub struct UnsafeIpc(Box<dyn Fn(&Window, String)>, Rc<Window>);
 impl UnsafeIpc {
@@ -94,7 +104,7 @@ pub unsafe fn setup(env: JNIEnv, looper: &ForeignLooper, activity: GlobalRef) {
 	// we must create the `WebChromeClient` here because it calls `registerForActivityResult`,
 	// which gives a `LifecycleOwners must call register before they are STARTED.` error when
 	// called outside the onCreate hook
-	let rust_webchrome_client_class = find_my_class(env, activity.as_obj(), format!("{}/RustWebChromeClient", PACKAGE.get().unwrap())).unwrap();
+	let rust_webchrome_client_class = find_class(env, activity.as_obj(), format!("{}/RustWebChromeClient", PACKAGE.get().unwrap())).unwrap();
 	let webchrome_client = env
 		.new_object(rust_webchrome_client_class, "(Landroidx/appcompat/app/AppCompatActivity;)V", &[activity.as_obj().into()])
 		.unwrap();
@@ -131,7 +141,7 @@ impl InnerWebView {
 	pub fn new(
 		window: Rc<Window>,
 		attributes: WebViewAttributes,
-		_pl_attrs: super::PlatformSpecificWebViewAttributes,
+		pl_attrs: super::PlatformSpecificWebViewAttributes,
 		_web_context: Option<&mut WebContext>
 	) -> Result<Self> {
 		let WebViewAttributes {
@@ -146,6 +156,12 @@ impl InnerWebView {
 			..
 		} = attributes;
 
+		let super::PlatformSpecificWebViewAttributes {
+			on_webview_created,
+			with_asset_loader,
+			asset_loader_domain
+		} = pl_attrs;
+
 		if let Some(u) = url {
 			let mut url_string = String::from(u.as_str());
 			let name = u.scheme();
@@ -159,8 +175,14 @@ impl InnerWebView {
 				devtools,
 				background_color,
 				transparent,
-				headers
+				headers,
+				on_webview_created
 			}));
+		}
+
+		WITH_ASSET_LOADER.get_or_init(move || with_asset_loader);
+		if let Some(domain) = asset_loader_domain {
+			ASSET_LOADER_DOMAIN.get_or_init(move || domain);
 		}
 
 		REQUEST_HANDLER.get_or_init(move || {
@@ -249,7 +271,7 @@ impl InnerWebView {
 		Url::parse(uri.as_str()).unwrap()
 	}
 
-	pub fn eval(&self, js: &str) -> Result<()> {
+	pub fn eval(&self, js: &str, _callback: Option<impl Fn(String) + Send + 'static>) -> Result<()> {
 		MainPipe::send(WebViewMessage::Eval(js.into()));
 		Ok(())
 	}
@@ -319,12 +341,23 @@ fn hash_script(script: &str) -> String {
 	format!("'sha256-{}'", base64::encode(hash))
 }
 
-fn find_my_class<'a>(env: JNIEnv<'a>, activity: JObject<'a>, name: String) -> std::result::Result<JClass<'a>, JniError> {
+/// Finds a class in the project scope.
+pub fn find_class<'a>(env: JNIEnv<'a>, activity: JObject<'a>, name: String) -> std::result::Result<JClass<'a>, JniError> {
 	let class_name = env.new_string(name.replace('/', "."))?;
 	let my_class = env
 		.call_method(activity, "getAppClass", "(Ljava/lang/String;)Ljava/lang/Class;", &[class_name.into()])?
 		.l()?;
 	Ok(my_class.into())
+}
+
+/// Dispatch a closure to run on the Android context.
+///
+/// The closure takes the JNI env, the Android activity instance, and the possibly null webview.
+pub fn dispatch<F>(func: F)
+where
+	F: FnOnce(JNIEnv, JObject, JObject) + Send + 'static
+{
+	MainPipe::send(WebViewMessage::Jni(Box::new(func)));
 }
 
 fn create_headers_map<'a, 'b>(env: &'a JNIEnv, headers: &http::HeaderMap) -> std::result::Result<JMap<'a, 'b>, JniError> {

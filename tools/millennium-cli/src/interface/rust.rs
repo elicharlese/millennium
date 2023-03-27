@@ -46,12 +46,14 @@ use notify_debouncer_mini::new_debouncer;
 use serde::Deserialize;
 use shared_child::SharedChild;
 
-use self::cargo_config::Config as CargoConfig;
-use self::manifest::{rewrite_manifest, Manifest};
+use self::{
+	cargo_config::Config as CargoConfig,
+	manifest::{rewrite_manifest, Manifest}
+};
 use super::{AppSettings, ExitReason, Interface};
 use crate::helpers::{
 	app_paths::{app_dir, millennium_dir},
-	config::{reload as reload_config, wix_settings, Config}
+	config::{nsis_settings, reload as reload_config, wix_settings, Config}
 };
 
 #[derive(Debug, Clone)]
@@ -919,6 +921,7 @@ fn millennium_config_to_bundle_settings(
 				wix.license = wix.license.map(|l| millennium_dir().join(l));
 				wix
 			}),
+			nsis: config.windows.nsis.map(nsis_settings),
 			icon_path: windows_icon_path,
 			webview_install_mode: config.windows.webview_install_mode,
 			webview_fixed_runtime_path: config.windows.webview_fixed_runtime_path,

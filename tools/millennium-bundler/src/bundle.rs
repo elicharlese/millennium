@@ -30,11 +30,13 @@ mod windows;
 use std::{fmt::Write, path::PathBuf};
 
 use log::{info, warn};
-pub use settings::{WindowsSettings, WixLanguage, WixLanguageConfig, WixSettings};
 
 pub use self::{
 	category::AppCategory,
-	settings::{BundleBinary, BundleSettings, DebianSettings, MacOsSettings, PackageSettings, PackageType, Settings, SettingsBuilder, UpdaterSettings}
+	settings::{
+		BundleBinary, BundleSettings, DebianSettings, MacOsSettings, NsisSettings, PackageSettings, PackageType, Settings, SettingsBuilder, UpdaterSettings,
+		WindowsSettings, WixLanguage, WixLanguageConfig, WixSettings
+	}
 };
 
 /// Generated bundle metadata.
@@ -60,6 +62,8 @@ pub fn bundle_project(settings: Settings) -> crate::Result<Vec<Bundle>> {
 			PackageType::IosBundle => macos::ios::bundle_project(&settings)?,
 			#[cfg(target_os = "windows")]
 			PackageType::WindowsMsi => windows::msi::bundle_project(&settings, false)?,
+			#[cfg(target_os = "windows")]
+			PackageType::Nsis => windows::nsis::bundle_project(&settings, false)?,
 			#[cfg(target_os = "linux")]
 			PackageType::Deb => linux::debian::bundle_project(&settings)?,
 			#[cfg(target_os = "linux")]

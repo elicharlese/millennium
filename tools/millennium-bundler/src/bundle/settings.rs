@@ -21,7 +21,7 @@ use std::{
 
 pub use millennium_utils::config::WebviewInstallMode;
 use millennium_utils::{
-	config::BundleType,
+	config::{BundleType, NSISInstallerMode},
 	resources::{external_binaries, ResourcePaths}
 };
 
@@ -38,6 +38,8 @@ pub enum PackageType {
 	IosBundle,
 	/// The Windows bundle (.msi).
 	WindowsMsi,
+	/// The NSIS bundle (.exe).
+	Nsis,
 	/// The Linux Debian package bundle (.deb).
 	Deb,
 	/// The Linux RPM bundle (.rpm).
@@ -56,6 +58,7 @@ impl From<BundleType> for PackageType {
 			BundleType::Deb => Self::Deb,
 			BundleType::AppImage => Self::AppImage,
 			BundleType::Msi => Self::WindowsMsi,
+			BundleType::Nsis => Self::Nsis,
 			BundleType::App => Self::MacOsBundle,
 			BundleType::Dmg => Self::Dmg,
 			BundleType::Updater => Self::Updater
@@ -72,6 +75,7 @@ impl PackageType {
 			"deb" => Some(PackageType::Deb),
 			"ios" => Some(PackageType::IosBundle),
 			"msi" => Some(PackageType::WindowsMsi),
+			"nsis" => Some(PackageType::Nsis),
 			"app" => Some(PackageType::MacOsBundle),
 			"rpm" => Some(PackageType::Rpm),
 			"appimage" => Some(PackageType::AppImage),
@@ -88,6 +92,7 @@ impl PackageType {
 			PackageType::Deb => "deb",
 			PackageType::IosBundle => "ios",
 			PackageType::WindowsMsi => "msi",
+			PackageType::Nsis => "nsis",
 			PackageType::MacOsBundle => "app",
 			PackageType::Rpm => "rpm",
 			PackageType::AppImage => "appimage",
@@ -109,6 +114,8 @@ const ALL_PACKAGE_TYPES: &[PackageType] = &[
 	PackageType::IosBundle,
 	#[cfg(target_os = "windows")]
 	PackageType::WindowsMsi,
+	#[cfg(target_os = "windows")]
+	PackageType::Nsis,
 	#[cfg(target_os = "macos")]
 	PackageType::MacOsBundle,
 	#[cfg(target_os = "linux")]
@@ -261,6 +268,25 @@ pub struct WixSettings {
 	pub fips_compliant: bool
 }
 
+/// Settings specific to the NSIS implementation.
+#[derive(Clone, Debug, Default)]
+pub struct NsisSettings {
+	/// The path to the license file to render on the installer.
+	pub license: Option<PathBuf>,
+	/// The path to a bitmap file to display on the header of installers pages.
+	///
+	/// The recommended dimensions are 150px x 57px.
+	pub header_image: Option<PathBuf>,
+	/// The path to a bitmap file for the Welcome page and the Finish page.
+	///
+	/// The recommended dimensions are 164px x 314px.
+	pub sidebar_image: Option<PathBuf>,
+	/// The path to an icon file used as the installer icon.
+	pub installer_icon: Option<PathBuf>,
+	/// Whether the installation will be for all users or just the current user.
+	pub install_mode: NSISInstallerMode
+}
+
 /// The Windows bundle settings.
 #[derive(Clone, Debug)]
 pub struct WindowsSettings {
@@ -276,6 +302,8 @@ pub struct WindowsSettings {
 	pub tsp: bool,
 	/// WiX configuration.
 	pub wix: Option<WixSettings>,
+	/// NSIS configuration.
+	pub nsis: Option<NsisSettings>,
 	/// The path to the application icon. Defaults to `./icons/icon.ico`.
 	pub icon_path: PathBuf,
 	/// The installation mode for the WebView2 runtime.
@@ -300,6 +328,7 @@ impl Default for WindowsSettings {
 			timestamp_url: None,
 			tsp: false,
 			wix: None,
+			nsis: None,
 			icon_path: PathBuf::from("icons/icon.ico"),
 			webview_install_mode: Default::default(),
 			webview_fixed_runtime_path: None,
@@ -573,7 +602,7 @@ impl Settings {
 			"macos" => vec![PackageType::MacOsBundle, PackageType::Dmg],
 			"ios" => vec![PackageType::IosBundle],
 			"linux" => vec![PackageType::Deb, PackageType::AppImage],
-			"windows" => vec![PackageType::WindowsMsi],
+			"windows" => vec![PackageType::WindowsMsi, PackageType::Nsis],
 			os => return Err(crate::Error::GenericError(format!("Native {os} bundles not yet supported.")))
 		};
 
