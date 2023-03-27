@@ -48,7 +48,7 @@ jobs:
         if: matrix.platform == 'ubuntu-latest'
         run: |
           sudo apt update
-          sudo apt install -y libgtk-3-dev webkit2gtk-4.1 libgtksourceview-3.0-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+          sudo apt install -y libgtk-3-dev
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
