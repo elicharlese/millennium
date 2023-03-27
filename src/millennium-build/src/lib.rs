@@ -180,7 +180,7 @@ impl WindowsAttributes {
 	/// ```ignore
 	#[doc = include_str!("default-manifest.xml")]
 	/// ```
-	///
+	/// 
 	/// [manifest]: https://learn.microsoft.com/en-us/windows/win32/sbscs/application-manifests
 	#[must_use]
 	pub fn app_manifest<S: AsRef<str>>(mut self, manifest: S) -> Self {
